@@ -1,0 +1,39 @@
+# https://github.com/adriangb/python-monorepo/tree/main/poetry
+
+[tool.poetry]
+name = "manman"
+version = "0.1.0"
+description = ""
+authors = []
+readme = "README.md"
+packages = []
+
+[tool.poetry.group.main.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.host.dependencies]
+manman-host = { path = "manman-host", develop = true}
+
+[tool.poetry.group.worker.dependencies]
+manman-worker = { path = "manman-worker", develop = true}
+
+# unsure if needed
+[tool.poetry.group.models.dependencies]
+manman-models = { path = "manman-models", develop = true}
+
+
+# [tool.poetry.group.app.dependencies]
+# manman-app = { path = "workspaces/app", develop = true}
+
+# [tool.poetry.group.lib.dependencies]
+# manman-lib = { path = "workspaces/lib", develop = true}
+
+# [tool.poetry.group.lib-test.dependencies]
+# manman-lib = { path = "workspaces/lib", develop = true, extras=["test"]}
+
+# [tool.poetry.group.cli.dependencies]
+# manman-cli = { path = "workspaces/cli", develop = true}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
