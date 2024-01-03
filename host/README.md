@@ -1,5 +1,5 @@
 
-# manman-worker
+# manman-host
 
 poetry subproject
 in general able to interact with it as you would any other poetry project
@@ -18,11 +18,11 @@ poetry install --extras develop
 
 execute locally with 
 ```
-poetry run python .
+poetry run python -m manman.host
 ```
-this will run the project in the poetry virtual environment with all our dependencies installed
+this will run the project in the context of the project's poetry virtual environment with all of the project's dependencies installed
 
-note: if dev dependencies are required to run, it will error (not good)
+note: if dev dependencies are required to run the production artifact, it will throw a dependency error
 
 ## adding dependencies
 there are two ways to add dependencies
