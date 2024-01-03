@@ -5,24 +5,15 @@ poetry subproject
 in general able to interact with it as you would any other poetry project
 
 ## installation
-although you shouldn't need this during development, install locally with
+do not install locally
 
-```
-poetry install
-```
+it will install locally to update the lock file, but it's not something you should do for other purposes
 
-if need develop dependencies (installed by default when installing from virtual project), use the extras develop group
-```
-poetry install --extras develop
-```
+## running
+do not run locally
 
-execute locally with 
-```
-poetry run python -m manman.host
-```
-this will run the project in the context of the project's poetry virtual environment with all of the project's dependencies installed
-
-note: if dev dependencies are required to run the production artifact, it will throw a dependency error
+it will reference old code
+run from outer main project venv
 
 ## adding dependencies
 there are two ways to add dependencies

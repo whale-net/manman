@@ -33,8 +33,7 @@ UI - this will live in https://github.com/whale-net/orca project
 ## setup
 both projects exist in this repo as separate poetry projects managed via another poetry 'virtual-project'
 
-this enables a single repo to host two projects and share tooling (CI/CD)
-but also introduces some development complexity. however the tradeoff has been deemed worth it for this project
+this enables a single repo to host two projects and share tooling (CI/CD) while still allowing separate artifact deployment
 
 
 ### install
@@ -42,8 +41,7 @@ but also introduces some development complexity. however the tradeoff has been d
 This is a poetry project. install poetry https://python-poetry.org/
 if you need a specific version of python that is different from your system, consider pyenv
 
-For local development installing all projects is the easiest way to develop and not an issue
-The virutal project is setup to install all dev dependencies
+For local development installing all projects is the easiest way to develop
 ```
 poetry install --no-root
 ```
@@ -51,6 +49,7 @@ NOTE: the no-root option prevents the project from attempting to install a `manm
 
 
 install a single project
+useful for deployment, and could be useful for local dev, but installing all is still recommended for simplicity
 ```
 poetry install --no-root --only {host | worker}
 ```
@@ -76,7 +75,9 @@ run code
 poetry run python -m manman.host
 ```
 
-eventually will have docker image
+eventually will have docker image for each project
 
 
-**NOTE:** don't ever run from within the subproject. always run from the outer layer, otherwise old dependencies can be referenced and casue very frustrating bugs
+### WARNING
+don't ever run from within the subproject (e.g. `host`). 
+always run from the outer virtual project, otherwise old dependencies can be referenced and cause very frustrating issues

@@ -1,4 +1,4 @@
 
 
 class Sample():
-    value = 200
+    value = 300
