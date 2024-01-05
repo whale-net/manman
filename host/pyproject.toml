@@ -13,7 +13,6 @@ isort = { version="^5.13.2", optional = true }
 black = { version = "^23.12.1", optional = true }
 manman-test_shared = { path = "../test_shared", develop = true} # sadly doesn't auto update, but whatever
 fastapi = "^0.108.0"
-click = "^8.1.7"
 
 [tool.poetry.extras]
 dev = ["isort", "black"]
