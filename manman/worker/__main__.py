@@ -13,20 +13,24 @@ logger = logging.getLogger(__name__)
 # also lol just keeping logging on by default this was a trap (although interesting)
 # @app.callback()
 # def callback(enable_logging: bool = Annotated[str, typer.Option(True, '--logging')]):
-    
+
 
 @app.command()
 def start(
     install_directory: str,
-    steamcmd_override: Annotated[str, typer.Argument(envvar='MANMAN_STEAMCMD_OVERRIDE'), None] = None,
+    steamcmd_override: Annotated[
+        str, typer.Argument(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
+    ] = None,
 ):
-    print(f"running")
+    print("running")
+
 
 @app.command()
 def test():
-    logger.info('test123')
-    install_directory = '/home/alex/manman/data/'
+    logger.info("test123")
+    install_directory = "/home/alex/manman/data/"
     cmd = SteamCMD(install_directory)
     cmd.install(730)
-    
+
+
 app()

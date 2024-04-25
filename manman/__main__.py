@@ -1,1 +1,1 @@
-raise Exception('run manman.host or manamn.worker')
+raise Exception("run manman.host or manamn.worker")
