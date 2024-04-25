@@ -1,6 +1,9 @@
 import logging
 import subprocess
 import os
+import time
+
+from manman.util import log_stream
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +56,25 @@ class CommandBuilder:
             stdinput = ''.join(arg + '\n' for arg in self._stdinput)
             stdinput_bytes = bytes(stdinput, encoding="ascii")
 
-        proc = subprocess.run([self._executable, *self._args], input=stdinput_bytes, stdout=subprocess.PIPE)
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            logger.info('command_base: %s', line)
+        # proc = subprocess.run(, input=stdinput_bytes, stdout=subprocess.PIPE)
+        proc = subprocess.Popen([self._executable, *self._args], stdout=subprocess.PIPE)
+        # everything is delimited, so just stuffff
+        if stdinput_bytes is not None:
+            # TODO test
+            proc.communicate(stdinput_bytes)
 
+        
         while True:
-            line = proc.stderr.readline()
-            if not line:
-                break
-            logger.info('command_base:STDERR: %s', line)
+            status = proc.poll()
+            logger.info('process status %s', status)
+
+            log_stream(proc.stdout, logger=logger)
+            log_stream(proc.stderr, logger=logger, prefix='stderr:')
+
+            if status is None:
+                time.sleep(0.250)
+                continue
+            break
 
         logger.info("Finished executing [%s]", command_base)
-
-
-        
-
-        
-
 
