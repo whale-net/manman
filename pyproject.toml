@@ -1,37 +1,20 @@
-# https://github.com/adriangb/python-monorepo/tree/main/poetry
-
 [tool.poetry]
 name = "manman"
-version = "0.0.0"
+version = "0.1.0"
 description = ""
-authors = []
+authors = ["qmastermoo <alex.harding@whale-net.net>"]
 readme = "README.md"
-packages = []
 
-[tool.poetry.group.main.dependencies]
+[tool.poetry.dependencies]
 python = "^3.11"
+typer = "^0.12.3"
+fastapi = "^0.110.2"
+pika = "^1.3.2"
+sqlalchemy = "^2.0.29"
 
-
-# NOTE - the develop flag enables automatic updates regardless of subproject version
-[tool.poetry.group.host.dependencies]
-manman-host = { path = "host", develop = true}
-# by default these dependencies will be installed
-# however when doing --only <project> it'll only pickup the above required dependencies
-# enabling local dev and production dev with common environment definition
-[tool.poetry.group.host-dev.dependencies]
-manman-host = { path = "host", extras = ['dev'], develop = true}
-
-[tool.poetry.group.worker.dependencies]
-manman-worker = { path = "worker", develop = true}
-[tool.poetry.group.worker-dev.dependencies]
-manman-worker = { path = "worker", extras = ['dev'], develop = true}
-
-[tool.poetry.group.test_shared.dependencies]
-manman-test_shared = { path = "test_shared", develop = true }
-
-# unsure if needed
-# [tool.poetry.group.models.dependencies]
-# manman-models = { path = "manman-models", develop = true}
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.1"
+pre-commit = "^3.7.0"
 
 [build-system]
 requires = ["poetry-core"]
