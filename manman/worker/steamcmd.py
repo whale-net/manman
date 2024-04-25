@@ -2,7 +2,7 @@ import logging
 import os
 import pathlib
 
-from manman.commandbuilder import CommandBuilder
+from manman.processbuilder import ProcessBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class SteamCMD:
         check_file_name = os.path.join(install_dir, ".manman")
         pathlib.Path(check_file_name).touch()
 
-        cb = CommandBuilder(self._steamcmd_executable)
+        cb = ProcessBuilder(self._steamcmd_executable)
         # steamcmd is different and uses + for args
         cb.add_parameter("+force_install_dir", install_dir)
         cb.add_parameter("+login", self._username)

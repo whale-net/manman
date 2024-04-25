@@ -8,7 +8,7 @@ from manman.util import log_stream
 logger = logging.getLogger(__name__)
 
 
-class CommandBuilder:
+class ProcessBuilder:
     def __init__(self, executable: str) -> None:
         self._executable = executable
         self._args: list[str] = []
