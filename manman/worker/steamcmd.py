@@ -14,18 +14,18 @@ class SteamCMD:
     def __init__(
         self,
         install_dir: str,
-        username: str | None = None,
+        username: str = DEFAULT_USERNAME,
         password: str | None = None,
         steamcmd_executable: str | None = None,
     ) -> None:
         self._install_dir = install_dir
 
-        self._username = username or SteamCMD.DEFAULT_USERNAME
-        self._password = password
-        if self._username != SteamCMD.DEFAULT_USERNAME and self._password is None:
+        if username != SteamCMD.DEFAULT_USERNAME and password is None:
             raise Exception(
                 "non-anonymous username specified and password not provided"
             )
+        self._username = username
+        self._password = password
 
         self._steamcmd_executable = steamcmd_executable or SteamCMD.DEFAULT_EXECUTABLE
 
@@ -43,24 +43,23 @@ class SteamCMD:
         logger.info("installing app_id=[%s]", app_id)
 
         # prepare directory
-        install_dir = os.path.join(self._install_dir, str(app_id))
-        if not os.path.exists(install_dir):
-            logger.info("directroy not found, creating=[%s]", install_dir)
-            os.makedirs(install_dir)
+        if not os.path.exists(self._install_dir):
+            logger.info("directroy not found, creating=[%s]", self._install_dir)
+            os.makedirs(self._install_dir)
 
         # leave a little something behind
-        check_file_name = os.path.join(install_dir, ".manman")
+        check_file_name = os.path.join(self._install_dir, ".manman")
         pathlib.Path(check_file_name).touch()
 
         cb = ProcessBuilder(self._steamcmd_executable)
         # steamcmd is different and uses + for args
-        cb.add_parameter("+force_install_dir", install_dir)
+        cb.add_parameter("+force_install_dir", self._install_dir)
         cb.add_parameter("+login", self._username)
         if self._password is not None:
             cb.add_stdin(self._password)
         cb.add_parameter("+app_update", str(app_id))
         cb.add_parameter("+exit")
 
-        cb.execute_command()
+        cb.execute()
 
         logger.info("installed app_id=[%s]", app_id)

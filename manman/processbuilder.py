@@ -42,7 +42,7 @@ class ProcessBuilder:
 
         return command, stdinput
 
-    def execute_command(self):
+    def execute(self):
         command_base = os.path.basename(self._executable)
 
         logger.info("About to start executing [%s]", command_base)
