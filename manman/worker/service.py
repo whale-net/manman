@@ -18,6 +18,11 @@ class WorkerService:
         sid = ServerID(ServerType.STEAM, app_id, name)
         # TODO - retrieve executable from some mapping?
         server = Server(
-            sid, self._root_install_dir, executable="game/bin/linuxsteamrt64/cs2"
+            sid,
+            self._root_install_dir,
+            executable="game/bin/linuxsteamrt64/cs2",
         )
-        server.run()
+        server.run(
+            args=["-dedicated", "-port", "27015", "+map", "de_ancient"],
+            should_update=False,
+        )

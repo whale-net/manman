@@ -49,7 +49,8 @@ class Server:
         if should_update:
             steam.install(app_id=self.server_id.app_id)
 
-        pb = ProcessBuilder(executable=self._executable)
+        executable_path = os.path.join(self._server_directory, self._executable)
+        pb = ProcessBuilder(executable=executable_path)
         for arg in args:
             pb.add_parameter(arg)
 

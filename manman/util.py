@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 def log_stream(
-    stream: io.IOBase | None,
+    stream: io.BufferedReader | None,
     prefix: str | None = None,
     logger: logging.Logger = logger,
     max_lines: int | None = None,
