@@ -1,6 +1,7 @@
 import typer
 import logging
 import os
+from typing import Optional
 from typing_extensions import Annotated
 from logging.config import fileConfig
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 def start(
     install_directory: str,
     steamcmd_override: Annotated[
-        str, typer.Argument(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
+        Optional[str], typer.Argument(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
     ] = None,
 ):
     install_directory = os.path.abspath(install_directory)

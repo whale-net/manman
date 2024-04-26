@@ -64,15 +64,17 @@ class NamedThreadPool:
     def __del__(self):
         self._graceful_shutdown()
 
-    def submit(self, target, name: str, *args, **kwargs):
-        thread_name = name
-        if len(self.thread_name_prefix) > 0:
-            thread_name = f"{self.thread_name_prefix}.{name}"
-
+    def submit(self, target, thread_name: str, *args, **kwargs):
         logger.info(f"creating thread {thread_name} target={target.__name__}")
-        thread = threading.Thread(target=target, name=thread_name, *args, **kwargs)
+        kwargs.update(
+            {
+                "target": target,
+                "name": thread_name,
+            }
+        )
+        thread = threading.Thread(*args, **kwargs)
         thread.start()
         self._threads.append(thread)
 
-    def prune():
+    def prune(self):
         return

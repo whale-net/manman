@@ -16,5 +16,8 @@ class WorkerService:
         # how to do communication to the servers?
 
         sid = ServerID(ServerType.STEAM, app_id, name)
-        server = Server(sid, self._root_install_dir, executable="ls")
+        # TODO - retrieve executable from some mapping?
+        server = Server(
+            sid, self._root_install_dir, executable="game/bin/linuxsteamrt64/cs2"
+        )
         server.run()

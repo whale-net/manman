@@ -50,4 +50,7 @@ class Server:
             steam.install(app_id=self.server_id.app_id)
 
         pb = ProcessBuilder(executable=self._executable)
+        for arg in args:
+            pb.add_parameter(arg)
+
         pb.execute()

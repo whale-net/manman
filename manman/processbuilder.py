@@ -38,7 +38,7 @@ class ProcessBuilder:
             command += " " + " ".join(self._args)
         stdinput = None
         if len(self._stdinput) > 0:
-            stdinput = " ".join(stdinput)
+            stdinput = " ".join(self._stdinput)
 
         return command, stdinput
 
