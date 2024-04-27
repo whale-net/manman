@@ -1,11 +1,10 @@
 
 .python-version
 
-.ruff_cache/*
+.ruff_cache
 
-data/*
-bin/*
-
+data
+bin
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

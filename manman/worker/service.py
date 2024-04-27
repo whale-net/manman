@@ -3,7 +3,7 @@ import pika
 from manman.worker.server import ServerID
 from manman.util import NamedThreadPool
 
-from manman.worker.server import Server, ServerType
+from manman.worker.server import Server, ServerTypeEnum
 
 
 class WorkerService:
@@ -33,7 +33,9 @@ class WorkerService:
         # list? is threadpool enough of a lifespan? is that dignified?
         # how to do communication to the servers?
 
-        sid = ServerID(server_type=ServerType.STEAM, app_id=app_id, name=name)
+        sid = ServerID(
+            id="fish123", server_type=ServerTypeEnum.STEAM, app_id=app_id, name=name
+        )
         # TODO - retrieve executable from some mapping?
         server = Server(
             sid,

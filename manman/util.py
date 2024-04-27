@@ -93,7 +93,22 @@ class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):
         return super().submit(rename_thread, *args, **kwargs)
 
 
-# TODO this may be useless with sessions
+def get_sqlalchemy_engine(
+    postgres_host: str, postgres_port: int, postgres_user: str, postgres_password: str
+) -> sqlalchemy.engine:
+    connection_string = sqlalchemy.URL.create(
+        "postgresql+psycopg2",
+        username=postgres_user,
+        password=postgres_password,
+        host=postgres_host,
+        port=postgres_port,
+        database="manman",
+    )
+    engine = sqlalchemy.create_engine(connection_string)
+    return engine
+
+
+# TODO this may be useless with engine+sessions
 def get_sqlalchemy_connection(
     postgres_host: str, postgres_port: int, postgres_user: str, postgres_password: str
 ) -> sqlalchemy.Connection:

@@ -8,7 +8,7 @@ from manman.processbuilder import ProcessBuilder
 from manman.worker.steamcmd import SteamCMD
 
 
-class ServerType(Enum):
+class ServerTypeEnum(Enum):
     STEAM = 1
 
 
@@ -21,7 +21,7 @@ class CommandType(Enum):
 
 class ServerID(BaseModel):
     id: str
-    server_type: ServerType
+    server_type: ServerTypeEnum
     app_id: int
     name: str
 
