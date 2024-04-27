@@ -47,6 +47,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
     )
 
     with context.begin_transaction():
@@ -79,8 +80,24 @@ def run_migrations_online() -> None:
         postgres_password,
     )
 
+    def include_object(object, name, type_, reflected, compare_to):
+        if type_ == "table":
+            return object.schema == "manman"
+        else:
+            return True
+
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            # require usage of schemas
+            include_schemas=True,
+            # this function will make it so migrations only apply to our manman schema
+            include_object=include_object,
+            # put version table somewhere else just for separation
+            # also needs to be specified in order to work with include_schemas
+            version_table_schema="public",
+        )
 
         with context.begin_transaction():
             context.run_migrations()
