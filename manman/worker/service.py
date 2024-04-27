@@ -3,7 +3,7 @@ import pika
 from manman.worker.server import ServerID
 from manman.util import NamedThreadPool
 
-from manman.worker.server import Server, ServerTypeEnum
+from manman.worker.server import Server, ServerType
 
 
 class WorkerService:
@@ -34,7 +34,7 @@ class WorkerService:
         # how to do communication to the servers?
 
         sid = ServerID(
-            id="fish123", server_type=ServerTypeEnum.STEAM, app_id=app_id, name=name
+            id="fish123", server_type=ServerType.STEAM, app_id=app_id, name=name
         )
         # TODO - retrieve executable from some mapping?
         server = Server(

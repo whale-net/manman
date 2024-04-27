@@ -1,9 +1,9 @@
 from datetime import datetime
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, MetaData, UniqueConstraint
+from sqlalchemy import String, MetaData  # , UniqueConstraint
 
-from manman.worker.server import ServerTypeEnum as ServerTypeEnum
+from manman.worker.server import ServerType
 
 
 class Base(DeclarativeBase):
@@ -26,13 +26,6 @@ class Worker(
 class Server(Base):
     __tablename__ = "servers"
     id: Mapped[int] = mapped_column(primary_key=True)
+    server_type: Mapped[ServerType]
     created_date: Mapped[datetime]
     end_date: Mapped[datetime]
-
-
-class ServerType(Base):
-    __tablename__ = "server_types"
-    __table_args__ = (UniqueConstraint("server_type"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    server_type: Mapped[ServerTypeEnum]

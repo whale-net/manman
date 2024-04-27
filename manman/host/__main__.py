@@ -23,7 +23,6 @@ __global_state = {
 }
 
 
-# TODO callback to share common boostrapping startup for easier test commands
 @app.command()
 def start(run_migration_check: Optional[bool] = True):
     engine = __global_state["sqlalchemy_engine"]
@@ -32,6 +31,7 @@ def start(run_migration_check: Optional[bool] = True):
         raise RuntimeError("migration needs to be ran before starting")
 
 
+# TODO - should these not be ran by host?
 @app.command()
 def run_migration():
     engine = __global_state["sqlalchemy_engine"]
