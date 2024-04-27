@@ -20,14 +20,25 @@ logger = logging.getLogger(__name__)
 # TODO callback to share common boostrapping startup for easier test commands
 @app.command()
 def start(
+    *,
     install_directory: str,
+    rabbitmq_host: str,
+    rabbitmq_port: int,
+    rabbitmq_username: str,
+    rabbitmq_password: str,
     steamcmd_override: Annotated[
-        Optional[str], typer.Argument(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
+        Optional[str], typer.Option(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
     ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
     logger.info(install_directory)
-    service = WorkerService(install_directory)
+    service = WorkerService(
+        install_directory,
+        rabbitmq_host,
+        rabbitmq_port,
+        rabbitmq_username,
+        rabbitmq_password,
+    )
     service.start_server(730, "cs2test")
 
 

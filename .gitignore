@@ -4,6 +4,7 @@
 .ruff_cache/*
 
 data/*
+bin/*
 
 
 # Byte-compiled / optimized / DLL files

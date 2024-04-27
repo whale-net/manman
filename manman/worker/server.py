@@ -1,6 +1,8 @@
 import os
-from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel
 
 from manman.processbuilder import ProcessBuilder
 from manman.worker.steamcmd import SteamCMD
@@ -10,12 +12,24 @@ class ServerType(Enum):
     STEAM = 1
 
 
-@dataclass
-class ServerID:
+class CommandType(Enum):
+    START = 1
+    STOP = 2
+    # KILL = 3
+    CUSTOM = 4
+
+
+class ServerID(BaseModel):
+    id: str
     server_type: ServerType
     app_id: int
-    # TODO pydantic to validate?
     name: str
+
+
+class ServerCommand(BaseModel):
+    server_id: ServerID
+    command_type: CommandType
+    command_data: Optional[str]
 
 
 # TODO logging
