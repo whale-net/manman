@@ -84,6 +84,8 @@ def get_session():
     if __GLOBALS.get("engine") is None:
         raise RuntimeError("global engine not defined - cannot start")
     if __GLOBALS.get("session") is None:
+        # expire_on_commit allows usage of objects after session context closes
+        # __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"], expire_on_commit=False)
         __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"])
     return __GLOBALS["session"]()
 

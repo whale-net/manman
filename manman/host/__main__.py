@@ -21,11 +21,20 @@ logger = logging.getLogger(__name__)
 
 
 @app.command()
-def start(run_migration_check: Optional[bool] = True):
+def start(
+    port: int = 8000,
+    # workers: int = 1,
+    # auto_reload: bool = False,
+    run_migration_check: Optional[bool] = True,
+):
     # TODO - get connection properly
     if run_migration_check and _need_migration(get_sqlalchemy_engine("", 0, "", "")):
         raise RuntimeError("migration needs to be ran before starting")
-    uvicorn.run(fastapp)
+    # TODO running via string doesn't initialize engine because separate process
+    # this would be a nice development enhancement, but may not matter if we scale out. TBD
+    # gunicorn + uvicorn worker is preferred if need to scale local api instance
+    # uvicorn.run("manman.host.api:fastapp", port=port, workers=workers, reload=auto_reload)
+    uvicorn.run(fastapp, port=port)
 
 
 # TODO - should these not be ran by host?
