@@ -10,7 +10,9 @@ from logging.config import fileConfig
 from typing import Optional
 
 import sqlalchemy
+import uvicorn
 
+from manman.host.api import fastapp
 from manman.util import init_sql_alchemy_engine, get_sqlalchemy_engine
 
 app = typer.Typer()
@@ -20,21 +22,25 @@ logger = logging.getLogger(__name__)
 
 @app.command()
 def start(run_migration_check: Optional[bool] = True):
-    if run_migration_check and _need_migration(get_sqlalchemy_engine()):
+    # TODO - get connection properly
+    if run_migration_check and _need_migration(get_sqlalchemy_engine("", 0, "", "")):
         raise RuntimeError("migration needs to be ran before starting")
+    uvicorn.run(fastapp)
 
 
 # TODO - should these not be ran by host?
 @app.command()
 def run_migration():
-    _run_migration(get_sqlalchemy_engine())
+    # TODO - get connection properly
+    _run_migration(get_sqlalchemy_engine("", 0, "", ""))
 
 
 @app.command()
 def create_migration(migration_message: Optional[str] = None):
     if os.environ.get("ENVIRONMENT", "DEV") == "PROD":
         raise RuntimeError("cannot create revisions in production")
-    _create_migration(get_sqlalchemy_engine(), message=migration_message)
+    # TODO - get connection properly
+    _create_migration(get_sqlalchemy_engine("", 0, "", ""), message=migration_message)
 
 
 @app.callback()

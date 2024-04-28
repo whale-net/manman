@@ -44,48 +44,6 @@ def log_stream(
     logger.debug("finished reading stream")
 
 
-# TODO - make threadsafe if need be
-# currently no need
-# class NamedThreadPool:
-#     def __init__(self) -> None:
-#         self._threads: list[threading.Thread] = []
-
-#     def __enter__(self) -> "NamedThreadPool":
-#         return self
-
-#     def _graceful_shutdown(self):
-#         logger.info("all work submitted, beginning to join threads")
-#         for thread in self._threads:
-#             try:
-#                 logger.debug(f"joining thread: {thread.name} id={thread.native_id}")
-#                 thread.join()
-#                 logger.debug(f"thread completed: {thread.name} id={thread.native_id}")
-#             except KeyboardInterrupt:
-#                 logger.warning(
-#                     f"KeyboardInterrupt recieved for thread: {thread.name} id={thread.native_id}"
-#                 )
-
-#     def __exit__(self, exc_type, exc_value, exc_tb):
-#         self._graceful_shutdown()
-
-#     def __del__(self):
-#         self._graceful_shutdown()
-
-#     def submit(self, target, thread_name: str, *args, **kwargs):
-#         logger.info(f"creating thread {thread_name} target={target.__name__}")
-#         kwargs.update(
-#             {
-#                 "target": target,
-#                 "name": thread_name,
-#             }
-#         )
-#         thread = threading.Thread(*args, **kwargs)
-#         thread.start()
-#         self._threads.append(thread)
-
-
-#     def prune(self):
-#         return
 class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):
     def submit(
         self, fn, /, name: Optional[str] = None, *args, **kwargs

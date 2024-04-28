@@ -57,9 +57,14 @@ class WorkerService:
         server = self._create_server(5)
         self._servers.append(server)
         while True:
-            for server in self._servers:
-                logger.info("%s", server._pb.status)
-            time.sleep(1)
+            logger.info("still running")
+            # for server in self._servers:
+            #     logger.info("%s", server._pb.status)
+            time.sleep(0.25)
+
+    def _process_queue(self):
+        # process worker and worker/server queue (maybe block on these? can we block on an OR?)
+        pass
 
     def _create_server(self, game_server_config_id: int) -> Server:
         # some of this logic should move to API

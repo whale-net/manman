@@ -32,6 +32,9 @@ class Server:
             )
             sess.add(self._instance)
             sess.flush()
+            sess.expunge(self._game_server)
+            sess.expunge(self._instance)
+            sess.commit()
 
         logger.info("starting instance %s", self._instance.game_server_instance_id)
 
