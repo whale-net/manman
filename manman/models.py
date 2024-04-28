@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -10,8 +11,11 @@ from sqlalchemy import (
     Index,
     ARRAY,
 )  # , UniqueConstraint
+from sqlalchemy.sql.functions import current_timestamp
 
-from manman.worker.server import ServerType
+
+class ServerType(Enum):
+    STEAM = 1
 
 
 class Base(DeclarativeBase):
@@ -35,15 +39,13 @@ class Worker(
 # do I need server table? -> yes, but make worker manage state
 # make health check contain server info for trueups
 class GameServerInstance(Base):
-    __tablename__ = "servers"
-    game_sever_instance_id: Mapped[int] = mapped_column(primary_key=True)
-    game_server_id: Mapped[int] = mapped_column(
-        ForeignKey("game_servers.game_server_id"), index=True
+    __tablename__ = "game_server_instances"
+    game_server_instance_id: Mapped[int] = mapped_column(primary_key=True)
+    game_server_config_id: Mapped[int] = mapped_column(
+        ForeignKey("game_server_configs.game_server_config_id"), index=True
     )
-    # TODO - is there some type of constraint I could use to avoid the name
-    name: Mapped[str]
-    created_date: Mapped[datetime]
-    end_date: Mapped[datetime]
+    created_date: Mapped[datetime] = mapped_column(default=current_timestamp())
+    end_date: Mapped[datetime] = mapped_column(nullable=True)
 
 
 class GameServer(Base):
@@ -80,6 +82,7 @@ class GameServerConfig(Base):
     )
     is_default: Mapped[bool] = mapped_column(default=False)
 
+    name: Mapped[str]
     executable: Mapped[str]
     args: Mapped[list[str]]
 
@@ -90,5 +93,11 @@ class GameServerConfig(Base):
             is_default,
             unique=True,
             postgresql_where=(is_default.column),
+        ),
+        Index(
+            "ixu_game_server_configs_game_server_id_name",
+            "game_server_id",
+            "name",
+            unique=True,
         ),
     )

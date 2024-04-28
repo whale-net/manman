@@ -1,9 +1,31 @@
+import logging
+import time
+from typing import Optional
+from enum import Enum
+
 import pika
+from pydantic import BaseModel
+# from sqlalchemy.orm import Session
 
-from manman.worker.server import ServerID
-from manman.util import NamedThreadPool
+from manman.models import GameServerConfig
+from manman.util import NamedThreadPool, get_session
+from manman.worker.server import Server
 
-from manman.worker.server import Server, ServerType
+logger = logging.getLogger(__name__)
+
+
+class CommandType(Enum):
+    START = 1
+    STOP = 2
+    # KILL = 3
+    CUSTOM = 4
+
+
+# TODO - subclass for each comamnd type + parent class factory based on enum
+class ServerCommand(BaseModel):
+    server_id: int
+    command_type: CommandType
+    command_data: Optional[str]
 
 
 class WorkerService:
@@ -19,6 +41,9 @@ class WorkerService:
         self._root_install_dir = root_install_dir
 
         self._threadpool = NamedThreadPool()
+        # this isn't threadsafe, but this is the only thread working on it
+        self._servers: list[Server] = []
+
         credentials = pika.credentials.PlainCredentials(
             username=rabbitmq_username, password=rabbitmq_password
         )
@@ -28,23 +53,21 @@ class WorkerService:
             )
         )
 
-    def start_server(self, app_id: int, name: str):
-        # TODO how to store servers?
-        # list? is threadpool enough of a lifespan? is that dignified?
-        # how to do communication to the servers?
+    def run(self):
+        server = self._create_server(5)
+        self._servers.append(server)
+        while True:
+            for server in self._servers:
+                logger.info("%s", server._pb.status)
+            time.sleep(1)
 
-        sid = ServerID(
-            id="fish123", server_type=ServerType.STEAM, app_id=app_id, name=name
-        )
-        # TODO - retrieve executable from some mapping?
+    def _create_server(self, game_server_config_id: int) -> Server:
+        # some of this logic should move to API
+        with get_session() as sess:
+            config = sess.get_one(GameServerConfig, game_server_config_id)
         server = Server(
-            sid,
-            self._root_install_dir,
-            executable="game/bin/linuxsteamrt64/cs2",
+            root_install_directory=self._root_install_dir,
+            config=config,
         )
-        print(server)
-        # temp disable
-        # server.run(
-        #     args=["-dedicated", "-port", "27015", "+map", "de_ancient"],
-        #     should_update=False,
-        # )
+        server.start(self._threadpool, should_update=False)
+        return server

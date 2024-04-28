@@ -11,39 +11,30 @@ from typing import Optional
 
 import sqlalchemy
 
-from manman.util import get_sqlalchemy_engine
+from manman.util import init_sql_alchemy_engine, get_sqlalchemy_engine
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
-# probably a better way to do this but \(o.0)/
-__global_state = {
-    "sqlalchemy_engine": None,
-}
-
 
 @app.command()
 def start(run_migration_check: Optional[bool] = True):
-    engine = __global_state["sqlalchemy_engine"]
-
-    if run_migration_check and _need_migration(engine):
+    if run_migration_check and _need_migration(get_sqlalchemy_engine()):
         raise RuntimeError("migration needs to be ran before starting")
 
 
 # TODO - should these not be ran by host?
 @app.command()
 def run_migration():
-    engine = __global_state["sqlalchemy_engine"]
-    _run_migration(engine)
+    _run_migration(get_sqlalchemy_engine())
 
 
 @app.command()
 def create_migration(migration_message: Optional[str] = None):
     if os.environ.get("ENVIRONMENT", "DEV") == "PROD":
         raise RuntimeError("cannot create revisions in production")
-    engine = __global_state["sqlalchemy_engine"]
-    _create_migration(engine, message=migration_message)
+    _create_migration(get_sqlalchemy_engine(), message=migration_message)
 
 
 @app.callback()
@@ -58,9 +49,11 @@ def callback(
     # __global_state["postgres_port"] = postgres_port
     # __global_state["postgres_user"] = postgres_user
     # __global_state["postgres_password"] = postgres_password
-    __global_state["sqlalchemy_engine"] = get_sqlalchemy_engine(
+    init_sql_alchemy_engine(
         postgres_host, postgres_port, postgres_user, postgres_password
     )
+    # __global_state["sqlalchemy_engine"] = engine
+    # sessionmaker(bind=engine)
 
 
 # alembic helpers

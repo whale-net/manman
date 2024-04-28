@@ -1,71 +1,79 @@
 import os
-from enum import Enum
-from typing import Optional
+import logging
 
-from pydantic import BaseModel
+# import sqlalchemy
+# from sqlalchemy.orm import Session
 
+# from pydantic import BaseModel
+
+from manman.models import GameServerConfig, GameServer, GameServerInstance
 from manman.processbuilder import ProcessBuilder
 from manman.worker.steamcmd import SteamCMD
+from manman.util import NamedThreadPool, get_session
 
-
-class ServerType(Enum):
-    STEAM = 1
-
-
-class CommandType(Enum):
-    START = 1
-    STOP = 2
-    # KILL = 3
-    CUSTOM = 4
-
-
-class ServerID(BaseModel):
-    id: str
-    server_type: ServerType
-    app_id: int
-    name: str
-
-
-class ServerCommand(BaseModel):
-    server_id: ServerID
-    command_type: CommandType
-    command_data: Optional[str]
+logger = logging.getLogger(__name__)
 
 
 # TODO logging
 class Server:
     def __init__(
         self,
-        server_id: ServerID,
-        # TODO where should this come from?
         root_install_directory: str,
-        executable: str,
+        config: GameServerConfig,
     ) -> None:
-        self._server_id = server_id
-        self._root_install_directory = root_install_directory
-        self._executable = executable
+        self._config = config
 
+        with get_session() as sess:
+            self._game_server: GameServer = sess.get_one(
+                GameServer, config.game_server_id
+            )
+            self._instance: GameServerInstance = GameServerInstance(
+                game_server_config_id=self._config.game_server_config_id
+            )
+            sess.add(self._instance)
+            sess.flush()
+
+        logger.info("starting instance %s", self._instance.game_server_instance_id)
+
+        self._root_install_directory = root_install_directory
         self._server_directory = os.path.join(
             self._root_install_directory,
-            self._server_id.server_type.name.lower(),
-            f"{server_id.app_id}-{server_id.name}",
+            # game_server is unique on server_type_appid
+            self._game_server.server_type.name.lower(),
+            str(self._game_server.app_id),
+            # and then config is unique on game_server_id
+            self._config.name,
         )
 
-    @property
-    def server_id(self) -> ServerID:
-        return self._server_id
-
-    def run(self, args: list[str] | None = None, should_update: bool = True):
-        if args is None:
-            args = []
-
-        steam = SteamCMD(self._server_directory)
-        if should_update:
-            steam.install(app_id=self.server_id.app_id)
-
-        executable_path = os.path.join(self._server_directory, self._executable)
+        executable_path = os.path.join(self._server_directory, self._config.executable)
         pb = ProcessBuilder(executable=executable_path)
-        for arg in args:
+        for arg in self._config.args:
             pb.add_parameter(arg)
+        self._pb = pb
 
-        pb.execute()
+    @property
+    def instance(self) -> GameServerInstance:
+        return self._instance
+
+    def add_stdin(self, input: str):
+        # TODO check if pb is running
+        self._pb.stdin_queue.put(input)
+
+    def start(
+        self,
+        threadpool: NamedThreadPool,
+        # extra_args: list[str] | None = None,
+        should_update: bool = True,
+    ):
+        # if extra_args is None:
+        #     extra_args = []
+
+        def fn():
+            if should_update:
+                steam = SteamCMD(self._server_directory)
+                steam.install(app_id=self._game_server.app_id)
+            # for arg in extra_args:
+            #     pb.add_parameter(arg)
+            self._pb.execute()
+
+        threadpool.submit(fn, name=f"server[{self.instance.game_server_instance_id}]")

@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.orm import Session
 
 from manman.models import GameServer, GameServerConfig
-from manman.worker.server import ServerType
+from manman.models import ServerType
 
 
 # revision identifiers, used by Alembic.

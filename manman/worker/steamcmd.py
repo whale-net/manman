@@ -56,7 +56,7 @@ class SteamCMD:
         cb.add_parameter("+force_install_dir", self._install_dir)
         cb.add_parameter("+login", self._username)
         if self._password is not None:
-            cb.add_stdin(self._password)
+            cb.add_parameter_stdin(self._password)
         cb.add_parameter("+app_update", str(app_id))
         cb.add_parameter("+exit")
 

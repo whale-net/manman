@@ -5,16 +5,13 @@ from typing import Optional
 from typing_extensions import Annotated
 from logging.config import fileConfig
 
+
 from manman.worker.service import WorkerService
+from manman.util import init_sql_alchemy_engine
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
-
-# TODO - how does an env var work with this? what takes precedence?
-# also lol just keeping logging on by default this was a trap (although interesting)
-# @app.callback()
-# def callback(enable_logging: bool = Annotated[str, typer.Option(True, '--logging')]):
 
 
 # TODO callback to share common boostrapping startup for easier test commands
@@ -39,7 +36,21 @@ def start(
         rabbitmq_username,
         rabbitmq_password,
     )
-    service.start_server(730, "cs2test")
+    # 5 = default cs config (for now)
+    service.run()
+
+
+@app.callback()
+def callback(
+    # TODO - worker will not connect to database in reality
+    postgres_host: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_HOST")],
+    postgres_port: Annotated[int, typer.Option(envvar="MANMAN_POSTGRES_PORT")],
+    postgres_user: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_USER")],
+    postgres_password: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_PASSWORD")],
+):
+    init_sql_alchemy_engine(
+        postgres_host, postgres_port, postgres_user, postgres_password
+    )
 
 
 @app.command()
