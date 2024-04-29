@@ -7,8 +7,9 @@ import pika
 from pydantic import BaseModel
 # from sqlalchemy.orm import Session
 
+from manman.host.api_client import WorkerAPI
 from manman.models import GameServerConfig
-from manman.util import NamedThreadPool, get_session
+from manman.util import NamedThreadPool
 from manman.worker.server import Server
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,8 @@ class WorkerService:
             )
         )
 
+        self._wapi = WorkerAPI("http://localhost:8000/")
+
     def run(self):
         server = self._create_server(5)
         self._servers.append(server)
@@ -67,10 +70,9 @@ class WorkerService:
         pass
 
     def _create_server(self, game_server_config_id: int) -> Server:
-        # some of this logic should move to API
-        with get_session() as sess:
-            config = sess.get_one(GameServerConfig, game_server_config_id)
+        config: GameServerConfig = self._wapi.game_server_config(game_server_config_id)
         server = Server(
+            wapi=self._wapi,
             root_install_directory=self._root_install_dir,
             config=config,
         )

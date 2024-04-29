@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 
 from manman.processbuilder import ProcessBuilder
 
@@ -48,8 +47,8 @@ class SteamCMD:
             os.makedirs(self._install_dir)
 
         # leave a little something behind
-        check_file_name = os.path.join(self._install_dir, ".manman")
-        pathlib.Path(check_file_name).touch()
+        # check_file_name = os.path.join(self._install_dir, ".manman")
+        # pathlib.Path(check_file_name).touch()
 
         cb = ProcessBuilder(self._steamcmd_executable)
         # steamcmd is different and uses + for args

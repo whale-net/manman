@@ -9,6 +9,7 @@ import logging
 from manman.models import GameServerConfig, GameServer, GameServerInstance
 from manman.processbuilder import ProcessBuilder
 from manman.worker.steamcmd import SteamCMD
+from manman.host.api_client import WorkerAPI
 from manman.util import NamedThreadPool, get_session
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,15 @@ logger = logging.getLogger(__name__)
 class Server:
     def __init__(
         self,
+        wapi: WorkerAPI,
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:
         self._config = config
+        self._api = wapi
+
+        self._instance = self._api.game_server_instance_create(config)
+        self._game_server = self._api.game_server(self._config.game_server_id)
 
         with get_session() as sess:
             self._game_server: GameServer = sess.get_one(

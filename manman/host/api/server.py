@@ -2,14 +2,14 @@ from fastapi import APIRouter
 import sqlalchemy
 from sqlalchemy.sql.functions import current_timestamp
 
-from manman.models import GameServerInstance
+from manman.models import GameServerInstance, GameServer, GameServerConfig
 from manman.util import get_session
 
-router = APIRouter()
+router = APIRouter(prefix="/workapi")
 
 
-@router.post("/server/create")
-async def server_create(body: GameServerInstance) -> GameServerInstance:
+@router.post("/server/instance/create")
+async def server_instance_create(body: GameServerInstance) -> GameServerInstance:
     with get_session() as sess:
         # TODO validate gaem_server_config_id exists
         server = GameServerInstance(game_server_config_id=body.game_server_config_id)
@@ -21,8 +21,8 @@ async def server_create(body: GameServerInstance) -> GameServerInstance:
     return server
 
 
-@router.put("/server/shutdown")
-async def server_shutdown(instance: GameServerInstance) -> GameServerInstance:
+@router.put("/server/instance/shutdown")
+async def server_instance_shutdown(instance: GameServerInstance) -> GameServerInstance:
     with get_session() as sess:
         # TODO - move check that it's not already dead to trigger
         # DB is right place to do that, but doing this so I can learn
@@ -43,8 +43,20 @@ async def server_shutdown(instance: GameServerInstance) -> GameServerInstance:
         sess.expunge(current_instance)
         sess.commit()
 
-    print(current_instance.end_date)
     return current_instance
 
 
-#     return server
+@router.get("/server/config/{id}")
+async def server_config(id: int) -> GameServerConfig:
+    with get_session() as sess:
+        config = sess.get_one(GameServerConfig, id)
+        sess.expunge(config)
+    return config
+
+
+@router.get("/server/{id}")
+async def server(id: int) -> GameServer:
+    with get_session() as sess:
+        config = sess.get_one(GameServer, id)
+        sess.expunge(config)
+    return config
