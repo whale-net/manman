@@ -3,13 +3,12 @@ import time
 from typing import Optional
 from enum import Enum
 
-import pika
 from pydantic import BaseModel
 # from sqlalchemy.orm import Session
 
 from manman.host.api_client import WorkerAPI
 from manman.models import GameServerConfig
-from manman.util import NamedThreadPool, get_rabbitmq_connection
+from manman.util import NamedThreadPool
 from manman.worker.server import Server
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,6 @@ class WorkerService:
     def __init__(
         self,
         install_dir: str,
-        rmq_parameters: pika.ConnectionParameters,
     ):
         # TODO error checking
         self._install_dir = install_dir
@@ -41,19 +39,18 @@ class WorkerService:
         self._threadpool = NamedThreadPool()
         # this isn't threadsafe, but this is the only thread working on it
         self._servers: list[Server] = []
-
-        self._rabbitmq_conn = get_rabbitmq_connection(rmq_parameters)
-
         self._wapi = WorkerAPI("http://localhost:8000/")
+        self._futures = []
 
     def run(self):
-        server = self._create_server(5)
-        self._servers.append(server)
+        self._create_server(5)
+        count = 0
         while True:
-            logger.info("still running")
-            # for server in self._servers:
-            #     logger.info("%s", server._pb.status)
-            time.sleep(0.25)
+            count += 1
+            if count % 10 == 0:
+                logger.info("still running - server_count=%s", len(self._servers))
+
+            time.sleep(1)
 
     def _process_queue(self):
         # process worker and worker/server queue (maybe block on these? can we block on an OR?)
@@ -66,5 +63,16 @@ class WorkerService:
             root_install_directory=self._install_dir,
             config=config,
         )
-        server.start(self._threadpool, should_update=False)
-        return server
+        future = self._threadpool.submit(
+            server.run,
+            name=f"server[{server.instance.game_server_instance_id}]",
+            should_update=False,
+        )
+        # TODO - does threadpool ever get too big with dead threads?
+        self._futures.append(future)
+        # TODO - need way to prune this list
+        self._servers.append(server)
+
+        # TODO TEMP
+        time.sleep(20)
+        server._process_queue()

@@ -6,12 +6,11 @@ from logging.config import fileConfig
 import pika
 
 from manman.worker.service import WorkerService
+from manman.util import init_rabbitmq, get_rabbitmq_connection
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
-
-__GLOBAL = {}
 
 
 # TODO callback to share common boostrapping startup for easier test commands
@@ -25,10 +24,7 @@ def start(
     # ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
-    service = WorkerService(
-        install_directory,
-        __GLOBAL["rmq_parms"],
-    )
+    service = WorkerService(install_directory)
     service.run()
 
 
@@ -43,17 +39,19 @@ def callback(
     credentials = pika.credentials.PlainCredentials(
         username=rabbitmq_username, password=rabbitmq_password
     )
-    __GLOBAL["rmq_parms"] = pika.ConnectionParameters(
-        host=rabbitmq_host, port=rabbitmq_port, credentials=credentials
+    init_rabbitmq(
+        pika.ConnectionParameters(
+            host=rabbitmq_host, port=rabbitmq_port, credentials=credentials
+        )
     )
 
 
 @app.command()
-def localdev():
-    #     logger.info("test123")
-    #     install_directory = "/home/alex/manman/data/"
-    #     cmd = SteamCMD(install_directory)
-    #     cmd.install(730)
+def localdev(key: int):
+    connection = get_rabbitmq_connection()
+    chan = connection.channel()
+    chan.exchange_declare("server")
+    chan.basic_publish(exchange="server", routing_key=str(key), body="test123")
     return
 
 

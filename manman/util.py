@@ -69,7 +69,10 @@ def get_sqlalchemy_engine(
             port=postgres_port,
             database="manman",
         )
-        __GLOBALS["engine"] = sqlalchemy.create_engine(connection_string)
+        __GLOBALS["engine"] = sqlalchemy.create_engine(
+            connection_string,
+            pool_pre_ping=True,
+        )
     return __GLOBALS["engine"]
 
 
@@ -91,19 +94,15 @@ def get_session():
     return __GLOBALS["session"]()
 
 
-def get_rabbitmq_connection(
-    connection_parms: Optional[pika.ConnectionParameters] = None,
-):
+def init_rabbitmq(connection_parms: pika.ConnectionParameters):
+    __GLOBALS["rmq_parameters"] = connection_parms
+
+
+def get_rabbitmq_connection():
     stored_parms = __GLOBALS.get("rmq_parameters")
-    # edge cases
-    if connection_parms is None and stored_parms is None:
-        raise RuntimeError("need to provide connection parms during first call")
-    elif stored_parms is None:
-        stored_parms = connection_parms
-    # favor new over current
-    parms = connection_parms or stored_parms
-    return pika.BlockingConnection(parms)
+    if stored_parms is None:
+        raise RuntimeError("need to provide init rabbitmq")
 
-
-# TODO
-# def create_rabbitmq_connection():
+    if "rmq_connection" not in __GLOBALS:
+        __GLOBALS["rmq_connection"] = pika.BlockingConnection(stored_parms)
+    return __GLOBALS["rmq_connection"]

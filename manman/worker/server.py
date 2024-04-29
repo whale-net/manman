@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Self
 
 # import sqlalchemy
 # from sqlalchemy.orm import Session
@@ -7,28 +8,40 @@ import logging
 # from pydantic import BaseModel
 
 from manman.models import GameServerConfig, GameServerInstance, ServerType
-from manman.processbuilder import ProcessBuilder
+from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
 from manman.host.api_client import WorkerAPI
-from manman.util import NamedThreadPool
+from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
 
 
 # TODO logging
 class Server:
+    RMQ_EXCHANGE = "server"
+
     def __init__(
         self,
         wapi: WorkerAPI,
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:
+        self._wapi = wapi
         self._config = config
-        self._api = wapi
 
-        self._instance = self._api.game_server_instance_create(config)
-        self._game_server = self._api.game_server(self._config.game_server_id)
+        self._instance = self._wapi.game_server_instance_create(config)
+        self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
+
+        self._rmq_channel = get_rabbitmq_connection().channel()
+        self._rmq_channel.exchange_declare(Server.RMQ_EXCHANGE, exchange_type="direct")
+        result = self._rmq_channel.queue_declare("", exclusive=True)
+        self._rmq_queue_name = result.method.queue
+        self._rmq_channel.queue_bind(
+            queue=self._rmq_queue_name,
+            exchange=Server.RMQ_EXCHANGE,
+            routing_key=str(self._instance.game_server_instance_id),
+        )
 
         self._root_install_directory = root_install_directory
         self._server_directory = os.path.join(
@@ -46,29 +59,51 @@ class Server:
             pb.add_parameter(arg)
         self._pb = pb
 
+    def __del__(self):
+        # probably a better place than garbage collector but whatever it works
+        self._wapi.game_server_instance_shutdown(self._instance)
+
     @property
     def instance(self) -> GameServerInstance:
         return self._instance
 
-    def add_stdin(self, input: str):
-        # TODO check if pb is running
-        self._pb.stdin_queue.put(input)
+    # def add_stdin(self, input: str):
+    #     # TODO check if pb is running
+    #     self._pb.stdin_queue.put(input)
 
-    def start(
-        self,
-        threadpool: NamedThreadPool,
-        # extra_args: list[str] | None = None,
-        should_update: bool = True,
-    ):
-        # if extra_args is None:
-        #     extra_args = []
+    # def stop(self):
+    #     status = self._pb.status
+    #     if status not in (ProcessBuilderStatus.INIT, ProcessBuilderStatus.RUNNING):
+    #         logger.info("invalid stop received, current_status = %s", status)
+    #         return
 
-        def fn():
-            if should_update:
-                steam = SteamCMD(self._server_directory)
-                steam.install(app_id=self._game_server.app_id)
-            # for arg in extra_args:
-            #     pb.add_parameter(arg)
-            self._pb.execute()
+    def _process_queue(self):
+        self._rmq_channel.basic_consume(
+            self._rmq_queue_name,
+            on_message_callback=self._process_message,
+            auto_ack=True,
+        )
+        self._rmq_channel.start_consuming()
 
-        threadpool.submit(fn, name=f"server[{self.instance.game_server_instance_id}]")
+    def _process_message(self, ch, method, properties, body):
+        logger.info("body=%s", body)
+        logger.warning("killing server")
+        self._pb.kill()
+        return
+
+    def run(self, should_update: bool = True) -> Self:
+        logger.info("instance %s starting", self._instance.game_server_instance_id)
+        if should_update:
+            steam = SteamCMD(self._server_directory)
+            steam.install(app_id=self._game_server.app_id)
+        self._pb.execute()
+        status = self._pb.status
+        while status != ProcessBuilderStatus.STOPPED:
+            self._pb.read_output()
+            self._process_queue()
+            status = self._pb.status
+
+        # do it one more time to clean up anything leftover
+        self._pb.read_output()
+        logger.info("instance %s ended", self._instance.game_server_instance_id)
+        return self
