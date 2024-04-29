@@ -6,6 +6,7 @@ from typing import Optional
 
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
+import pika
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,20 @@ def get_session():
         # __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"], expire_on_commit=False)
         __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"])
     return __GLOBALS["session"]()
+
+
+def get_rabbitmq_connection(
+    connection_parms: Optional[pika.ConnectionParameters] = None,
+):
+    stored_parms = __GLOBALS.get("rmq_parameters")
+    # edge cases
+    if connection_parms is None and stored_parms is None:
+        raise RuntimeError("need to provide connection parms during first call")
+    elif stored_parms is None:
+        stored_parms = connection_parms
+    # favor new over current
+    parms = connection_parms or stored_parms
+    return pika.BlockingConnection(parms)
 
 
 # TODO

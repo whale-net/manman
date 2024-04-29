@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from manman.host.api_client import WorkerAPI
 from manman.models import GameServerConfig
-from manman.util import NamedThreadPool
+from manman.util import NamedThreadPool, get_rabbitmq_connection
 from manman.worker.server import Server
 
 logger = logging.getLogger(__name__)
@@ -32,27 +32,17 @@ class ServerCommand(BaseModel):
 class WorkerService:
     def __init__(
         self,
-        root_install_dir: str,
-        rabbitmq_host: str,
-        rabbitmq_port: int,
-        rabbitmq_username: str,
-        rabbitmq_password: str,
+        install_dir: str,
+        rmq_parameters: pika.ConnectionParameters,
     ):
         # TODO error checking
-        self._root_install_dir = root_install_dir
+        self._install_dir = install_dir
 
         self._threadpool = NamedThreadPool()
         # this isn't threadsafe, but this is the only thread working on it
         self._servers: list[Server] = []
 
-        credentials = pika.credentials.PlainCredentials(
-            username=rabbitmq_username, password=rabbitmq_password
-        )
-        self._rabbitmq_conn = pika.BlockingConnection(
-            pika.ConnectionParameters(
-                host=rabbitmq_host, port=rabbitmq_port, credentials=credentials
-            )
-        )
+        self._rabbitmq_conn = get_rabbitmq_connection(rmq_parameters)
 
         self._wapi = WorkerAPI("http://localhost:8000/")
 
@@ -73,7 +63,7 @@ class WorkerService:
         config: GameServerConfig = self._wapi.game_server_config(game_server_config_id)
         server = Server(
             wapi=self._wapi,
-            root_install_directory=self._root_install_dir,
+            root_install_directory=self._install_dir,
             config=config,
         )
         server.start(self._threadpool, should_update=False)
