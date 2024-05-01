@@ -40,23 +40,32 @@ def callback(
     credentials = pika.credentials.PlainCredentials(
         username=rabbitmq_username, password=rabbitmq_password
     )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    # TODO - what does this really do?
+    # server auth is used to create clients
+    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
     init_rabbitmq(
         pika.ConnectionParameters(
             host=rabbitmq_host,
             port=rabbitmq_port,
             credentials=credentials,
             # TODO - should we share or specify the SSL context somewhere?
-            ssl_options=pika.SSLOptions(ssl.SSLContext()),
+            ssl_options=pika.SSLOptions(context),
         )
     )
 
 
 @app.command()
-def localdev(key: int):
+def localdev_send_queue(key: int):
     connection = get_rabbitmq_connection()
     chan = connection.channel()
     chan.exchange_declare("server")
     chan.basic_publish(exchange="server", routing_key=str(key), body="test123")
+    return
+
+
+@app.command()
+def localdev_auth():
     return
 
 
