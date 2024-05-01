@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from typing import Self
 
 # import sqlalchemy
@@ -59,10 +60,6 @@ class Server:
             pb.add_parameter(arg)
         self._pb = pb
 
-    def __del__(self):
-        # probably a better place than garbage collector but whatever it works
-        self._wapi.game_server_instance_shutdown(self._instance)
-
     @property
     def instance(self) -> GameServerInstance:
         return self._instance
@@ -78,6 +75,7 @@ class Server:
     #         return
 
     def _process_queue(self):
+        logger.info("starting to read queue")
         self._rmq_channel.basic_consume(
             self._rmq_queue_name,
             on_message_callback=self._process_message,
@@ -91,8 +89,20 @@ class Server:
         self._pb.kill()
         return
 
+    def shutdown(self):
+        # TODO kill
+        if self._instance.end_date is None:
+            logger.info("shutting down")
+            self.instance = self._wapi.game_server_instance_shutdown(self._instance)
+            self._t.join()
+
     def run(self, should_update: bool = True) -> Self:
         logger.info("instance %s starting", self._instance.game_server_instance_id)
+
+        # TODO - temp workaround
+        self._t = threading.Thread(target=self._process_queue)
+        self._t.start()
+
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
@@ -100,10 +110,11 @@ class Server:
         status = self._pb.status
         while status != ProcessBuilderStatus.STOPPED:
             self._pb.read_output()
-            self._process_queue()
             status = self._pb.status
 
         # do it one more time to clean up anything leftover
         self._pb.read_output()
         logger.info("instance %s ended", self._instance.game_server_instance_id)
+        self.shutdown()
+
         return self

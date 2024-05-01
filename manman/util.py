@@ -23,26 +23,18 @@ def log_stream(
         prefix = ""
 
     if stream is None:
-        # logger.debug(f"cannot read, stream is empty prefix=[{prefix}]")
         return
 
     line_count = 0
     while True:
         if max_lines is not None and line_count >= max_lines:
-            logger.info(
-                "exiting stream read early %s of %s max lines read",
-                line_count,
-                max_lines,
-            )
             break
 
         line = stream.readline()
         if line is None or len(line) == 0:
             break
         logger.info("%s%s", prefix, line.decode("utf-8").rstrip())
-        line_count += 1
-
-    logger.debug("finished reading stream")
+        line_count += 1 if max_lines is not None else 0
 
 
 class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):

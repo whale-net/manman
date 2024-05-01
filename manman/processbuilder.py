@@ -85,6 +85,9 @@ class ProcessBuilder:
         if parm_stdinput_bytes is not None:
             # TODO test
             proc.communicate(parm_stdinput_bytes)
+        # TODO - is this more than a hack?
+        # set this false to allow instant (None) read
+        os.set_blocking(proc.stdout.fileno(), False)
         self._process_start_time = datetime.datetime.now()
         self._proc = proc
 

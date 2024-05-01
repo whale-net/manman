@@ -72,7 +72,3 @@ class WorkerService:
         self._futures.append(future)
         # TODO - need way to prune this list
         self._servers.append(server)
-
-        # TODO TEMP
-        time.sleep(20)
-        server._process_queue()

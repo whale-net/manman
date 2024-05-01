@@ -47,7 +47,7 @@ class GameServerInstance(Base, table=True):
         foreign_key="game_server_configs.game_server_config_id", index=True
     )
     created_date: datetime = Field(default=current_timestamp(), exclude=True)
-    end_date: datetime = Field(nullable=True)
+    end_date: Optional[datetime] = Field(nullable=True)
 
 
 class GameServer(Base, table=True):
