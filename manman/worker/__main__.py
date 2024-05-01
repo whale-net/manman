@@ -1,6 +1,7 @@
 import typer
 import logging
 import os
+import ssl
 from typing_extensions import Annotated
 from logging.config import fileConfig
 import pika
@@ -41,7 +42,11 @@ def callback(
     )
     init_rabbitmq(
         pika.ConnectionParameters(
-            host=rabbitmq_host, port=rabbitmq_port, credentials=credentials
+            host=rabbitmq_host,
+            port=rabbitmq_port,
+            credentials=credentials,
+            # TODO - should we share or specify the SSL context somewhere?
+            ssl_options=pika.SSLOptions(ssl.SSLContext()),
         )
     )
 
