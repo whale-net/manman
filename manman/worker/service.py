@@ -6,7 +6,7 @@ from enum import Enum
 from pydantic import BaseModel
 # from sqlalchemy.orm import Session
 
-from manman.host.api_client import WorkerAPI
+from manman.api_client import WorkerAPIClient
 from manman.models import GameServerConfig
 from manman.util import NamedThreadPool
 from manman.worker.server import Server
@@ -39,7 +39,7 @@ class WorkerService:
         self._threadpool = NamedThreadPool()
         # this isn't threadsafe, but this is the only thread working on it
         self._servers: list[Server] = []
-        self._wapi = WorkerAPI("http://localhost:8000/")
+        self._wapi = WorkerAPIClient("http://localhost:8000/")
         self._futures = []
 
     def run(self):

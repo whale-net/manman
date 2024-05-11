@@ -11,7 +11,7 @@ from typing import Self
 from manman.models import GameServerConfig, GameServerInstance, ServerType
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
-from manman.host.api_client import WorkerAPI
+from manman.api_client import WorkerAPIClient
 from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class Server:
 
     def __init__(
         self,
-        wapi: WorkerAPI,
+        wapi: WorkerAPIClient,
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:

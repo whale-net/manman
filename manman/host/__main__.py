@@ -55,6 +55,7 @@ def create_migration(migration_message: Optional[str] = None):
 @app.callback()
 def callback(
     # TODO - envar global for alembic import
+    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     postgres_host: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_HOST")],
     postgres_port: Annotated[int, typer.Option(envvar="MANMAN_POSTGRES_PORT")],
     postgres_user: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_USER")],
