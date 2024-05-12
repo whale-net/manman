@@ -8,6 +8,8 @@ import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 import pika
 
+from manman.api_client import AuthAPIClient
+
 logger = logging.getLogger(__name__)
 
 __GLOBALS = {}
@@ -76,7 +78,7 @@ def init_sql_alchemy_engine(
     )
 
 
-def get_session():
+def get_sqlalchemy_session():
     if __GLOBALS.get("engine") is None:
         raise RuntimeError("global engine not defined - cannot start")
     if __GLOBALS.get("session") is None:
@@ -98,3 +100,14 @@ def get_rabbitmq_connection():
     if "rmq_connection" not in __GLOBALS:
         __GLOBALS["rmq_connection"] = pika.BlockingConnection(stored_parms)
     return __GLOBALS["rmq_connection"]
+
+
+def init_auth_api_client(auth_url: str):
+    __GLOBALS["auth_api_client"] = AuthAPIClient(base_url=auth_url)
+
+
+def get_auth_api_client() -> AuthAPIClient:
+    api_client = __GLOBALS.get("auth_api_client")
+    if api_client is None:
+        raise RuntimeError("api_client is not initialized")
+    return api_client

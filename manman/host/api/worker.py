@@ -3,14 +3,15 @@ import sqlalchemy
 from sqlalchemy.sql.functions import current_timestamp
 
 from manman.models import Worker
-from manman.util import get_session
+from manman.util import get_sqlalchemy_session
+
 
 router = APIRouter(prefix="/workapi")
 
 
 @router.post("/worker/create")
 async def worker_create() -> Worker:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         worker = Worker()
         sess.add(worker)
         sess.flush()
@@ -22,7 +23,7 @@ async def worker_create() -> Worker:
 
 @router.put("/worker/shutdown")
 async def worker_shutdown(instance: Worker) -> Worker:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         # TODO - move check that it's not already dead to trigger
         # DB is right place to do that, but doing this so I can learn
         stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)

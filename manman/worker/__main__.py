@@ -7,7 +7,7 @@ from logging.config import fileConfig
 import pika
 
 from manman.worker.service import WorkerService
-from manman.util import init_rabbitmq, get_rabbitmq_connection
+from manman.util import init_rabbitmq, get_rabbitmq_connection, init_auth_api_client
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # TODO callback to share common boostrapping startup for easier test commands
 @app.command()
 def start(
+    sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
+    sa_client_secret: Annotated[
+        str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
+    ],
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
     ] = "./data",
@@ -25,13 +29,13 @@ def start(
     # ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
-    service = WorkerService(install_directory)
+    service = WorkerService(install_directory, sa_client_id, sa_client_secret)
     service.run()
 
 
 @app.callback()
 def callback(
-    # TODO - worker will not connect to database in reality
+    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
     rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
     rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
@@ -53,6 +57,7 @@ def callback(
             ssl_options=pika.SSLOptions(context),
         )
     )
+    init_auth_api_client(auth_url)
 
 
 @app.command()
@@ -84,6 +89,7 @@ def localdev_auth(
         token_response.access_token, do_online_check=True
     )
     print(is_valid_offline, is_valid_online)
+    print(token_response.access_token.jwt)
 
 
 app()

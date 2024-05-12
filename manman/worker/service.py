@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from manman.api_client import WorkerAPIClient
 from manman.models import GameServerConfig
-from manman.util import NamedThreadPool
+from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ class WorkerService:
     def __init__(
         self,
         install_dir: str,
+        sa_client_id: str,
+        sa_client_secret: str,
     ):
         # TODO error checking
         self._install_dir = install_dir
@@ -39,7 +41,13 @@ class WorkerService:
         self._threadpool = NamedThreadPool()
         # this isn't threadsafe, but this is the only thread working on it
         self._servers: list[Server] = []
-        self._wapi = WorkerAPIClient("http://localhost:8000/")
+
+        self._wapi = WorkerAPIClient(
+            "http://localhost:8000/",
+            auth_api_client=get_auth_api_client(),
+            sa_client_id=sa_client_id,
+            sa_client_secret=sa_client_secret,
+        )
         self._futures = []
 
     def run(self):

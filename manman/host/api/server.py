@@ -1,16 +1,17 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 import sqlalchemy
 from sqlalchemy.sql.functions import current_timestamp
 
 from manman.models import GameServerInstance, GameServer, GameServerConfig
-from manman.util import get_session
+from manman.util import get_sqlalchemy_session
+from manman.host.api.injectors import has_basic_worker_authz
 
-router = APIRouter(prefix="/workapi")
+router = APIRouter(prefix="/workapi", dependencies=[Depends(has_basic_worker_authz)])
 
 
 @router.post("/server/instance/create")
 async def server_instance_create(body: GameServerInstance) -> GameServerInstance:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         # TODO validate gaem_server_config_id exists
         server = GameServerInstance(game_server_config_id=body.game_server_config_id)
         sess.add(server)
@@ -23,7 +24,7 @@ async def server_instance_create(body: GameServerInstance) -> GameServerInstance
 
 @router.put("/server/instance/shutdown")
 async def server_instance_shutdown(instance: GameServerInstance) -> GameServerInstance:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         # TODO - move check that it's not already dead to trigger
         # DB is right place to do that, but doing this so I can learn
         stmt = sqlalchemy.select(GameServerInstance).where(
@@ -48,7 +49,7 @@ async def server_instance_shutdown(instance: GameServerInstance) -> GameServerIn
 
 @router.get("/server/config/{id}")
 async def server_config(id: int) -> GameServerConfig:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         config = sess.get_one(GameServerConfig, id)
         sess.expunge(config)
     return config
@@ -56,7 +57,7 @@ async def server_config(id: int) -> GameServerConfig:
 
 @router.get("/server/{id}")
 async def server(id: int) -> GameServer:
-    with get_session() as sess:
+    with get_sqlalchemy_session() as sess:
         config = sess.get_one(GameServer, id)
         sess.expunge(config)
     return config

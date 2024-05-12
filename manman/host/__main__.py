@@ -13,7 +13,11 @@ import sqlalchemy
 import uvicorn
 
 from manman.host.api import fastapp
-from manman.util import init_sql_alchemy_engine, get_sqlalchemy_engine
+from manman.util import (
+    init_sql_alchemy_engine,
+    get_sqlalchemy_engine,
+    init_auth_api_client,
+)
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
@@ -22,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @app.command()
 def start(
+    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     port: int = 8000,
     # workers: int = 1,
     # auto_reload: bool = False,
@@ -30,6 +35,9 @@ def start(
     # TODO - get connection properly
     if run_migration_check and _need_migration(get_sqlalchemy_engine("", 0, "", "")):
         raise RuntimeError("migration needs to be ran before starting")
+
+    init_auth_api_client(auth_url)
+
     # TODO running via string doesn't initialize engine because separate process
     # this would be a nice development enhancement, but may not matter if we scale out. TBD
     # gunicorn + uvicorn worker is preferred if need to scale local api instance
@@ -55,7 +63,6 @@ def create_migration(migration_message: Optional[str] = None):
 @app.callback()
 def callback(
     # TODO - envar global for alembic import
-    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     postgres_host: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_HOST")],
     postgres_port: Annotated[int, typer.Option(envvar="MANMAN_POSTGRES_PORT")],
     postgres_user: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_USER")],

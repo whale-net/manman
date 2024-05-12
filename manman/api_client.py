@@ -61,6 +61,15 @@ class AccessToken(BaseModel):
         scopes = scope_str.split(" ")
         return set(scopes)
 
+    @cached_property
+    def roles(self) -> set[str]:
+        # this couples me to keycloak but whatever at this point
+
+        # TODO - rethink which roles I'm using
+        # for now this will work
+        roles = self.jwt["realm_access"]["roles"]
+        return set(roles)
+
     def is_expired(self, expiry_threshold_seconds: int = 10) -> bool:
         expiration_delta = self.expires_at - datetime.datetime.now()
         return expiration_delta < datetime.timedelta(seconds=expiry_threshold_seconds)
@@ -112,40 +121,6 @@ class APIClientBase:
         self._session = BaseUrlSession(self._base_url)
 
 
-# TODO - is there a way to auto generate this? I feel I should be able to extend off openAPI spec
-class WorkerAPIClient(APIClientBase):
-    def __init__(self, base_url: str, api_prefix: str = "/workapi") -> None:
-        super().__init__(base_url=base_url, api_prefix=api_prefix)
-
-    def game_server(self, game_server_id: int) -> GameServer:
-        response = self._session.get(f"/server/{game_server_id}")
-        return GameServer.model_validate_json(response.content)
-
-    def game_server_config(self, game_server_config_id: int) -> GameServerConfig:
-        response = self._session.get(f"/server/config/{game_server_config_id}")
-        return GameServerConfig.model_validate_json(response.content)
-
-    def game_server_instance_create(
-        self, config: GameServerConfig
-    ) -> GameServerInstance:
-        instance = GameServerInstance(
-            game_server_config_id=config.game_server_config_id
-        )
-        # TODO - there is probably a way to centralize this without it being stupid
-        response = self._session.post(
-            "/server/instance/create", data=instance.model_dump_json()
-        )
-        return GameServerInstance.model_validate_json(response.content)
-
-    def game_server_instance_shutdown(
-        self, instance: GameServerInstance
-    ) -> GameServerInstance:
-        response = self._session.put(
-            "/server/instance/shutdown", data=instance.model_dump_json()
-        )
-        return GameServerInstance.model_validate_json(response.content)
-
-
 class AuthAPIClient(APIClientBase):
     # TODO - can api_prefix be removed from subclass if set up right in baseclass?
     def __init__(self, base_url: str, api_prefix: str = "") -> None:
@@ -180,7 +155,7 @@ class AuthAPIClient(APIClientBase):
             )
         return AccessTokenResponse.create_from_response(response, self._jwk)
 
-    def validate_token(self, access_token: AccessToken, do_online_check: bool = True):
+    def validate_token(self, access_token: AccessToken, do_online_check: bool = False):
         # behavior of this is kind of whack since the online check will fail if the token is expired
         # whereas the offline doesn't
         # this behavior is probably fine though since online checks should be more rare
@@ -192,3 +167,78 @@ class AuthAPIClient(APIClientBase):
             return response.status_code == 200
         else:
             return access_token.is_valid()
+
+    def create_token_from_str(self, raw_token: str) -> AccessToken:
+        """
+        helper function
+        """
+        return AccessToken(raw_token=raw_token, jwk=self._jwk)
+
+
+# TODO - is there a way to auto generate this? I feel I should be able to extend off openAPI spec
+class WorkerAPIClient(APIClientBase):
+    def __init__(
+        self,
+        base_url: str,
+        auth_api_client: AuthAPIClient,
+        sa_client_id: str,
+        sa_client_secret: str,
+        api_prefix: str = "/workapi",
+    ) -> None:
+        self._auth_api_client = auth_api_client
+        self._sa_client_id = sa_client_id
+        self._sa_client_secret = sa_client_secret
+        super().__init__(base_url=base_url, api_prefix=api_prefix)
+
+    def _get_access_token(self) -> AccessToken:
+        # TODO - store access token locally and yield when appropriate
+        access_token_response = self._auth_api_client.get_access_token(
+            self._sa_client_id, self._sa_client_secret
+        )
+        return access_token_response.access_token
+
+    def game_server(self, game_server_id: int) -> GameServer:
+        response = self._session.get(
+            f"/server/{game_server_id}", auth=BearerAuth(self._get_access_token())
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return GameServer.model_validate_json(response.content)
+
+    def game_server_config(self, game_server_config_id: int) -> GameServerConfig:
+        response = self._session.get(
+            f"/server/config/{game_server_config_id}",
+            auth=BearerAuth(self._get_access_token()),
+        )
+        # just fail for now
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return GameServerConfig.model_validate_json(response.content)
+
+    def game_server_instance_create(
+        self, config: GameServerConfig
+    ) -> GameServerInstance:
+        instance = GameServerInstance(
+            game_server_config_id=config.game_server_config_id
+        )
+        # TODO - there is probably a way to centralize this without it being stupid
+        response = self._session.post(
+            "/server/instance/create",
+            data=instance.model_dump_json(),
+            auth=BearerAuth(self._get_access_token()),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return GameServerInstance.model_validate_json(response.content)
+
+    def game_server_instance_shutdown(
+        self, instance: GameServerInstance
+    ) -> GameServerInstance:
+        response = self._session.put(
+            "/server/instance/shutdown",
+            data=instance.model_dump_json(),
+            auth=BearerAuth(self._get_access_token()),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return GameServerInstance.model_validate_json(response.content)
