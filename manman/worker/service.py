@@ -63,7 +63,13 @@ class WorkerService:
                 count += 1
                 if count % 10 == 0:
                     logger.info("still running - server_count=%s", len(self._servers))
-
+                new_server_list = []
+                for server in self._servers:
+                    if server.is_shutdown:
+                        logger.info("%s is shutdown, pruning", server.instance)
+                        continue
+                    new_server_list.append(server)
+                self._servers = new_server_list
                 time.sleep(1)
         finally:
             self._shutdown()
@@ -73,9 +79,6 @@ class WorkerService:
             return
         self._wapi.worker_shutdown(self._worker_instance)
         self._is_shutdown = True
-
-    def __del__(self):
-        self._shutdown()
 
     def _process_queue(self):
         # process worker and worker/server queue (maybe block on these? can we block on an OR?)
@@ -90,7 +93,7 @@ class WorkerService:
         )
         future = self._threadpool.submit(
             server.run,
-            name=f"server[{server.instance.game_server_instance_id}]",
+            name=server.instance.get_thread_name(),
             should_update=False,
         )
         # TODO - does threadpool ever get too big with dead threads?

@@ -52,6 +52,10 @@ class GameServerInstance(Base, table=True):
     created_date: datetime = Field(default=current_timestamp(), exclude=True)
     end_date: Optional[datetime] = Field(nullable=True)
 
+    def get_thread_name(self, extra: Optional[str] = None) -> str:
+        extra_str = "-" + extra if extra is not None else ""
+        return f"server[{self.game_server_instance_id}{extra_str}]"
+
 
 class GameServer(Base, table=True):
     __tablename__ = "game_servers"
@@ -104,3 +108,15 @@ class GameServerConfig(Base, table=True):
             unique=True,
         ),
     )
+
+
+### NON TABLES # unsure if this is good idea
+class CommandType(Enum):
+    START = 1
+    STDIN = 2
+    STOP = 3
+
+
+class Command(Base):
+    command_type: CommandType = Field()
+    command_params: Optional[list[str]] = Field()

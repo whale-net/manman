@@ -71,27 +71,27 @@ def localdev_send_queue(key: int):
     return
 
 
-@app.command()
-def localdev_auth(
-    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
-    sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
-    sa_client_secret: Annotated[
-        str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
-    ],
-):
-    from manman.api_client import AuthAPIClient
+# @app.command()
+# def localdev_auth(
+#     auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
+#     sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
+#     sa_client_secret: Annotated[
+#         str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
+#     ],
+# ):
+#     from manman.api_client import AuthAPIClient
 
-    auth_client = AuthAPIClient(base_url=auth_url)
-    token_response = auth_client.get_access_token(sa_client_id, sa_client_secret)
+#     auth_client = AuthAPIClient(base_url=auth_url)
+#     token_response = auth_client.get_access_token(sa_client_id, sa_client_secret)
 
-    is_valid_offline = auth_client.validate_token(
-        token_response.access_token, do_online_check=False
-    )
-    is_valid_online = auth_client.validate_token(
-        token_response.access_token, do_online_check=True
-    )
-    print(is_valid_offline, is_valid_online)
-    print(token_response.access_token.jwt)
+#     is_valid_offline = auth_client.validate_token(
+#         token_response.access_token, do_online_check=False
+#     )
+#     is_valid_online = auth_client.validate_token(
+#         token_response.access_token, do_online_check=True
+#     )
+#     print(is_valid_offline, is_valid_online)
+#     print(token_response.access_token.jwt)
 
 
 app()
