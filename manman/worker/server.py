@@ -9,6 +9,8 @@ from manman.api_client import WorkerAPIClient
 # from sqlalchemy.orm import Session
 # from pydantic import BaseModel
 from manman.models import (
+    Command,
+    CommandType,
     GameServerConfig,
     GameServerInstance,
     ServerType,
@@ -30,6 +32,8 @@ class Server:
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:
+        self._should_be_running = False
+
         self._wapi = wapi
         self._config = config
 
@@ -94,22 +98,42 @@ class Server:
         self._rmq_channel.start_consuming()
         logger.info("done consuming queue")
 
-    def _queue_message_handler(self, ch, method, properties, body):
-        logger.info("body=%s", body)
-        logger.warning("killing server")
-        self._pb.kill()
-        self._rmq_channel.basic_cancel(str(self.instance.game_server_instance_id))
+    def _queue_message_handler(self, ch, method, properties, body: bytes):
+        message = Command.model_validate_json(body)
+        match message.command_type:
+            case CommandType.START:
+                # I don't think this will even doing anything? maybe should be remade to restart? that'd be cool...
+                pass
+            case CommandType.STDIN:
+                # TODO
+                pass
+            case CommandType.STOP:
+                if self._should_be_running:
+                    logger.warning("killing server")
+                    # main run loop will handle shutdown
+                    # this channel will be closed after that
+                    self._should_be_running = False
+                else:
+                    # won't stop server that isn't started (unsure if desired)
+                    logger.warning("kill command received before server startup")
+            case _:
+                logger.warning("unknown command type recieved")
+
         return
 
     def shutdown(self):
         # TODO kill
         if not self.is_shutdown:
             logger.info("shutting down")
+            self._pb.stop()
             self._instance = self._wapi.game_server_instance_shutdown(self._instance)
+            self._rmq_channel.basic_cancel(str(self.instance.game_server_instance_id))
             self._pq_thread.join()
+            logger.info("shutdown complete")
 
     def run(self, should_update: bool = True) -> Self:
         logger.info("instance %s starting", self._instance.game_server_instance_id)
+        self._should_be_running = True
 
         # TODO - temp workaround
         self._pq_thread = threading.Thread(
@@ -122,7 +146,7 @@ class Server:
             steam.install(app_id=self._game_server.app_id)
         self._pb.execute()
         status = self._pb.status
-        while status != ProcessBuilderStatus.STOPPED:
+        while status != ProcessBuilderStatus.STOPPED and self._should_be_running:
             self._pb.read_output()
             status = self._pb.status
 

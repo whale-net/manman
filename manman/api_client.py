@@ -1,7 +1,7 @@
 import datetime
 import urllib.parse
 from functools import cached_property
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import requests
 import requests.auth
@@ -106,11 +106,23 @@ class AccessTokenResponse(BaseModel):
 
 
 class BearerAuth(requests.auth.AuthBase):
-    def __init__(self, access_token: AccessToken):
-        self.access_token = access_token
+    # TODO - is refresh_callback type right?
+    def __init__(
+        self, refresh_callback: Callable[..., AccessToken], refresh_threshhold: int = 10
+    ):
+        self._refresh_callback = refresh_callback
+        self._refresh_threshhold = refresh_threshhold
+        # prefetch access token - probably not needed but makes it easier on me
+        self._access_token: AccessToken = self._refresh_callback()
 
     def __call__(self, r):
-        r.headers["authorization"] = "bearer " + self.access_token.raw_token
+        # no lock so if multithread can make multiple refreshes
+        # probably fine
+        if self._access_token.is_expired(
+            expiry_threshold_seconds=self._refresh_threshhold
+        ):
+            self._access_token = self._refresh_callback()
+        r.headers["authorization"] = "bearer " + self._access_token.raw_token
         return r
 
 
@@ -190,15 +202,7 @@ class WorkerAPIClient(APIClientBase):
         self._sa_client_secret = sa_client_secret
         super().__init__(base_url=base_url, api_prefix=api_prefix)
 
-        self.__access_token: AccessToken
-
-    @property
-    def _access_token(self) -> AccessToken:
-        if self.__access_token is None or self.__access_token.is_expired(
-            expiry_threshold_seconds=10
-        ):
-            self.__access_token = self._refresh_access_token()
-        return self.__access_token
+        self._session.auth = BearerAuth(refresh_callback=self._refresh_access_token)
 
     def _refresh_access_token(self):
         access_token_response = self._auth_api_client.get_access_token(
@@ -207,9 +211,7 @@ class WorkerAPIClient(APIClientBase):
         return access_token_response.access_token
 
     def game_server(self, game_server_id: int) -> GameServer:
-        response = self._session.get(
-            f"/server/{game_server_id}", auth=BearerAuth(self._refresh_access_token())
-        )
+        response = self._session.get(f"/server/{game_server_id}")
         if response.status_code != 200:
             raise RuntimeError(response.content)
         return GameServer.model_validate_json(response.content)
@@ -217,7 +219,6 @@ class WorkerAPIClient(APIClientBase):
     def game_server_config(self, game_server_config_id: int) -> GameServerConfig:
         response = self._session.get(
             f"/server/config/{game_server_config_id}",
-            auth=BearerAuth(self._refresh_access_token()),
         )
         # just fail for now
         if response.status_code != 200:
@@ -234,7 +235,6 @@ class WorkerAPIClient(APIClientBase):
         response = self._session.post(
             "/server/instance/create",
             data=instance.model_dump_json(),
-            auth=BearerAuth(self._refresh_access_token()),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
@@ -246,7 +246,6 @@ class WorkerAPIClient(APIClientBase):
         response = self._session.put(
             "/server/instance/shutdown",
             data=instance.model_dump_json(),
-            auth=BearerAuth(self._refresh_access_token()),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
@@ -255,7 +254,6 @@ class WorkerAPIClient(APIClientBase):
     def worker_create(self):
         response = self._session.post(
             "/worker/create",
-            auth=BearerAuth(self._refresh_access_token()),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
@@ -264,7 +262,6 @@ class WorkerAPIClient(APIClientBase):
     def worker_shutdown(self, worker: Worker):
         response = self._session.put(
             "/worker/shutdown",
-            auth=BearerAuth(self._refresh_access_token()),
             data=worker.model_dump_json(),
         )
         if response.status_code != 200:

@@ -67,7 +67,13 @@ def localdev_send_queue(key: int):
     connection = get_rabbitmq_connection()
     chan = connection.channel()
     chan.exchange_declare("server")
-    chan.basic_publish(exchange="server", routing_key=str(key), body="test123")
+    # chan.basic_publish(exchange="server", routing_key=str(key), body="test123")
+    from manman.models import Command, CommandType
+
+    shutdown_command = Command(command_type=CommandType.STOP)
+    chan.basic_publish(
+        exchange="server", routing_key=str(key), body=shutdown_command.model_dump_json()
+    )
     return
 
 

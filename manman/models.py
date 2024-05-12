@@ -112,11 +112,11 @@ class GameServerConfig(Base, table=True):
 
 ### NON TABLES # unsure if this is good idea
 class CommandType(Enum):
-    START = 1
-    STDIN = 2
-    STOP = 3
+    START = "START"
+    STDIN = "STDIN"
+    STOP = "STOP"
 
 
 class Command(Base):
     command_type: CommandType = Field()
-    command_params: Optional[list[str]] = Field()
+    command_args: list[str] = Field(default=[])
