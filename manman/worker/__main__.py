@@ -1,13 +1,14 @@
-import typer
 import logging
 import os
 import ssl
-from typing_extensions import Annotated
 from logging.config import fileConfig
-import pika
 
+import pika
+import typer
+from typing_extensions import Annotated
+
+from manman.util import get_rabbitmq_connection, init_auth_api_client, init_rabbitmq
 from manman.worker.service import WorkerService
-from manman.util import init_rabbitmq, get_rabbitmq_connection, init_auth_api_client
 
 app = typer.Typer()
 fileConfig("logging.ini", disable_existing_loggers=False)
@@ -21,6 +22,7 @@ def start(
     sa_client_secret: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
     ],
+    host_url: Annotated[str, typer.Option(envvar="MANMAN_HOST_URL")],
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
     ] = "./data",
@@ -29,7 +31,7 @@ def start(
     # ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
-    service = WorkerService(install_directory, sa_client_id, sa_client_secret)
+    service = WorkerService(install_directory, host_url, sa_client_id, sa_client_secret)
     service.run()
 
 

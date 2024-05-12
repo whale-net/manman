@@ -3,18 +3,21 @@ from enum import Enum
 from typing import Optional
 
 from sqlalchemy import (
-    String,
-    # MetaData,
-    # ForeignKey,
-    Index,
     # using postgres.ARRAY I guess
     ARRAY,
     Column,
-)  # , UniqueConstraint
+    # MetaData,
+    # ForeignKey,
+    Index,
+    String,
+)
+
+# , UniqueConstraint
 from sqlalchemy.sql.functions import current_timestamp
 
 # from sqlalchemy.dialects import postgresql
-from sqlmodel import SQLModel, Field, MetaData
+from sqlmodel import Field, MetaData, SQLModel
+
 # SQLModel.metadata = MetaData(schema="manman")
 
 

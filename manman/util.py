@@ -1,12 +1,12 @@
+import concurrent.futures
+import io
 import logging
 import threading
-import io
-import concurrent.futures
 from typing import Optional
 
+import pika
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
-import pika
 
 from manman.api_client import AuthAPIClient
 

@@ -1,11 +1,11 @@
 import logging
 import time
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel
-# from sqlalchemy.orm import Session
 
+# from sqlalchemy.orm import Session
 from manman.api_client import WorkerAPIClient
 from manman.models import GameServerConfig
 from manman.util import NamedThreadPool, get_auth_api_client
@@ -32,6 +32,7 @@ class WorkerService:
     def __init__(
         self,
         install_dir: str,
+        host_url: str,
         sa_client_id: str,
         sa_client_secret: str,
     ):
@@ -43,22 +44,38 @@ class WorkerService:
         self._servers: list[Server] = []
 
         self._wapi = WorkerAPIClient(
-            "http://localhost:8000/",
+            host_url,
             auth_api_client=get_auth_api_client(),
             sa_client_id=sa_client_id,
             sa_client_secret=sa_client_secret,
         )
+
+        self._is_shutdown = False
+        self._worker_instance = self._wapi.worker_create()
+
         self._futures = []
 
     def run(self):
         self._create_server(5)
         count = 0
-        while True:
-            count += 1
-            if count % 10 == 0:
-                logger.info("still running - server_count=%s", len(self._servers))
+        try:
+            while True:
+                count += 1
+                if count % 10 == 0:
+                    logger.info("still running - server_count=%s", len(self._servers))
 
-            time.sleep(1)
+                time.sleep(1)
+        finally:
+            self._shutdown()
+
+    def _shutdown(self):
+        if self._is_shutdown:
+            return
+        self._wapi.worker_shutdown(self._worker_instance)
+        self._is_shutdown = True
+
+    def __del__(self):
+        self._shutdown()
 
     def _process_queue(self):
         # process worker and worker/server queue (maybe block on these? can we block on an OR?)

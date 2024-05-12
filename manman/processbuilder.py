@@ -1,8 +1,8 @@
-import logging
-import enum
 import datetime
-import subprocess
+import enum
+import logging
 import os
+import subprocess
 from queue import Queue
 
 from manman.util import log_stream

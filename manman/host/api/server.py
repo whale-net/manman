@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends
 import sqlalchemy
+from fastapi import APIRouter, Depends
 from sqlalchemy.sql.functions import current_timestamp
 
-from manman.models import GameServerInstance, GameServer, GameServerConfig
-from manman.util import get_sqlalchemy_session
 from manman.host.api.injectors import has_basic_worker_authz
+from manman.models import GameServer, GameServerConfig, GameServerInstance
+from manman.util import get_sqlalchemy_session
 
 router = APIRouter(prefix="/workapi", dependencies=[Depends(has_basic_worker_authz)])
 

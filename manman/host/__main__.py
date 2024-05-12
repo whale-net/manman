@@ -1,22 +1,22 @@
-import alembic.command
-import typer
 import logging
 import os
-import alembic
-import alembic.config
 import pathlib
-from typing_extensions import Annotated
 from logging.config import fileConfig
 from typing import Optional
 
 import sqlalchemy
+import typer
 import uvicorn
+from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.host.api import fastapp
 from manman.util import (
-    init_sql_alchemy_engine,
     get_sqlalchemy_engine,
     init_auth_api_client,
+    init_sql_alchemy_engine,
 )
 
 app = typer.Typer()

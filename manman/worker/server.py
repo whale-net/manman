@@ -1,18 +1,17 @@
-import os
 import logging
+import os
 import threading
 from typing import Self
 
+from manman.api_client import WorkerAPIClient
+
 # import sqlalchemy
 # from sqlalchemy.orm import Session
-
 # from pydantic import BaseModel
-
 from manman.models import GameServerConfig, GameServerInstance, ServerType
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
-from manman.worker.steamcmd import SteamCMD
-from manman.api_client import WorkerAPIClient
 from manman.util import get_rabbitmq_connection
+from manman.worker.steamcmd import SteamCMD
 
 logger = logging.getLogger(__name__)
 

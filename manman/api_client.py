@@ -1,15 +1,15 @@
 import datetime
-from pydantic import BaseModel, Field
-from functools import cached_property
-from jose import jwt
-from typing import Optional, Any
 import urllib.parse
+from functools import cached_property
+from typing import Any, Optional
+
 import requests
 import requests.auth
+from jose import jwt
+from pydantic import BaseModel, Field
+
 # import urllib
-
-
-from manman.models import GameServerInstance, GameServerConfig, GameServer
+from manman.models import GameServer, GameServerConfig, GameServerInstance, Worker
 
 # TODO LIST (TBD correct layer for each feature)
 #   RETRY
@@ -70,7 +70,7 @@ class AccessToken(BaseModel):
         roles = self.jwt["realm_access"]["roles"]
         return set(roles)
 
-    def is_expired(self, expiry_threshold_seconds: int = 10) -> bool:
+    def is_expired(self, expiry_threshold_seconds: int = 0) -> bool:
         expiration_delta = self.expires_at - datetime.datetime.now()
         return expiration_delta < datetime.timedelta(seconds=expiry_threshold_seconds)
 
@@ -190,8 +190,17 @@ class WorkerAPIClient(APIClientBase):
         self._sa_client_secret = sa_client_secret
         super().__init__(base_url=base_url, api_prefix=api_prefix)
 
-    def _get_access_token(self) -> AccessToken:
-        # TODO - store access token locally and yield when appropriate
+        self.__access_token: AccessToken
+
+    @property
+    def _access_token(self) -> AccessToken:
+        if self.__access_token is None or self.__access_token.is_expired(
+            expiry_threshold_seconds=10
+        ):
+            self.__access_token = self._refresh_access_token()
+        return self.__access_token
+
+    def _refresh_access_token(self):
         access_token_response = self._auth_api_client.get_access_token(
             self._sa_client_id, self._sa_client_secret
         )
@@ -199,7 +208,7 @@ class WorkerAPIClient(APIClientBase):
 
     def game_server(self, game_server_id: int) -> GameServer:
         response = self._session.get(
-            f"/server/{game_server_id}", auth=BearerAuth(self._get_access_token())
+            f"/server/{game_server_id}", auth=BearerAuth(self._refresh_access_token())
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
@@ -208,7 +217,7 @@ class WorkerAPIClient(APIClientBase):
     def game_server_config(self, game_server_config_id: int) -> GameServerConfig:
         response = self._session.get(
             f"/server/config/{game_server_config_id}",
-            auth=BearerAuth(self._get_access_token()),
+            auth=BearerAuth(self._refresh_access_token()),
         )
         # just fail for now
         if response.status_code != 200:
@@ -225,7 +234,7 @@ class WorkerAPIClient(APIClientBase):
         response = self._session.post(
             "/server/instance/create",
             data=instance.model_dump_json(),
-            auth=BearerAuth(self._get_access_token()),
+            auth=BearerAuth(self._refresh_access_token()),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
@@ -237,8 +246,27 @@ class WorkerAPIClient(APIClientBase):
         response = self._session.put(
             "/server/instance/shutdown",
             data=instance.model_dump_json(),
-            auth=BearerAuth(self._get_access_token()),
+            auth=BearerAuth(self._refresh_access_token()),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
         return GameServerInstance.model_validate_json(response.content)
+
+    def worker_create(self):
+        response = self._session.post(
+            "/worker/create",
+            auth=BearerAuth(self._refresh_access_token()),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return Worker.model_validate_json(response.content)
+
+    def worker_shutdown(self, worker: Worker):
+        response = self._session.put(
+            "/worker/shutdown",
+            auth=BearerAuth(self._refresh_access_token()),
+            data=worker.model_dump_json(),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return Worker.model_validate_json(response.content)

@@ -1,7 +1,9 @@
 from typing import Annotated
-from fastapi import Header, Depends, HTTPException
-from manman.util import get_auth_api_client
+
+from fastapi import Depends, Header, HTTPException
+
 from manman.api_client import AccessToken
+from manman.util import get_auth_api_client
 
 
 # using builtin fastapi classes is not helpful because my token provider endpoint is elsewhere

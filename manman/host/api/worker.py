@@ -1,12 +1,12 @@
-from fastapi import APIRouter
 import sqlalchemy
+from fastapi import APIRouter, Depends
 from sqlalchemy.sql.functions import current_timestamp
 
+from manman.host.api.injectors import has_basic_worker_authz
 from manman.models import Worker
 from manman.util import get_sqlalchemy_session
 
-
-router = APIRouter(prefix="/workapi")
+router = APIRouter(prefix="/workapi", dependencies=[Depends(has_basic_worker_authz)])
 
 
 @router.post("/worker/create")
@@ -40,5 +40,5 @@ async def worker_shutdown(instance: Worker) -> Worker:
         sess.expunge(current_instance)
         sess.commit()
 
-    print(current_instance.end_date)
+    # print(current_instance.end_date)
     return current_instance
