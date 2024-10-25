@@ -31,53 +31,22 @@ UI - this will live in https://github.com/whale-net/orca project
 
 
 ## setup
-both projects exist in this repo as separate poetry projects managed via another poetry 'virtual-project'
-
-this enables a single repo to host two projects and share tooling (CI/CD) while still allowing separate artifact deployment
-
+this used to be like a little baby poetry project with complex imports but it's literally just 2 packages so just put it into a single module dangit
 
 ### install
 
 This is a poetry project. install poetry https://python-poetry.org/
 if you need a specific version of python that is different from your system, consider pyenv
 
-For local development installing all projects is the easiest way to develop
+If you use pyenv you may want to set this to make poetry use your pyenv local environment rather than creating a conflicting virtual environment
+(you can also remove --local to make this default, but may need to restart your shell)
 ```
-poetry install --no-root
-```
-NOTE: the no-root option prevents the project from attempting to install a `manman` package that does not exist
-
-
-install a single project
-useful for deployment, and could be useful for local dev, but installing all is still recommended for simplicity
-```
-poetry install --no-root --only {host | worker}
+poetry config virtualenvs.prefer-active-python true --local
 ```
 
-run projects
+Otherwise, install
 ```
-poetry run python -m manman.{host | worker}
+poetry install
 ```
 
 
-### adding dependencies
-see individual project README for how to add dependencies
-it is very easy, but I am keeping track of any bodges per-project
-
-### running
-install individual project
-```
-poetry install --no-root --only host
-```
-
-run code
-```
-poetry run python -m manman.host
-```
-
-eventually will have docker image for each project
-
-
-### WARNING
-don't ever run from within the subproject (e.g. `host`). 
-always run from the outer virtual project, otherwise old dependencies can be referenced and cause very frustrating issues

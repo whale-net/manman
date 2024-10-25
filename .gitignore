@@ -1,8 +1,10 @@
 
 .python-version
 
+.ruff_cache
 
-
+data
+bin
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -106,6 +108,8 @@ ipython_config.py
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
+#   local settings
+poetry.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
