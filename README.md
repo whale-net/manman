@@ -29,24 +29,34 @@ this project is the mother and observer to all the little workers
 ### not in this repo
 UI - this will live in https://github.com/whale-net/orca project
 
-
-## setup
-this used to be like a little baby poetry project with complex imports but it's literally just 2 packages so just put it into a single module dangit
-
 ### install
 
-This is a poetry project. install poetry https://python-poetry.org/
-if you need a specific version of python that is different from your system, consider pyenv
+Using UV
 
-If you use pyenv you may want to set this to make poetry use your pyenv local environment rather than creating a conflicting virtual environment
-(you can also remove --local to make this default, but may need to restart your shell)
+bring your own python version, or use uv to install it
 ```
-poetry config virtualenvs.prefer-active-python true --local
+uv python install 3.11
 ```
 
-Otherwise, install
+then setup venv
 ```
-poetry install
+uv venv
+source .venv/bin/activate
 ```
 
+update your IDE interpreter path to `.venv/bin/python`
 
+install packages. for now seems to install everything, but may need to manually install dev group at some point. Not really sure tbh
+```
+uv pip install .
+```
+
+setup your .env file. sampe .env to come.  typer appears to import these, but may need to set manually
+
+everything should work
+```
+python -m manman.host start
+```
+```
+python -m manman.worker start
+```
