@@ -67,7 +67,8 @@ class AccessToken(BaseModel):
 
         # TODO - rethink which roles I'm using
         # for now this will work
-        roles = self.jwt["realm_access"]["roles"]
+        roles = self.jwt["roles"]
+        # print(roles)
         return set(roles)
 
     def is_expired(self, expiry_threshold_seconds: int = 0) -> bool:
