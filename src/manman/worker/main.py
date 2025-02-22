@@ -1,7 +1,6 @@
 import logging
 import os
 import ssl
-from logging.config import fileConfig
 
 import pika
 import typer
@@ -11,7 +10,7 @@ from manman.util import get_rabbitmq_connection, init_auth_api_client, init_rabb
 from manman.worker.service import WorkerService
 
 app = typer.Typer()
-fileConfig("logging.ini", disable_existing_loggers=False)
+# fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
@@ -100,4 +99,4 @@ def localdev_send_queue(key: int):
 #     print(token_response.access_token.jwt)
 
 
-app()
+# app()

@@ -27,26 +27,18 @@ this project is the mother and observer to all the little workers
     - exposes management API (worker/info/admin)
 
 ### not in this repo
-UI - this will live in https://github.com/whale-net/orca project
+~~UI - this will live in https://github.com/whale-net/orca project~~
+
+
+going to try and expose via slack instead. Don't want to have to maintain a javascript ui.
+
 
 
 ## setup
-this used to be like a little baby poetry project with complex imports but it's literally just 2 packages so just put it into a single module dangit
 
-### install
-
-This is a poetry project. install poetry https://python-poetry.org/
-if you need a specific version of python that is different from your system, consider pyenv
-
-If you use pyenv you may want to set this to make poetry use your pyenv local environment rather than creating a conflicting virtual environment
-(you can also remove --local to make this default, but may need to restart your shell)
+this is uv project. install using the following commands:
+```bash
+uv venv
+source .venv/bin/activate
+uv sync
 ```
-poetry config virtualenvs.prefer-active-python true --local
-```
-
-Otherwise, install
-```
-poetry install
-```
-
-

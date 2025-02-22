@@ -1,27 +1,28 @@
+# whale-net python pre-commit v1
+
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.6.0
-  hooks:
-  - id: trailing-whitespace
-  - id: end-of-file-fixer
-  - id: check-yaml
-  - id: check-added-large-files
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.4.1
-  hooks:
-    # Run the linter.
-    - id: ruff
-    # , --select I
-      args: [ --fix ]
-    # Run the formatter.
-    - id: ruff-format
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: 'v1.10.0'
-  hooks:
-  - id: mypy
-    # TEMP DISABLE
-    files: dummyfile
-    #files: manman/*
+  -   repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v5.0.0
+      hooks:
+        - id: trailing-whitespace
+        - id: end-of-file-fixer
+        # -   id: check-yaml
+        - id: check-added-large-files
+        - id: mixed-line-ending
+          args: [ --fix=lf ]
+  # TODO - isort?
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.8.4
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+
+ci:
+  # should test this one day, but for now not enabling
+  autofix_prs: false

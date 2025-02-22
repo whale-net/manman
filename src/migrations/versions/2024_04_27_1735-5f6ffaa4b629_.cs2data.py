@@ -8,9 +8,9 @@ Create Date: 2024-04-27 17:35:51.259556
 
 from typing import Sequence, Union
 
+from alembic import op
 from sqlalchemy.orm import Session
 
-from alembic import op
 from manman.models import GameServer, GameServerConfig, ServerType
 
 # revision identifiers, used by Alembic.
