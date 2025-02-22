@@ -1,17 +1,16 @@
 import logging
 import os
 import pathlib
-from logging.config import fileConfig
 from typing import Optional
 
+import alembic
+import alembic.command
+import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
-import alembic
-import alembic.command
-import alembic.config
 from manman.host.api import fastapp
 from manman.util import (
     get_sqlalchemy_engine,
@@ -20,7 +19,7 @@ from manman.util import (
 )
 
 app = typer.Typer()
-fileConfig("logging.ini", disable_existing_loggers=False)
+# fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
@@ -119,5 +118,5 @@ def _create_migration(engine: sqlalchemy.Engine, message: Optional[str] = None):
         alembic.command.revision(config, message=message, autogenerate=True)
 
 
-if __name__ == "__main__":
-    app()
+# if __name__ == "__main__":
+#     app()

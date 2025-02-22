@@ -21,7 +21,7 @@ game_id = `install_method:install_identifier`
 - host receives command for server
     - checks if alive
     - sends command to registered server if alive
-        - 
+        -
 
 ### routes
 
@@ -35,7 +35,7 @@ game_id = `install_method:install_identifier`
 - GET /server/id
     - info about server
     - custom status info in subclasses? or just generic way for extra status?
-    - can return url for server 
+    - can return url for server
 - GET /server/id/log
     - returns URL to read log (?)
 - POST /server/id/health
@@ -71,7 +71,7 @@ game_id = `install_method:install_identifier`
 
 ## manman-worker
 
-all state for worker is stored locally in sql-lite. Desired config is in manman-host, and should be worked towards in worker. 
+all state for worker is stored locally in sql-lite. Desired config is in manman-host, and should be worked towards in worker.
 need to keep worker in sync for this to work
 
 ideally the main postgres database is never exposed
@@ -122,5 +122,3 @@ class MessageType(enum.Enum):
     KILL = 4
 
     COMMAND_ = 200
-
-    
