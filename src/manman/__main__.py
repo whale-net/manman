@@ -1,1 +1,3 @@
-raise Exception("run manman.host or manamn.worker")
+raise RuntimeError(
+    "do not run this module directly. Run manman.host or manman.worker instead"
+)
