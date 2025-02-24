@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq-dev
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-dev
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672 # Management UI
+  serviceName: "rabbitmq-dev"
+  volumeClaimTemplates:
+    - metadata:
+        name: rmq-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: "{{ .Values.storageClassName }}"
+        resources:
+          requests:
+            storage: "{{ .Values.storageSize }}"
