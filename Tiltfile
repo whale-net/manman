@@ -12,13 +12,15 @@ load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo('dev-util', 'https://whale-net.github.io/dev-util')
 
 # setup postgres
-# this will use default values which is fine
-# TBD how to setup non-default avlues
-helm_resource('postgres-dev', 'dev-util/postgres-dev', resource_deps=['dev-util'])
+helm_resource('postgres-dev', 'dev-util/postgres-dev', resource_deps=['dev-util'],
+    flags=['--set=postgresDB=manman', '--set=namespace={}'.format(namespace)]
+)
 k8s_resource(workload='postgres-dev', port_forwards='5432:5432')
 
 # setup rabbitmq
-helm_resource('rabbitmq-dev', 'dev-util/rabbitmq-dev', resource_deps=['dev-util'])
+helm_resource('rabbitmq-dev', 'dev-util/rabbitmq-dev', resource_deps=['dev-util'],
+    flags=['--set=namespace={}'.format(namespace)]
+)
 k8s_resource(workload='rabbitmq-dev', port_forwards='5672:5672')
 k8s_resource(workload='rabbitmq-dev', port_forwards='15672:15672')
 

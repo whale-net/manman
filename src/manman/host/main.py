@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 from typing import Optional
 
 import alembic
@@ -14,7 +13,6 @@ from typing_extensions import Annotated
 from manman.host.api import fastapp
 from manman.util import (
     get_sqlalchemy_engine,
-    init_auth_api_client,
     init_sql_alchemy_engine,
 )
 
@@ -25,17 +23,17 @@ logger = logging.getLogger(__name__)
 
 @app.command()
 def start(
-    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
+    # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     port: int = 8000,
     # workers: int = 1,
     # auto_reload: bool = False,
     run_migration_check: Optional[bool] = True,
 ):
     # TODO - get connection properly
-    if run_migration_check and _need_migration(get_sqlalchemy_engine("", 0, "", "")):
+    if run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
 
-    init_auth_api_client(auth_url)
+    # init_auth_api_client(auth_url)
 
     # TODO running via string doesn't initialize engine because separate process
     # this would be a nice development enhancement, but may not matter if we scale out. TBD
@@ -47,33 +45,26 @@ def start(
 # TODO - should these not be ran by host?
 @app.command()
 def run_migration():
-    # TODO - get connection properly
-    _run_migration(get_sqlalchemy_engine("", 0, "", ""))
+    _run_migration(get_sqlalchemy_engine())
 
 
 @app.command()
 def create_migration(migration_message: Optional[str] = None):
+    # TODO - make use of this? or remove
     if os.environ.get("ENVIRONMENT", "DEV") == "PROD":
         raise RuntimeError("cannot create revisions in production")
-    # TODO - get connection properly
-    _create_migration(get_sqlalchemy_engine("", 0, "", ""), message=migration_message)
+    _create_migration(get_sqlalchemy_engine(), message=migration_message)
 
 
 @app.callback()
 def callback(
-    # TODO - envar global for alembic import
-    postgres_host: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_HOST")],
-    postgres_port: Annotated[int, typer.Option(envvar="MANMAN_POSTGRES_PORT")],
-    postgres_user: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_USER")],
-    postgres_password: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_PASSWORD")],
+    db_connection_string: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_URL")],
 ):
     # __global_state["postgres_host"] = postgres_host
     # __global_state["postgres_port"] = postgres_port
     # __global_state["postgres_user"] = postgres_user
     # __global_state["postgres_password"] = postgres_password
-    init_sql_alchemy_engine(
-        postgres_host, postgres_port, postgres_user, postgres_password
-    )
+    init_sql_alchemy_engine(db_connection_string)
     # __global_state["sqlalchemy_engine"] = engine
     # sessionmaker(bind=engine)
 
@@ -81,14 +72,14 @@ def callback(
 # alembic helpers
 # TODO context manager to reduce duplication
 def _get_alembic_config() -> alembic.config.Config:
-    current_path = pathlib.Path(__file__).parent.resolve()
-    alembic_path = os.path.join(current_path, "../../", "alembic.ini")
+    alembic_path = "./alembic.ini"
     config = alembic.config.Config(alembic_path)
     return config
 
 
-def _need_migration(engine: sqlalchemy.Engine) -> bool:
+def _need_migration() -> bool:
     config = _get_alembic_config()
+    engine = get_sqlalchemy_engine()
     with engine.begin() as conn:
         # TODO remove connection from env and use this?
         config.attributes["connection"] = conn
