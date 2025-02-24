@@ -41,6 +41,7 @@ def callback(
     rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
     rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    ssl_enabled: Annotated[bool, typer.Option(default=True)] = True,
 ):
     credentials = pika.credentials.PlainCredentials(
         username=rabbitmq_username, password=rabbitmq_password
@@ -55,8 +56,7 @@ def callback(
             port=rabbitmq_port,
             credentials=credentials,
             # TODO - should we share or specify the SSL context somewhere?
-            # TODO - this is only needed in production usage. Add parameter to disable
-            # ssl_options=pika.SSLOptions(context),
+            ssl_options=pika.SSLOptions(context) if ssl_enabled else None,
         )
     )
     # TODO - fix
