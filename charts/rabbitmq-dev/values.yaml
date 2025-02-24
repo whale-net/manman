@@ -1,8 +1,0 @@
-# values.yaml
-image:
-  repository: rabbitmq
-  tag: "4.0"
-  pullPolicy: IfNotPresent
-
-storageClassName: hostpath
-storageSize: 1Gi
