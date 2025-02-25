@@ -57,7 +57,8 @@ class WorkerService:
 
     def run(self):
         # TODO - this is temporary, need to figure out a way to start/stop this more easily
-        self._create_server(5)
+        # this uses openttd as a test, small game (80mb on mac)
+        self._create_server(2)
         count = 0
         try:
             while True:
