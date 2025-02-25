@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # TODO callback to share common boostrapping startup for easier test commands
 @app.command()
 def start(
-    sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
-    sa_client_secret: Annotated[
-        str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
-    ],
+    # sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
+    # sa_client_secret: Annotated[
+    #     str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
+    # ],
     host_url: Annotated[str, typer.Option(envvar="MANMAN_HOST_URL")],
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
@@ -30,10 +30,12 @@ def start(
     # ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
-    service = WorkerService(install_directory, host_url, sa_client_id, sa_client_secret)
+    # todo - re-add authcz
+    service = WorkerService(install_directory, host_url, None, None)
     service.run()
 
 
+# TODO - these parameters should not be options.
 @app.callback()
 def callback(
     # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],

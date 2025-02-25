@@ -56,6 +56,7 @@ class WorkerService:
         self._futures = []
 
     def run(self):
+        # TODO - this is temporary, need to figure out a way to start/stop this more easily
         self._create_server(5)
         count = 0
         try:
@@ -97,6 +98,7 @@ class WorkerService:
             should_update=False,
         )
         # TODO - does threadpool ever get too big with dead threads?
+        # TODO - should I use a threadpool for this? I think I should move to explicit thread management
         self._futures.append(future)
         # TODO - need way to prune this list
         self._servers.append(server)
