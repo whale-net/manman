@@ -7,6 +7,10 @@ load('ext://dotenv', 'dotenv')
 # load env vars from .env
 dotenv()
 
+build_env = os.getenv('MANMAN_BUILD_ENV', 'default')
+print("Build environment:", build_env)
+
+
 # load the dev-util helm chart museum
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo('dev-util', 'https://whale-net.github.io/dev-util')
@@ -30,19 +34,23 @@ docker_build(
     'manman',
     context='.'
 )
-# k8s_yaml(
-#     helm(
-#         'charts/manman-host',
-#         name='manman-host',
-#         namespace=namespace,
-#         set=[
-#             'image.name=manman',
-#            'image.tag=dev',
-#            'env.db.url={}'.format(os.getenv('DATABASE_URL')),
-#            'namespace={}'.format(namespace)
-#        ]
-#    )
-#)
+db_url = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
+if build_env == 'custom':
+    db_url = os.getenv('MANMAN_POSTGRES_URL') or db_url
+k8s_yaml(
+    helm(
+        'charts/manman-host',
+        name='manman-host',
+        namespace=namespace,
+        set=[
+            'image.name=manman',
+            'image.tag=dev',
+            'env.db.url={}'.format(db_url),
+            'namespace={}'.format(namespace)
+        ]
+    )
+)
+k8s_resource(workload='manman-host-deployment', port_forwards='8000:8000')
 
 # this should be a docker compose becauset hat is how I will actually deploy it
 #local_resource(

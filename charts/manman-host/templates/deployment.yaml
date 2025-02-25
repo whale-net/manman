@@ -28,8 +28,8 @@ spec:
               cpu: 200m
               memory: 256Mi
           args:
-            - migration
-            - run
+            - host
+            - run-migration
           env:
             - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}
