@@ -1,0 +1,9 @@
+apiVersion: v2
+name: manman-host
+description: API service for manman
+
+type: application
+
+version: 0.1.0
+
+appVersion: "v0"
