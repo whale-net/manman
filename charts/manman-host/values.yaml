@@ -6,7 +6,12 @@ namespace: manman
 
 deployment:
   name: manman-host-deployment
+  # TODO - note that this will be problematic when replicas > 1 because of the migrations
+  # this can be fixed by switching to job
   replicas: 1
+
+  # TODO - for now keep false
+  skip_migration_check: false
 
 env:
   db:

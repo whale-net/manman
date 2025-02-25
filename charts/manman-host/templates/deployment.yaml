@@ -6,7 +6,7 @@ metadata:
   labels:
     app: manman-host
 spec:
-  replicas: {{ .Values.deployment.replicas }}
+  replicas: 1 # {{ .Values.deployment.replicas }}
   selector:
     matchLabels:
       app: manman-host
@@ -26,15 +26,15 @@ spec:
               memory: 128Mi
             limits:
               cpu: 200m
-              memory: 128Mi
+              memory: 256Mi
           args:
             - migration
             - run
           env:
-            - name: DATABASE_URL
+            - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}
       containers:
-        - name: friendly-computing-machine
+        - name: manman-host
           image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
           resources:
             requests:
@@ -43,48 +43,15 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
-          ports:
-            - containerPort: 7654
-              name: health
-        {{- if .Values.deployment.health.enabled }}
-          livenessProbe:
-            httpGet:
-              path: /
-              port: health
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 2
-          readinessProbe:
-            httpGet:
-              path: /
-              port: health
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            failureThreshold: 5
-        {{- end }}
           args:
-            - bot
-            - run
-            # migrations run as init-container using (almost certainly) the same image
-            # so no need to check
+            - host
+            - start
           {{- if .Values.deployment.skip_migration_check}}
+            # migrations run as init-container using (almost certainly) the same image
+            # so no need to check again
             - --skip-migration-check
           {{- end}}
           # TODO - improve how secrets are sourced in this template
           env:
-            - name: SLACK_BOT_TOKEN
-              value: {{ .Values.env.slack.botToken }}
-            - name: SLACK_APP_TOKEN
-              value: {{ .Values.env.slack.appToken }}
-            - name: DATABASE_URL
+            - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}
-            - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-              value: {{ .Values.env.otelCollector.logs.endpoint }}
-            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              value: {{ .Values.env.otelCollector.traces.endpoint }}
-{{/*          - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT*/}}
-{{/*            value: {{ .Values.env.otelCollector.metrics.endpoint }}*/}}
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "deployment-name={{ .Values.deployment.name }}"
-            - name: GOOGLE_API_KEY
-              value: {{ .Values.env.google.api_key }}
