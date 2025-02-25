@@ -27,15 +27,15 @@ def start(
     port: int = 8000,
     # workers: int = 1,
     # auto_reload: bool = False,
-    run_migration_check: Optional[bool] = True,
+    should_run_migration_check: Optional[bool] = True,
 ):
-    # TODO - get connection properly
-    if run_migration_check and _need_migration():
+    if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
 
     # init_auth_api_client(auth_url)
 
     # TODO running via string doesn't initialize engine because separate process
+    # TODO - does running in this way cause blocking issues with concurrent requests?
     # this would be a nice development enhancement, but may not matter if we scale out. TBD
     # gunicorn + uvicorn worker is preferred if need to scale local api instance
     # uvicorn.run("manman.host.api:fastapp", port=port, workers=workers, reload=auto_reload)
@@ -60,17 +60,12 @@ def create_migration(migration_message: Optional[str] = None):
 def callback(
     db_connection_string: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_URL")],
 ):
-    # __global_state["postgres_host"] = postgres_host
-    # __global_state["postgres_port"] = postgres_port
-    # __global_state["postgres_user"] = postgres_user
-    # __global_state["postgres_password"] = postgres_password
     init_sql_alchemy_engine(db_connection_string)
-    # __global_state["sqlalchemy_engine"] = engine
-    # sessionmaker(bind=engine)
 
 
 # alembic helpers
 # TODO context manager to reduce duplication
+# TODO - figure out what I meant with the previous TODO
 def _get_alembic_config() -> alembic.config.Config:
     alembic_path = "./alembic.ini"
     config = alembic.config.Config(alembic_path)
@@ -93,21 +88,16 @@ def _need_migration() -> bool:
 
 def _run_migration(engine: sqlalchemy.Engine):
     config = _get_alembic_config()
-    with engine.begin() as conn:
-        # TODO remove connection from env and use this?
-        config.attributes["connection"] = conn
-        alembic.command.upgrade(config, "head")
+    # with engine.begin() as conn:
+    # config.attributes["connection"] = conn
+    alembic.command.upgrade(config, "head")
 
 
 def _create_migration(engine: sqlalchemy.Engine, message: Optional[str] = None):
-    if not _need_migration(engine):
+    if not _need_migration():
         raise RuntimeError("no migration creation required")
 
     config = _get_alembic_config()
-    with engine.begin() as conn:
-        config.attributes["connection"] = conn
-        alembic.command.revision(config, message=message, autogenerate=True)
-
-
-# if __name__ == "__main__":
-#     app()
+    # with engine.begin() as conn:
+    # config.attributes["connection"] = conn
+    alembic.command.revision(config, message=message, autogenerate=True)
