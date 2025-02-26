@@ -137,7 +137,9 @@ class Server:
 
         # TODO - temp workaround
         self._pq_thread = threading.Thread(
-            target=self._process_queue, name=self.instance.get_thread_name(extra="q")
+            target=self._process_queue,
+            name=self.instance.get_thread_name(extra="q"),
+            daemon=True,
         )
         self._pq_thread.start()
 

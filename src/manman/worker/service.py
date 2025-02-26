@@ -56,9 +56,10 @@ class WorkerService:
         self._futures = []
 
     def run(self):
+        print("hello")
         # TODO - this is temporary, need to figure out a way to start/stop this more easily
-        # this uses openttd as a test, small game (80mb on mac)
-        self._create_server(2)
+        # openttd didn't work so good
+        self._create_server(3)
         count = 0
         try:
             while True:
@@ -96,7 +97,8 @@ class WorkerService:
         future = self._threadpool.submit(
             server.run,
             name=server.instance.get_thread_name(),
-            should_update=False,
+            # TODO - set this to false when we get blocked by steamcmd
+            should_update=True,
         )
         # TODO - does threadpool ever get too big with dead threads?
         # TODO - should I use a threadpool for this? I think I should move to explicit thread management

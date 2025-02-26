@@ -52,6 +52,8 @@ class SteamCMD:
 
         cb = ProcessBuilder(self._steamcmd_executable)
         # steamcmd is different and uses + for args
+        # TODO - temp? should come from config
+        cb.add_parameter("+@sSteamCmdForcePlatformType", "linux")
         cb.add_parameter("+force_install_dir", self._install_dir)
         cb.add_parameter("+login", self._username)
         if self._password is not None:

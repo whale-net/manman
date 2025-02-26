@@ -64,6 +64,9 @@ def callback(
     # TODO - fix
     # init_auth_api_client(auth_url)
 
+    # init basic logging config
+    logging.basicConfig(level=logging.INFO)
+
 
 @app.command()
 def localdev_send_queue(key: int):

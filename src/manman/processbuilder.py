@@ -76,9 +76,10 @@ class ProcessBuilder:
             logger.debug("stdinput list: %s", self._parameter_stdin)
             stdinput = "".join(arg + "\n" for arg in self._parameter_stdin)
             parm_stdinput_bytes = bytes(stdinput, encoding="ascii")
-
+        proc_command = [self._executable, *self._args]
+        logger.info("executing [%s]", " ".join(proc_command))
         proc = subprocess.Popen(
-            [self._executable, *self._args],
+            proc_command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
         )

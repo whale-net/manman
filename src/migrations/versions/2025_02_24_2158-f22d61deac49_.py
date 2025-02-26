@@ -115,21 +115,28 @@ def upgrade() -> None:
     # manual inserts of data
     op.execute("""
     insert into manman.game_servers (name, server_type, app_id)
-    values ('cs2', 'STEAM', 730), ('openttd', 'STEAM', 1536610);
+    values ('cs2', 'STEAM', 730), ('openttd', 'STEAM', 1536610), ('valheim', 'STEAM', 896660);
     """)
 
     op.execute("""
     insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
-    SELECT game_server_id, true, 'test cs2 config', 'game/bin/linuxsteamrt64/cs2', ARRAY['-dedicated', '-port', '27015', '+map', 'de_ancient']
+    SELECT game_server_id, true, 'testcs2', 'game/bin/linuxsteamrt64/cs2', ARRAY['-dedicated', '-port', '27015', '+map', 'de_ancient']
     from manman.game_servers
     where name = 'cs2'
     """)
 
     op.execute("""
     insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
-    SELECT game_server_id, true, 'test openttd config', 'openttd', ARRAY['-D']
+    SELECT game_server_id, true, 'testottd', 'openttd', ARRAY['-D']
     from manman.game_servers
     where name = 'openttd'
+    """)
+
+    op.execute("""
+    insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
+    SELECT game_server_id, true, 'testvalheim', 'valheim', ARRAY['']
+    from manman.game_servers
+    where name = 'valheim'
     """)
 
 
