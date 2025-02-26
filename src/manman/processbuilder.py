@@ -65,7 +65,7 @@ class ProcessBuilder:
 
         return command, stdinput
 
-    def execute(self):
+    def execute(self, wait: bool = False):
         command_base = os.path.basename(self._executable)
         logger.info("About to start executing [%s]", command_base)
 
@@ -83,6 +83,7 @@ class ProcessBuilder:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
         )
+        logger.info("started process [%s]", proc.pid)
         if parm_stdinput_bytes is not None:
             # TODO test
             proc.communicate(parm_stdinput_bytes)
@@ -91,6 +92,10 @@ class ProcessBuilder:
         os.set_blocking(proc.stdout.fileno(), False)
         self._process_start_time = datetime.datetime.now()
         self._proc = proc
+
+        # TODO - is this the right place to do this?
+        if wait:
+            self._proc.wait()
 
         # if is_subprocess_running and self.status == ProcessBuilderStatus.RUNNING:
         #     # TODO kill logic

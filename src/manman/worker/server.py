@@ -146,6 +146,7 @@ class Server:
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
+        raise RuntimeError()
         self._pb.execute()
         status = self._pb.status
         while status != ProcessBuilderStatus.STOPPED and self._should_be_running:
