@@ -59,6 +59,7 @@ class WorkerService:
         print("hello")
         # TODO - this is temporary, need to figure out a way to start/stop this more easily
         # openttd didn't work so good
+        # TODO - docker compose for worker. MUST run from container for linux compatibility
         self._create_server(3)
         count = 0
         try:

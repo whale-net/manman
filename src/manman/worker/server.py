@@ -146,10 +146,18 @@ class Server:
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
-        raise RuntimeError()
-        self._pb.execute()
+        try:
+            # TODO - temp workaround for env var, need to come from config
+            # this was for valheim which did not work on apple silicon (unsurprisingly)
+            # self._pb.execute(extra_env={"LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH"})
+            self._pb.execute()
+        except Exception:
+            # TODO - unsure if shutdown is correct
+            self.shutdown()
+            raise
         status = self._pb.status
         while status != ProcessBuilderStatus.STOPPED and self._should_be_running:
+            logger.info(self._pb.status)
             self._pb.read_output()
             status = self._pb.status
 

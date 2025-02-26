@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 from queue import Queue
+from typing import Optional
 
 from manman.util import log_stream
 
@@ -31,6 +32,7 @@ class ProcessBuilder:
         if self._process_start_time is None:
             return ProcessBuilderStatus.NOTSTARTED
         proc_status = self._proc.poll()
+        # logger.info('status %s', proc_status)
         if proc_status is not None:
             return ProcessBuilderStatus.STOPPED
 
@@ -65,7 +67,7 @@ class ProcessBuilder:
 
         return command, stdinput
 
-    def execute(self, wait: bool = False):
+    def execute(self, wait: bool = False, extra_env: Optional[dict[str, str]] = None):
         command_base = os.path.basename(self._executable)
         logger.info("About to start executing [%s]", command_base)
 
@@ -78,11 +80,22 @@ class ProcessBuilder:
             parm_stdinput_bytes = bytes(stdinput, encoding="ascii")
         proc_command = [self._executable, *self._args]
         logger.info("executing [%s]", " ".join(proc_command))
-        proc = subprocess.Popen(
-            proc_command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-        )
+
+        # always pass in env, TBD if good idea
+        # TODO - untested, not even locally
+        env = os.environ.copy()
+        env.update(extra_env or {})
+        try:
+            proc = subprocess.Popen(
+                proc_command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                env=env,
+            )
+        except Exception as e:
+            logger.error("failed to start process [%s]", e)
+            raise
+
         logger.info("started process [%s]", proc.pid)
         if parm_stdinput_bytes is not None:
             # TODO test
@@ -95,6 +108,7 @@ class ProcessBuilder:
 
         # TODO - is this the right place to do this?
         if wait:
+            logger.info("waiting for process to finish")
             self._proc.wait()
 
         # if is_subprocess_running and self.status == ProcessBuilderStatus.RUNNING:
