@@ -1,16 +1,17 @@
 import abc
-import threading
 import logging
 import queue
+import threading
 from typing import Optional
 
 import pika
 import pika.channel
 import pika.frame
 
-from manman.models import Command, CommandType
+from manman.models import Command
 
 logger = logging.getLogger(__name__)
+
 
 class MessageProvider(abc.ABC):
     """
@@ -39,12 +40,34 @@ class MessageProvider(abc.ABC):
 
 
 class RabbitMessageProvider(MessageProvider):
-    def __init__(self, connection: pika.connection.Connection, exchange: str, queue_name: Optional[str] = None) -> None:
+    """
+    A message provider that retrieves commands from a RabbitMQ queue.
+
+    This class sets up a connection to RabbitMQ, declares an exchange and
+    a queue, and starts consuming messages from the queue in a separate
+    thread.  It uses a blocking connection internally, managed in its own
+    thread, to continuously listen for messages. Received messages are
+    parsed as `Command` objects and placed in an internal queue for retrieval
+    by the `get_commands` method.
+
+    """
+
+    def __init__(
+        self,
+        connection: pika.connection.Connection,
+        exchange: str,
+        queue_name: Optional[str] = None,
+    ) -> None:
         self._queue_name = queue_name
+        if self._queue_name is not None:
+            # TODO - routing-keys in queue-bind
+            raise NotImplementedError()
         self._exchange = exchange
         self._channel: pika.channel.Channel = connection.channel()
         self._channel.exchange_declare(exchange=self._exchange, exchange_type="direct")
-        self._method: pika.frame.Method = self._channel.queue_declare(self._queue_name, exclusive=True)  # noqa - bad hint
+        self._method: pika.frame.Method = self._channel.queue_declare(
+            self._queue_name, exclusive=True
+        )  # noqa - bad hint
         if self._method.method.queue is None:
             logger.error("unable to declare queue with name %s", self._queue_name)
             raise RuntimeError("failed to create queue")
@@ -56,38 +79,33 @@ class RabbitMessageProvider(MessageProvider):
         self._name = f"rmq-{self._exchange}-{self._queue_name}"
 
         self._rabbit_thread = threading.Thread(
-            target=self._blocking_wrapper,
+            target=self._start_consuming,
             name=self._name,
             daemon=True,
         )
 
         self._command_queue = queue.Queue()
+
+        # this is non-blocking
+        # this is also likely non-optimal, but good for mvp
+        self._channel.basic_consume(
+            queue=self._queue_name,
+            on_message_callback=self._message_handler,
+            auto_ack=True,
+            # TODO consumer tag?
+        )
+
         self._rabbit_thread.start()
         logger.info("rabbit message provider created %s", self._name)
 
-    def _blocking_wrapper(self):
-        self._channel.queue_bind(
-            exchange=self._exchange,
-            queue=self._queue_name,
-            routing_key=str(self._instance.game_server_instance_id),
-        )
+    def _start_consuming(self):
+        logger.info("starting to consume")
+        self._channel.start_consuming()
 
-    def _process_queue(self):
-            logger.info("starting to read queue")
-        # while True:
-        #     for message in self._rmq_channel.consume()
-        self._rmq_channel.basic_consume(
-            self._rmq_queue_name,
-            on_message_callback=self._queue_message_handler,
-            auto_ack=True,
-            consumer_tag=str(self.instance.game_server_instance_id),
-        )
-        self._rmq_channel.start_consuming()
-        logger.info("done consuming queue")
-
-    def _queue_message_handler(self, ch, method, properties, body: bytes):
+    def _message_handler(self, ch, method, properties, body: bytes):  # noqa: F841
         command = Command.model_validate_json(body)
         self._command_queue.put(command)
+        # auto-ack is set to true, so no need to ack
 
     def get_commands(self) -> list[Command]:
         commands = []
@@ -100,7 +118,8 @@ class RabbitMessageProvider(MessageProvider):
         return commands
 
     def shutdown(self) -> None:
-        self._channel.basic_cancel(str(self.instance.game_server_instance_id))
+        # TODO - consumer tag?
+        self._channel.basic_cancel()
 
-        # TODO: JOIN????? - this is a blocking call???
-        self._pq_thread.join()
+        # TODO: no need to join, but whatever. it was in the old code
+        self._rabbit_thread.join()
