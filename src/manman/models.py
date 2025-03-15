@@ -111,12 +111,15 @@ class GameServerConfig(Base, table=True):
 
 
 ### NON TABLES # unsure if this is good idea
+
+
 class CommandType(Enum):
     START = "START"
     STDIN = "STDIN"
     STOP = "STOP"
 
 
+# TODO subclass for each comamnd type + parent class factory based on enum
 class Command(Base):
     command_type: CommandType = Field()
     command_args: list[str] = Field(default=[])
