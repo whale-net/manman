@@ -162,9 +162,7 @@ class Server:
 
         # do it one more time to clean up anything leftover
         self._proc.read_output()
-        logger.info(
-            "instance %s has exited normally", self._instance.game_server_instance_id
-        )
+        logger.info("instance %s has exited", self._instance.game_server_instance_id)
         self.shutdown()
 
         return self

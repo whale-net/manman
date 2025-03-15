@@ -53,6 +53,8 @@ class WorkerService:
         # openttd didn't work so good
         # TODO - docker compose for worker. MUST run from container for linux compatibility?
         self._create_server(3)
+        # cs2 again
+        # self._create_server(1)
         count = 0
         try:
             while True:
