@@ -51,34 +51,25 @@ class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):
         return super().submit(rename_thread, *args, **kwargs)
 
 
-def get_sqlalchemy_engine(
-    postgres_host: str, postgres_port: int, postgres_user: str, postgres_password: str
-) -> sqlalchemy.engine:
+def get_sqlalchemy_engine() -> sqlalchemy.engine:
     if __GLOBALS.get("engine") is None:
-        connection_string = sqlalchemy.URL.create(
-            "postgresql+psycopg2",
-            username=postgres_user,
-            password=postgres_password,
-            host=postgres_host,
-            port=postgres_port,
-            database="manman",
-        )
-        __GLOBALS["engine"] = sqlalchemy.create_engine(
-            connection_string,
-            pool_pre_ping=True,
-        )
+        raise RuntimeError("global engine not defined - cannot start")
     return __GLOBALS["engine"]
 
 
 def init_sql_alchemy_engine(
-    postgres_host: str, postgres_port: int, postgres_user: str, postgres_password: str
+    connection_string: str,
 ):
-    __GLOBALS["engine"] = get_sqlalchemy_engine(
-        postgres_host, postgres_port, postgres_user, postgres_password
+    if "engine" in __GLOBALS:
+        return
+    __GLOBALS["engine"] = sqlalchemy.create_engine(
+        connection_string,
+        pool_pre_ping=True,
     )
 
 
 def get_sqlalchemy_session():
+    # TODO : apply lessons from fcm on session management. this doesn't seem right.
     if __GLOBALS.get("engine") is None:
         raise RuntimeError("global engine not defined - cannot start")
     if __GLOBALS.get("session") is None:
@@ -107,7 +98,11 @@ def init_auth_api_client(auth_url: str):
 
 
 def get_auth_api_client() -> AuthAPIClient:
-    api_client = __GLOBALS.get("auth_api_client")
-    if api_client is None:
-        raise RuntimeError("api_client is not initialized")
-    return api_client
+    # api_client = __GLOBALS.get("auth_api_client")
+    # if api_client is None:
+    #     raise RuntimeError("api_client is not initialized")
+    # return api_client
+    # TODO - re-add authcz
+    from unittest.mock import MagicMock
+
+    return MagicMock()

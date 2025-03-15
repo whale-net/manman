@@ -6,7 +6,7 @@ import pika
 import typer
 from typing_extensions import Annotated
 
-from manman.util import get_rabbitmq_connection, init_auth_api_client, init_rabbitmq
+from manman.util import get_rabbitmq_connection, init_rabbitmq
 from manman.worker.service import WorkerService
 
 app = typer.Typer()
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # TODO callback to share common boostrapping startup for easier test commands
 @app.command()
 def start(
-    sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
-    sa_client_secret: Annotated[
-        str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
-    ],
+    # sa_client_id: Annotated[str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_ID")],
+    # sa_client_secret: Annotated[
+    #     str, typer.Option(envvar="MANMAN_WORKER_SA_CLIENT_SECRET")
+    # ],
     host_url: Annotated[str, typer.Option(envvar="MANMAN_HOST_URL")],
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
@@ -30,13 +30,15 @@ def start(
     # ] = None,
 ):
     install_directory = os.path.abspath(install_directory)
-    service = WorkerService(install_directory, host_url, sa_client_id, sa_client_secret)
+    # todo - re-add authcz
+    service = WorkerService(install_directory, host_url, None, None)
     service.run()
 
 
+# TODO - these parameters should not be options.
 @app.callback()
 def callback(
-    auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
+    # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
     rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
     rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
@@ -55,10 +57,15 @@ def callback(
             port=rabbitmq_port,
             credentials=credentials,
             # TODO - should we share or specify the SSL context somewhere?
-            ssl_options=pika.SSLOptions(context),
+            # TODO - this is only needed in production usage. Add parameter to disable
+            # ssl_options=pika.SSLOptions(context),
         )
     )
-    init_auth_api_client(auth_url)
+    # TODO - fix
+    # init_auth_api_client(auth_url)
+
+    # init basic logging config
+    logging.basicConfig(level=logging.INFO)
 
 
 @app.command()

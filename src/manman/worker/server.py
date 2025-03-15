@@ -137,16 +137,27 @@ class Server:
 
         # TODO - temp workaround
         self._pq_thread = threading.Thread(
-            target=self._process_queue, name=self.instance.get_thread_name(extra="q")
+            target=self._process_queue,
+            name=self.instance.get_thread_name(extra="q"),
+            daemon=True,
         )
         self._pq_thread.start()
 
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
-        self._pb.execute()
+        try:
+            # TODO - temp workaround for env var, need to come from config
+            # this was for valheim which did not work on apple silicon (unsurprisingly)
+            # self._pb.execute(extra_env={"LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH"})
+            self._pb.execute()
+        except Exception:
+            # TODO - unsure if shutdown is correct
+            self.shutdown()
+            raise
         status = self._pb.status
         while status != ProcessBuilderStatus.STOPPED and self._should_be_running:
+            logger.info(self._pb.status)
             self._pb.read_output()
             status = self._pb.status
 

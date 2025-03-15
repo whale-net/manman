@@ -63,20 +63,26 @@ class AccessToken(BaseModel):
 
     @cached_property
     def roles(self) -> set[str]:
-        # this couples me to keycloak but whatever at this point
-
-        # TODO - rethink which roles I'm using
-        # for now this will work
-        roles = self.jwt["realm_access"]["roles"]
-        return set(roles)
+        # # this couples me to keycloak but whatever at this point
+        #
+        # # TODO - rethink which roles I'm using
+        # # for now this will work
+        # roles = self.jwt["realm_access"]["roles"]
+        # return set(roles)
+        # TODO - re-add authcz
+        return set("manman-worker")
 
     def is_expired(self, expiry_threshold_seconds: int = 0) -> bool:
-        expiration_delta = self.expires_at - datetime.datetime.now()
-        return expiration_delta < datetime.timedelta(seconds=expiry_threshold_seconds)
+        # expiration_delta = self.expires_at - datetime.datetime.now()
+        # return expiration_delta < datetime.timedelta(seconds=expiry_threshold_seconds)
+        # TODO - re-add authcz
+        return True
 
     def is_valid(self) -> bool:
         # if jwt can be decoded, it is considered OK
-        return len(self.jwt) > 0
+        # return len(self.jwt) > 0
+        # TODO - re-add authcz
+        return True
 
     @classmethod
     def create_from_response(cls, response: requests.Response, jwk: dict):
@@ -202,7 +208,10 @@ class WorkerAPIClient(APIClientBase):
         self._sa_client_secret = sa_client_secret
         super().__init__(base_url=base_url, api_prefix=api_prefix)
 
-        self._session.auth = BearerAuth(refresh_callback=self._refresh_access_token)
+        # TODO - add authcz
+        self._session.auth = (
+            None  # BearerAuth(refresh_callback=self._refresh_access_token)
+        )
 
     def _refresh_access_token(self):
         access_token_response = self._auth_api_client.get_access_token(
