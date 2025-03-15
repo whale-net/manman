@@ -66,8 +66,8 @@ class RabbitMessageProvider(MessageProvider):
         self._channel: pika.channel.Channel = connection.channel()
         self._channel.exchange_declare(exchange=self._exchange, exchange_type="direct")
         self._method: pika.frame.Method = self._channel.queue_declare(
-            self._queue_name, exclusive=True
-        )  # noqa - bad hint
+            self._queue_name or "", exclusive=True
+        )
         if self._method.method.queue is None:
             logger.error("unable to declare queue with name %s", self._queue_name)
             raise RuntimeError("failed to create queue")

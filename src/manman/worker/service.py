@@ -1,6 +1,8 @@
 import logging
 import time
 
+from requests import ConnectionError
+
 # from sqlalchemy.orm import Session
 from manman.api_client import WorkerAPIClient
 from manman.models import GameServerConfig
@@ -34,8 +36,15 @@ class WorkerService:
             sa_client_id=sa_client_id,
             sa_client_secret=sa_client_secret,
         )
-
-        self._worker_instance = self._wapi.worker_create()
+        try:
+            self._worker_instance = self._wapi.worker_create()
+        except ConnectionError as e:
+            logger.exception(e)
+            # if you see this while debugging, wait for tilt to start the api server
+            raise RuntimeError("failed to connect to host - is it running?") from e
+        except Exception as e:
+            logger.exception(e)
+            raise RuntimeError("failed to create worker instance") from e
 
         self._futures = []
 
