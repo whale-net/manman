@@ -83,7 +83,7 @@ def init_rabbitmq(connection_parms: pika.ConnectionParameters):
     __GLOBALS["rmq_parameters"] = connection_parms
 
 
-def get_rabbitmq_connection():
+def get_rabbitmq_connection() -> pika.BaseConnection:
     stored_parms = __GLOBALS.get("rmq_parameters")
     if stored_parms is None:
         raise RuntimeError("need to provide init rabbitmq")

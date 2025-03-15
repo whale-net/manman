@@ -148,16 +148,18 @@ class Server:
             steam.install(app_id=self._game_server.app_id)
         try:
             # TODO - temp workaround for env var, need to come from config
-            # this was for valheim which did not work on apple silicon (unsurprisingly)
-            # self._pb.execute(extra_env={"LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH"})
-            self._pb.execute()
-        except Exception:
+            self._pb.execute(
+                extra_env={"LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH"}
+            )
+            # self._pb.execute()
+        except Exception as e:
             # TODO - unsure if shutdown is correct
+            logger.exception(e)
             self.shutdown()
             raise
         status = self._pb.status
         while status != ProcessBuilderStatus.STOPPED and self._should_be_running:
-            logger.info(self._pb.status)
+            # logger.info(self._pb.status)
             self._pb.read_output()
             status = self._pb.status
 
