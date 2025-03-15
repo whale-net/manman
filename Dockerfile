@@ -1,34 +1,32 @@
 FROM python:3.11-slim
-# not sure if it's necessary to pin uv for this project, but whatever may as well
-# NOTE: update in github actions too
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
-# Install the project into `/app`
 WORKDIR /app
 
-# Enable bytecode compilation
+# Enable bytecode compilation for installation
 ENV UV_COMPILE_BYTECODE=1
-
-# Copy from the cache instead of linking since it's a mounted volume
 ENV UV_LINK_MODE=copy
 
-# Install the project's dependencies using the lockfile and settings
+# First phase: Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
-
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
+# Second phase: Install project
 COPY uv.lock pyproject.toml alembic.ini README.md /app/
 COPY /src /app/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Place executables in the environment at the front of the path
+# Third phase: Pre-compile all Python files to bytecode
+RUN python -m compileall -f /app
+
+# Disable bytecode compilation at runtime since we've already done it
+ENV UV_COMPILE_BYTECODE=0
+
+# Place executables in the environment
 ENV PATH="/app/.venv/bin:$PATH"
 
-# can do `host` or `worker`
 ENTRYPOINT ["uv", "run"]

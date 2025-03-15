@@ -10,8 +10,9 @@ deployment:
   # this can be fixed by switching to job
   replicas: 1
 
-  # TODO - for now keep false
-  skip_migration_check: false
+  # run the migration, skip the check
+  skip_migration: false
+  skip_migration_check: true
 
 env:
   db:

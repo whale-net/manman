@@ -46,7 +46,10 @@ k8s_yaml(
             'image.name=manman',
             'image.tag=dev',
             'env.db.url={}'.format(db_url),
-            'namespace={}'.format(namespace)
+            'namespace={}'.format(namespace),
+            # for local dev, require manual migration and protect against bad models being used
+            'deployment.skip_migration=true',
+            'deployment.skip_migration_check=false'
         ]
     )
 )
