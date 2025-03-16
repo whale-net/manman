@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta
 from threading import Lock
 
-import pika.connection
+from amqpstorm import Connection
 from requests import ConnectionError
 
 # from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ class WorkerService:
         host_url: str,
         sa_client_id: str,
         sa_client_secret: str,
-        rabbitmq_connection: pika.connection.Connection,
+        rabbitmq_connection: Connection,
     ):
         self.__is_started = False
         self.__is_stopped = False
@@ -57,7 +57,7 @@ class WorkerService:
         self._rabbitmq_connection = rabbitmq_connection
         self._message_provider = RabbitMessageProvider(
             connection=self._rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
+            exchange=WorkerService.RMQ_EXCHANGE,
             queue_name=self.rmq_queue_name,
         )
 
@@ -71,7 +71,9 @@ class WorkerService:
         # TODO - this is temporary, need to figure out a way to start/stop this more easily
         # openttd didn't work so good
         # TODO - docker compose for worker. MUST run from container for linux compatibility?
-        # self._create_server(3)
+
+        # TODO 3/16 - there is an issue with multiple pika channels it or at least the way I'm using them
+        self._create_server(3)
         # cs2 again
         # self._create_server(1)
         loop_log_time = datetime.now()
@@ -94,6 +96,7 @@ class WorkerService:
                 self._servers_lock.release()
 
                 # process commands
+                # TODO - offload to another function
                 commands = self._message_provider.get_commands()
                 if commands is not None:
                     for command in commands:

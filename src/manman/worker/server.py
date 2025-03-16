@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Self
 
-import pika.connection
+from amqpstorm import Connection
 
 from manman.api_client import WorkerAPIClient
 
@@ -31,7 +31,7 @@ class Server:
     def __init__(
         self,
         wapi: WorkerAPIClient,
-        rabbitmq_connection: pika.connection.Connection,
+        rabbitmq_connection: Connection,
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:

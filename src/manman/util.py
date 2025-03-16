@@ -4,7 +4,7 @@ import logging
 import threading
 from typing import Optional
 
-import pika
+import amqpstorm
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 
@@ -79,21 +79,44 @@ def get_sqlalchemy_session():
     return __GLOBALS["session"]()
 
 
-def init_rabbitmq(connection_parms: pika.ConnectionParameters):
-    __GLOBALS["rmq_parameters"] = connection_parms
-    rmq_connection = pika.BlockingConnection(connection_parms)
+# Update RabbitMQ functions to use AMQPStorm
+def init_rabbitmq(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    virtual_host: str = "/",
+    ssl_enabled: bool = False,
+    ssl_context=None,
+):
+    """Initialize RabbitMQ connection using AMQPStorm."""
+    __GLOBALS["rmq_parameters"] = {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "virtual_host": virtual_host,
+        "ssl": ssl_enabled,
+        "ssl_options": ssl_context,
+    }
+
+    rmq_connection = amqpstorm.Connection(
+        hostname=host,
+        port=port,
+        username=username,
+        password=password,
+        virtual_host=virtual_host,
+        ssl=ssl_enabled,
+        ssl_options=ssl_context,
+    )
     __GLOBALS["rmq_connection"] = rmq_connection
     logger.info("rmq connection established")
 
 
-def get_rabbitmq_connection() -> pika.BaseConnection:
-    # stored_parms = __GLOBALS.get("rmq_parameters")
-    # if stored_parms is None:
-    #     raise RuntimeError("need to provide init rabbitmq")
-
+def get_rabbitmq_connection() -> amqpstorm.Connection:
+    """Get the RabbitMQ connection."""
     if "rmq_connection" not in __GLOBALS:
         raise RuntimeError("rmq_connection not defined - cannot start")
-        # __GLOBALS["rmq_connection"] = pika.BlockingConnection(stored_parms)
     return __GLOBALS["rmq_connection"]
 
 

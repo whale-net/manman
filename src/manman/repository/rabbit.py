@@ -4,9 +4,7 @@ import queue
 import threading
 from typing import Optional
 
-import pika
-import pika.channel
-import pika.frame
+from amqpstorm import Connection, Message
 
 from manman.models import Command
 
@@ -45,44 +43,43 @@ class RabbitMessageProvider(MessageProvider):
 
     This class sets up a connection to RabbitMQ, declares an exchange and
     a queue, and starts consuming messages from the queue in a separate
-    thread.  It uses a blocking connection internally, managed in its own
-    thread, to continuously listen for messages. Received messages are
+    thread.  It uses AMQPStorm's thread-safe connection internally, managed
+    in its own thread, to continuously listen for messages. Received messages are
     parsed as `Command` objects and placed in an internal queue for retrieval
     by the `get_commands` method.
-
     """
 
     def __init__(
         self,
-        connection: pika.connection.Connection,
+        connection: Connection,
         exchange: str,
         queue_name: Optional[str] = None,
     ) -> None:
         """
-
-
-        :param connection: A pika connection to the RabbitMQ server.
-        :param exchange: pika exchange to bind to
-        :param queue_name: name of queue to bind to the exchange. If None, a random name will be generated.
+        :param connection: An AMQPStorm connection to the RabbitMQ server.
+        :param exchange: Exchange to bind to
+        :param queue_name: Name of queue to bind to the exchange. If None, a random name will be generated.
         """
         self._queue_name = queue_name
-        # if self._queue_name is not None:
-        #     # TODO - routing-keys in queue-bind
-        #     raise NotImplementedError()
         self._exchange = exchange
-        self._channel: pika.channel.Channel = connection.channel()
-        self._channel.exchange_declare(exchange=self._exchange, exchange_type="direct")
-        self._method: pika.frame.Method = self._channel.queue_declare(
-            self._queue_name or "", exclusive=True
+        self._channel = connection.channel()
+
+        # Declare exchange
+        self._channel.exchange.declare(exchange=self._exchange, exchange_type="direct")
+
+        # Declare queue
+        result = self._channel.queue.declare(
+            queue=self._queue_name or "", exclusive=True, auto_delete=True
         )
-        if self._method.method.queue is None:
-            logger.error("unable to declare queue with name %s", self._queue_name)
-            raise RuntimeError("failed to create queue")
-        self._queue_name = self._method.method.queue
-        logger.info("queue declared %s", self._queue_name)
+        if not result:
+            logger.error("Unable to declare queue with name %s", self._queue_name)
+            raise RuntimeError("Failed to create queue")
+
+        self._queue_name = result["queue"]
+        logger.info("Queue declared %s", self._queue_name)
 
         # Bind the queue to the exchange
-        self._channel.queue_bind(
+        self._channel.queue.bind(
             exchange=self._exchange,
             queue=self._queue_name,
         )
@@ -92,38 +89,38 @@ class RabbitMessageProvider(MessageProvider):
             self._exchange,
         )
 
-        # TODO - should ideally use something other than a blocking connection in a thread
-        #   but this will work for mvp
         self._name = f"rmq-{self._exchange}-{self._queue_name}"
+        self._command_queue = queue.Queue()
+        self._consumer_tag = None
 
+        # Set up consumption
+        self._consumer_tag = self._channel.basic.consume(
+            callback=self._message_handler,
+            queue=self._queue_name,
+            no_ack=True,  # equivalent to auto_ack=True in pika
+        )
+
+        # Start consuming in a separate thread
         self._rabbit_thread = threading.Thread(
             target=self._start_consuming,
             name=self._name,
             daemon=True,
         )
-
-        self._command_queue = queue.Queue()
-
-        # this is non-blocking
-        # this is also likely non-optimal, but good for mvp
-        self._channel.basic_consume(
-            queue=self._queue_name,
-            on_message_callback=self._message_handler,
-            auto_ack=True,
-            # TODO consumer tag?
-        )
-
         self._rabbit_thread.start()
-        logger.info("rabbit message provider created %s", self._name)
+
+        logger.info("Rabbit message provider created %s", self._name)
 
     def _start_consuming(self):
-        logger.info("starting to consume")
+        logger.info("Starting to consume")
         self._channel.start_consuming()
 
-    def _message_handler(self, ch, method, properties, body: bytes):  # noqa: F841
-        command = Command.model_validate_json(body)
-        self._command_queue.put(command)
-        # auto-ack is set to true, so no need to ack
+    def _message_handler(self, message: Message):
+        try:
+            command = Command.model_validate_json(message.body)
+            self._command_queue.put(command)
+            # No need to ack as no_ack=True is set
+        except Exception as e:
+            logger.exception("Error processing message: %s", e)
 
     def get_commands(self) -> list[Command]:
         commands = []
@@ -136,21 +133,19 @@ class RabbitMessageProvider(MessageProvider):
         return commands
 
     def shutdown(self) -> None:
-        # TODO - consumer tag?
-
         logger.info("Shutting down RabbitMessageProvider...")
+
         try:
             # Cancel the consumer
-            if self._channel and self._channel.is_open:
-                # TODO - regular cancel?
-                self._channel.basic_cancel()
+            if self._consumer_tag and self._channel.is_open:
+                self._channel.basic.cancel(self._consumer_tag)
                 logger.info("Consumer cancelled.")
         except Exception as e:
             logger.exception("Error cancelling consumer: %s", e)
 
         try:
             # Stop consuming
-            if self._channel and self._channel.is_open and self._channel.is_consuming:
+            if self._channel.is_open:
                 self._channel.stop_consuming()
                 logger.info("Stopped consuming.")
         except Exception as e:
@@ -158,7 +153,7 @@ class RabbitMessageProvider(MessageProvider):
 
         try:
             # Close the channel
-            if self._channel and self._channel.is_open:
+            if self._channel.is_open:
                 self._channel.close()
                 logger.info("Channel closed.")
         except Exception as e:
