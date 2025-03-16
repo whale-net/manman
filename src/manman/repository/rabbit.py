@@ -58,10 +58,17 @@ class RabbitMessageProvider(MessageProvider):
         exchange: str,
         queue_name: Optional[str] = None,
     ) -> None:
+        """
+
+
+        :param connection: A pika connection to the RabbitMQ server.
+        :param exchange: pika exchange to bind to
+        :param queue_name: name of queue to bind to the exchange. If None, a random name will be generated.
+        """
         self._queue_name = queue_name
-        if self._queue_name is not None:
-            # TODO - routing-keys in queue-bind
-            raise NotImplementedError()
+        # if self._queue_name is not None:
+        #     # TODO - routing-keys in queue-bind
+        #     raise NotImplementedError()
         self._exchange = exchange
         self._channel: pika.channel.Channel = connection.channel()
         self._channel.exchange_declare(exchange=self._exchange, exchange_type="direct")
@@ -73,6 +80,17 @@ class RabbitMessageProvider(MessageProvider):
             raise RuntimeError("failed to create queue")
         self._queue_name = self._method.method.queue
         logger.info("queue declared %s", self._queue_name)
+
+        # Bind the queue to the exchange
+        self._channel.queue_bind(
+            exchange=self._exchange,
+            queue=self._queue_name,
+        )
+        logger.info(
+            "Queue %s bound to exchange %s",
+            self._queue_name,
+            self._exchange,
+        )
 
         # TODO - should ideally use something other than a blocking connection in a thread
         #   but this will work for mvp
@@ -119,7 +137,29 @@ class RabbitMessageProvider(MessageProvider):
 
     def shutdown(self) -> None:
         # TODO - consumer tag?
-        self._channel.basic_cancel()
 
-        # TODO: no need to join, but whatever. it was in the old code
-        self._rabbit_thread.join()
+        logger.info("Shutting down RabbitMessageProvider...")
+        try:
+            # Cancel the consumer
+            if self._channel and self._channel.is_open:
+                # TODO - regular cancel?
+                self._channel.basic_cancel()
+                logger.info("Consumer cancelled.")
+        except Exception as e:
+            logger.exception("Error cancelling consumer: %s", e)
+
+        try:
+            # Stop consuming
+            if self._channel and self._channel.is_open and self._channel.is_consuming:
+                self._channel.stop_consuming()
+                logger.info("Stopped consuming.")
+        except Exception as e:
+            logger.exception("Error stopping consuming: %s", e)
+
+        try:
+            # Close the channel
+            if self._channel and self._channel.is_open:
+                self._channel.close()
+                logger.info("Channel closed.")
+        except Exception as e:
+            logger.exception("Error closing channel: %s", e)

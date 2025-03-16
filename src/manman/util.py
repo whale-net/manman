@@ -81,15 +81,19 @@ def get_sqlalchemy_session():
 
 def init_rabbitmq(connection_parms: pika.ConnectionParameters):
     __GLOBALS["rmq_parameters"] = connection_parms
+    rmq_connection = pika.BlockingConnection(connection_parms)
+    __GLOBALS["rmq_connection"] = rmq_connection
+    logger.info("rmq connection established")
 
 
 def get_rabbitmq_connection() -> pika.BaseConnection:
-    stored_parms = __GLOBALS.get("rmq_parameters")
-    if stored_parms is None:
-        raise RuntimeError("need to provide init rabbitmq")
+    # stored_parms = __GLOBALS.get("rmq_parameters")
+    # if stored_parms is None:
+    #     raise RuntimeError("need to provide init rabbitmq")
 
     if "rmq_connection" not in __GLOBALS:
-        __GLOBALS["rmq_connection"] = pika.BlockingConnection(stored_parms)
+        raise RuntimeError("rmq_connection not defined - cannot start")
+        # __GLOBALS["rmq_connection"] = pika.BlockingConnection(stored_parms)
     return __GLOBALS["rmq_connection"]
 
 

@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.deployment.name }}
+  name: {{ .Values.deployment.name }}-{{ .Values.env.environment }}
   namespace: {{ .Values.namespace }}
   labels:
     app: manman-host
@@ -9,12 +9,12 @@ spec:
   replicas: 1 # {{ .Values.deployment.replicas }}
   selector:
     matchLabels:
-      app: manman-host
+      app: manman-host-{{ .Values.env.environment }}
   template:
     metadata:
       namespace: {{ .Values.namespace }}
       labels:
-        app: manman-host
+        app: manman-host-{{ .Values.env.environment }}
     spec:
       # TODO - improve how migrations are ran. this will be problematic when replicas > 1
       {{- if not .Values.deployment.skip_migration }}

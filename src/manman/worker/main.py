@@ -4,7 +4,7 @@ import ssl
 
 import pika
 import typer
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Optional
 
 from manman.util import get_rabbitmq_connection, init_rabbitmq
 from manman.worker.service import WorkerService
@@ -43,6 +43,7 @@ def callback(
     rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
     rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
 ):
     credentials = pika.credentials.PlainCredentials(
         username=rabbitmq_username, password=rabbitmq_password
@@ -51,11 +52,13 @@ def callback(
     # TODO - what does this really do?
     # server auth is used to create clients
     context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+    virtual_host = f"manman-{app_env}" if app_env else "/"
     init_rabbitmq(
         pika.ConnectionParameters(
             host=rabbitmq_host,
             port=rabbitmq_port,
             credentials=credentials,
+            virtual_host=virtual_host,
             # TODO - should we share or specify the SSL context somewhere?
             # TODO - this is only needed in production usage. Add parameter to disable
             # ssl_options=pika.SSLOptions(context),

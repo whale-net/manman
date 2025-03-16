@@ -9,6 +9,7 @@ dotenv()
 
 build_env = os.getenv('MANMAN_BUILD_ENV', 'default')
 print("Build environment:", build_env)
+app_env = os.getenv('APP_ENV', 'dev')
 
 
 # load the dev-util helm chart museum
@@ -54,7 +55,7 @@ k8s_yaml(
         ]
     )
 )
-k8s_resource(workload='manman-host-deployment', port_forwards='8000:8000')
+k8s_resource(workload='manman-host-deployment-{}'.format(app_env), port_forwards='8000:8000')
 
 # this should be a docker compose becauset hat is how I will actually deploy it
 #local_resource(

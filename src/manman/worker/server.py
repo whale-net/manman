@@ -47,7 +47,7 @@ class Server:
         self._message_provider = RabbitMessageProvider(
             connection=get_rabbitmq_connection(),
             exchange=Server.RMQ_EXCHANGE,
-            # queue_name=str(self._instance.game_server_instance_id),
+            queue_name=self.rmq_queue_name,
         )
 
         self._root_install_directory = root_install_directory
@@ -69,6 +69,10 @@ class Server:
     @property
     def instance(self) -> GameServerInstance:
         return self._instance
+
+    @property
+    def rmq_queue_name(self) -> str:
+        return f"game-server-instance.{self._instance.game_server_instance_id}"
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running

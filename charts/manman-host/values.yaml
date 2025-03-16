@@ -15,6 +15,7 @@ deployment:
   skip_migration_check: true
 
 env:
+  environment: dev
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>
 #  otelCollector:
