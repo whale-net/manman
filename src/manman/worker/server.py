@@ -140,7 +140,10 @@ class Server:
         try:
             # TODO - temp workaround for env var, need to come from config
             self._proc.execute(
-                extra_env={"LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH"}
+                extra_env={
+                    "LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH",
+                    "SteamAppId": "892970",
+                }
             )
             # self._pb.execute()
         except Exception as e:

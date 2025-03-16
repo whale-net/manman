@@ -119,6 +119,8 @@ class CommandType(Enum):
     STOP = "STOP"
 
 
+# {"command_type":"START", "command_args": []}
+# {"command_type":"STOP", "command_args": []}
 # TODO subclass for each comamnd type + parent class factory based on enum
 class Command(Base):
     command_type: CommandType = Field()
