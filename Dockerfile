@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # Second phase: compile deps
-RUN python -m compileall -f -j $(nproc) /app/.venv
+RUN python -m compileall -f -j $(nproc) -o2 /app/.venv
 
 # Third phase: Install project
 COPY uv.lock pyproject.toml alembic.ini README.md /app/
@@ -24,7 +24,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # Fourth phase: compile app code
-RUN python -m compileall -f -j $(nproc) /app/src
+RUN python -m compileall -f -j $(nproc) -o2 /app/src
 
 # Disable bytecode compilation at runtime since we've already done it
 ENV UV_COMPILE_BYTECODE=0
