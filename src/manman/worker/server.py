@@ -152,7 +152,7 @@ class Server:
             raise
 
         status = self._proc.status
-        while status != ProcessBuilderStatus.STOPPED and self.__is_started:
+        while status != ProcessBuilderStatus.STOPPED and not self.__is_stopped:
             # TODO - make this available through property or something
             self._proc.read_output()
             commands = self._message_provider.get_commands()
