@@ -65,7 +65,9 @@ class RabbitMessageProvider(MessageProvider):
         self._channel = connection.channel()
 
         # Declare exchange
-        self._channel.exchange.declare(exchange=self._exchange, exchange_type="direct")
+        self._channel.exchange.declare(
+            exchange=self._exchange, exchange_type="direct", durable=True
+        )
 
         # Declare queue
         result = self._channel.queue.declare(
