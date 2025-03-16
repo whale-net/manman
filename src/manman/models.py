@@ -92,6 +92,7 @@ class GameServerConfig(Base, table=True):
     name: str = Field()
     executable: str = Field()
     args: list[str] = Field(sa_column=Column(ARRAY(String()), nullable=False))
+    env_var: list[str] = Field(sa_column=Column(ARRAY(String()), nullable=False))
 
     __table_args__ = (
         Index(
@@ -119,6 +120,8 @@ class CommandType(Enum):
     STOP = "STOP"
 
 
+# {"command_type":"START", "command_args": ["1"]}
+# {"command_type":"START", "command_args": ["3"]}
 # {"command_type":"START", "command_args": []}
 # {"command_type":"STOP", "command_args": []}
 # TODO subclass for each comamnd type + parent class factory based on enum

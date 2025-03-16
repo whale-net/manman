@@ -13,6 +13,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
+# compile deps
+RUN python -m compileall -f /app
+
 # Second phase: Install project
 COPY uv.lock pyproject.toml alembic.ini README.md /app/
 COPY /src /app/src
@@ -20,7 +23,8 @@ COPY /src /app/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Third phase: Pre-compile all Python files to bytecode
+# TODO - does split compile help anything?
+# compile non-deps
 RUN python -m compileall -f /app
 
 # Disable bytecode compilation at runtime since we've already done it

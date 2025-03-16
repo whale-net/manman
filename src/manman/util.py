@@ -110,3 +110,14 @@ def get_auth_api_client() -> AuthAPIClient:
     from unittest.mock import MagicMock
 
     return MagicMock()
+
+
+def env_list_to_dict(env_list: list[str]) -> dict[str, str]:
+    """Convert a list of environment variables to a dictionary."""
+    env_dict = {}
+    for env in env_list:
+        if "=" not in env:
+            raise ValueError(f"Invalid environment variable: {env}")
+        key, value = env.split("=", 1)
+        env_dict[key] = value
+    return env_dict

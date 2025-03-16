@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Self
 
+import pika.connection
+
 from manman.api_client import WorkerAPIClient
 
 # import sqlalchemy
@@ -16,7 +18,7 @@ from manman.models import (
 )
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.repository.rabbit import RabbitMessageProvider
-from manman.util import get_rabbitmq_connection
+from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,7 @@ class Server:
     def __init__(
         self,
         wapi: WorkerAPIClient,
+        rabbitmq_connection: pika.connection.Connection,
         root_install_directory: str,
         config: GameServerConfig,
     ) -> None:
@@ -45,7 +48,7 @@ class Server:
         logger.info("starting instance %s", self._instance.model_dump_json())
 
         self._message_provider = RabbitMessageProvider(
-            connection=get_rabbitmq_connection(),
+            connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
             queue_name=self.rmq_queue_name,
         )
@@ -143,13 +146,9 @@ class Server:
 
         try:
             # TODO - temp workaround for env var, need to come from config
-            self._proc.execute(
-                extra_env={
-                    "LD_LIBRARY_PATH": "./linux64:$LD_LIBRARY_PATH",
-                    "SteamAppId": "892970",
-                }
-            )
-            # self._pb.execute()
+            extra_env = env_list_to_dict(self._config.env_var)
+            logger.info("extra_env=%s", extra_env)
+            self._proc.execute(extra_env=extra_env)
         except Exception as e:
             logger.exception(e)
             self.shutdown()

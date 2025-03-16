@@ -31,7 +31,13 @@ def start(
 ):
     install_directory = os.path.abspath(install_directory)
     # todo - re-add authcz
-    service = WorkerService(install_directory, host_url, None, None)
+    service = WorkerService(
+        install_directory,
+        host_url,
+        None,
+        None,
+        rabbitmq_connection=get_rabbitmq_connection(),
+    )
     service.run()
 
 

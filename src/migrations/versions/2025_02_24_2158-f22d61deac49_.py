@@ -10,6 +10,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 import sqlmodel
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -125,16 +126,16 @@ def upgrade() -> None:
     where name = 'cs2'
     """)
 
-    op.execute("""
-    insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
-    SELECT game_server_id, true, 'testottd', 'openttd', ARRAY['-D']
-    from manman.game_servers
-    where name = 'openttd'
-    """)
+    # op.execute("""
+    # insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
+    # SELECT game_server_id, true, 'testottd', 'openttd', ARRAY['-D']
+    # from manman.game_servers
+    # where name = 'openttd'
+    # """)
 
     op.execute("""
     insert into manman.game_server_configs (game_server_id, is_default, name, executable, args)
-    SELECT game_server_id, true, 'testvalheim', 'valheim', ARRAY['']
+    SELECT game_server_id, true, 'testvalheim', 'valheim', ARRAY['-name', 'manmantest', '-port', '2456', '-world', 'Dedicated', '-password', 'fish123', '-crossplay']
     from manman.game_servers
     where name = 'valheim'
     """)
