@@ -34,6 +34,7 @@ k8s_resource(workload='rabbitmq-dev', port_forwards='15672:15672')
 docker_build(
     'manman',
     context='.',
+    build_args={"COMPILE_CORES": "2"},
     ignore=['.git', 'data', 'dist', '.venv', 'manman.log', 'manman.warnings.log', 'build', 'bin']
 )
 db_url = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
