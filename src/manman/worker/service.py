@@ -129,6 +129,22 @@ class WorkerService:
 
     def _create_server(self, game_server_config_id: int):
         config: GameServerConfig = self._wapi.game_server_config(game_server_config_id)
+
+        # Temp check to prevent duplicates
+        # ideally this will be a check against the database via api
+        self._servers_lock.acquire()
+        game_server_ids = {
+            server._game_server.game_server_id for server in self._servers
+        }
+        if config.game_server_id in game_server_ids:
+            logger.warning(
+                "server with app_id %s already running, ignoring create request",
+                config.game_server_id,
+            )
+            self._servers_lock.release()
+            return
+        self._servers_lock.release()
+
         server = Server(
             wapi=self._wapi,
             rabbitmq_connection=self._rabbitmq_connection,
