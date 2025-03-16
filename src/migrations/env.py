@@ -6,7 +6,7 @@ from alembic import context
 # import SQLmodel from models because it's modified
 # from sqlmodel import SQLModel
 from manman.models import Base  # SQLModel
-from manman.util import get_sqlalchemy_engine
+from manman.util import get_sqlalchemy_engine, init_sql_alchemy_engine
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -69,17 +69,10 @@ def run_migrations_online() -> None:
     # )
 
     # TODO - type checking at some point would probably save a headache
-    postgres_host = os.environ.get("MANMAN_POSTGRES_HOST")
-    postgres_port = os.environ.get("MANMAN_POSTGRES_PORT")
-    postgres_user = os.environ.get("MANMAN_POSTGRES_USER")
-    postgres_password = os.environ.get("MANMAN_POSTGRES_PASSWORD")
+    connection_string = os.environ.get("MANMAN_POSTGRES_URL")
 
-    connectable = get_sqlalchemy_engine(
-        postgres_host,
-        postgres_port,
-        postgres_user,
-        postgres_password,
-    )
+    init_sql_alchemy_engine(connection_string)
+    connectable = get_sqlalchemy_engine()
 
     def include_object(object, name, type_, reflected, compare_to):
         if type_ == "table":

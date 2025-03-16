@@ -42,3 +42,29 @@ uv venv
 source .venv/bin/activate
 uv sync
 ```
+
+
+### running locally
+
+Put env vars into `.env` file.
+This is not required for running tilt, as tilt will autoload them.
+These can be exported using the following command:
+```bash
+export $(cat .env | xargs)
+```
+
+Host can be started with Tilt
+```bash
+tilt up
+```
+
+or done manually.
+The manual approach is handy for creating and running migrations
+```bash
+uv run host start
+```
+
+start the worker
+```bash
+uv run worker start
+```

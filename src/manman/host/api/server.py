@@ -1,12 +1,15 @@
 import sqlalchemy
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy.sql.functions import current_timestamp
 
-from manman.host.api.injectors import has_basic_worker_authz
 from manman.models import GameServer, GameServerConfig, GameServerInstance
 from manman.util import get_sqlalchemy_session
 
-router = APIRouter(prefix="/workapi", dependencies=[Depends(has_basic_worker_authz)])
+# TODO - add authcz
+# TODO - this should have a better prefix taht is different from the worker api
+router = APIRouter(
+    prefix="/workapi"
+)  # , dependencies=[Depends(has_basic_worker_authz)])
 
 
 @router.post("/server/instance/create")

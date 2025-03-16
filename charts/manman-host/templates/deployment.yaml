@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.deployment.name }}-{{ .Values.env.environment }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: manman-host
+spec:
+  replicas: 1 # {{ .Values.deployment.replicas }}
+  selector:
+    matchLabels:
+      app: manman-host-{{ .Values.env.environment }}
+  template:
+    metadata:
+      namespace: {{ .Values.namespace }}
+      labels:
+        app: manman-host-{{ .Values.env.environment }}
+    spec:
+      # TODO - improve how migrations are ran. this will be problematic when replicas > 1
+      {{- if not .Values.deployment.skip_migration }}
+      initContainers:
+        - name: manman-migrations
+          image: "{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          args:
+            - host
+            - run-migration
+          env:
+            - name: MANMAN_POSTGRES_URL
+              value: {{ .Values.env.db.url }}
+      {{- end }}
+      containers:
+        - name: manman-host
+          image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          args:
+            - host
+            - start
+          {{- if .Values.deployment.skip_migration_check}}
+            # migrations run as init-container using (almost certainly) the same image
+            # so no need to check again
+            - --no-should-run-migration-check
+          {{- end}}
+          # TODO - improve how secrets are sourced in this template
+          env:
+            - name: MANMAN_POSTGRES_URL
+              value: {{ .Values.env.db.url }}

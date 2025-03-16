@@ -50,15 +50,16 @@ class SteamCMD:
         # check_file_name = os.path.join(self._install_dir, ".manman")
         # pathlib.Path(check_file_name).touch()
 
-        cb = ProcessBuilder(self._steamcmd_executable)
+        pb = ProcessBuilder(self._steamcmd_executable)
         # steamcmd is different and uses + for args
-        cb.add_parameter("+force_install_dir", self._install_dir)
-        cb.add_parameter("+login", self._username)
+        # TODO - temp? should come from config
+        pb.add_parameter("+@sSteamCmdForcePlatformType", "linux")
+        pb.add_parameter("+force_install_dir", self._install_dir)
+        pb.add_parameter("+login", self._username)
         if self._password is not None:
-            cb.add_parameter_stdin(self._password)
-        cb.add_parameter("+app_update", str(app_id))
-        cb.add_parameter("+exit")
+            pb.add_parameter_stdin(self._password)
+        pb.add_parameter("+app_update", str(app_id))
+        pb.add_parameter("+exit")
 
-        cb.execute()
-
+        pb.execute(wait=True)
         logger.info("installed app_id=[%s]", app_id)

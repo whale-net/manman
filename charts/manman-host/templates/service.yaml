@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: manman-host-{{ .Values.env.environment }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: manman-host-{{ .Values.env.environment }}
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

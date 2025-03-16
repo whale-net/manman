@@ -1,0 +1,27 @@
+image:
+  name: "ghcr.io/whale-net/manman"
+  tag: ""
+
+namespace: manman
+
+deployment:
+  name: manman-host-deployment
+  # TODO - note that this will be problematic when replicas > 1 because of the migrations
+  # this can be fixed by switching to job
+  replicas: 1
+
+  # run the migration, skip the check
+  skip_migration: false
+  skip_migration_check: true
+
+env:
+  environment: dev
+  db:
+    url: <postgresql+psycopg2://user:password@host:port/database>
+#  otelCollector:
+#    logs:
+#      endpoint: <logs_endpoint>
+#    traces:
+#      endpoint: <traces_endpoint>
+#    metrics:
+#      endpoint: <metrics_endpoint>
