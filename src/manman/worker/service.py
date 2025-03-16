@@ -68,14 +68,6 @@ class WorkerService:
         return f"worker.{self._worker_instance.worker_id}"
 
     def run(self):
-        # TODO - this is temporary, need to figure out a way to start/stop this more easily
-        # openttd didn't work so good
-        # TODO - docker compose for worker. MUST run from container for linux compatibility?
-
-        # TODO 3/16 - there is an issue with multiple pika channels it or at least the way I'm using them
-        self._create_server(3)
-        # cs2 again
-        # self._create_server(1)
         loop_log_time = datetime.now()
         try:
             logger.info("worker service starting")
