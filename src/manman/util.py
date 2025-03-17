@@ -6,7 +6,7 @@ from typing import Optional
 
 import amqpstorm
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker
+from sqlmodel import Session
 
 from manman.api_client import AuthAPIClient
 
@@ -68,15 +68,16 @@ def init_sql_alchemy_engine(
     )
 
 
-def get_sqlalchemy_session():
+def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
     # TODO : apply lessons from fcm on session management. this doesn't seem right.
-    if __GLOBALS.get("engine") is None:
-        raise RuntimeError("global engine not defined - cannot start")
-    if __GLOBALS.get("session") is None:
-        # expire_on_commit allows usage of objects after session context closes
-        # __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"], expire_on_commit=False)
-        __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"])
-    return __GLOBALS["session"]()
+    if session is not None:
+        return session
+    # if __GLOBALS.get("session") is None:
+    #     # expire_on_commit allows usage of objects after session context closes
+    #     # __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"], expire_on_commit=False)
+    #     __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"])
+    # return __GLOBALS["session"]()
+    return Session(get_sqlalchemy_engine())
 
 
 # Update RabbitMQ functions to use AMQPStorm

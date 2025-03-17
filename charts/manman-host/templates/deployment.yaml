@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.deployment.name }}-{{ .Values.env.environment }}
+  name: {{ .Values.deployment.name }}-{{ .Values.env.app_env }}
   namespace: {{ .Values.namespace }}
   labels:
     app: manman-host
@@ -9,12 +9,12 @@ spec:
   replicas: 1 # {{ .Values.deployment.replicas }}
   selector:
     matchLabels:
-      app: manman-host-{{ .Values.env.environment }}
+      app: manman-host-{{ .Values.env.app_env }}
   template:
     metadata:
       namespace: {{ .Values.namespace }}
       labels:
-        app: manman-host-{{ .Values.env.environment }}
+        app: manman-host-{{ .Values.env.app_env }}
     spec:
       # TODO - improve how migrations are ran. this will be problematic when replicas > 1
       {{- if not .Values.deployment.skip_migration }}
@@ -45,6 +45,9 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+{{/*          ports:*/}}
+{{/*            - containerPort: 8000*/}}
+{{/*              name: http*/}}
           args:
             - host
             - start
@@ -53,7 +56,29 @@ spec:
             # so no need to check again
             - --no-should-run-migration-check
           {{- end}}
+{{/*          livenessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /host/health*/}}
+{{/*              port: 8000 # parameterize if needed*/}}
+{{/*            initialDelaySeconds: 15*/}}
+{{/*            periodSeconds: 10*/}}
+{{/*            timeoutSeconds: 5*/}}
+{{/*            failureThreshold: 3*/}}
           # TODO - improve how secrets are sourced in this template
           env:
             - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}
+            - name: MANMAN_RABBITMQ_HOST
+              value: {{ .Values.env.rabbitmq.host }}
+            - name: MANMAN_RABBITMQ_PORT
+              value: {{ .Values.env.rabbitmq.port }}
+            - name: MANMAN_RABBITMQ_USER
+              value: {{ .Values.env.rabbitmq.user }}
+            - name: MANMAN_RABBITMQ_PASSWORD
+              value: {{ .Values.env.rabbitmq.password }}
+            - name: APP_ENV
+              value: {{ .Values.env.app_env }}
+{{/*                valueFrom:*/}}
+{{/*                    secretKeyRef:*/}}
+{{/*                    name: {{ .Values.env.rabbitmq.secret }}*/}}
+{{/*                    key: {{ .Values.env.rabbitmq.password_key }}*/}}

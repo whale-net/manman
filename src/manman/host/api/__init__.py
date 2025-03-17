@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from .hostapi import router as host_router
 from .server import router as server_router
 from .worker import router as worker_router
 
@@ -8,3 +9,4 @@ from .worker import router as worker_router
 fastapp = FastAPI()
 fastapp.include_router(server_router)
 fastapp.include_router(worker_router)
+fastapp.include_router(host_router)

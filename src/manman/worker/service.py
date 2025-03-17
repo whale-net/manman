@@ -54,6 +54,9 @@ class WorkerService:
             logger.exception(e)
             raise RuntimeError("failed to create worker instance") from e
 
+        # SHUT DOWN OTHER WORKERS to enfroce single worker for now
+        self._wapi.close_other_workers(self._worker_instance)
+
         self._rabbitmq_connection = rabbitmq_connection
         self._message_provider = RabbitMessageProvider(
             connection=self._rabbitmq_connection,
@@ -65,13 +68,19 @@ class WorkerService:
 
     @property
     def rmq_queue_name(self) -> str:
-        return f"worker.{self._worker_instance.worker_id}"
+        return self.generate_rmq_queue_name(self._worker_instance.worker_id)
+
+    @staticmethod
+    def generate_rmq_queue_name(worker_id: int) -> str:
+        return f"worker.{worker_id}"
 
     def run(self):
         loop_log_time = datetime.now()
         try:
             logger.info("worker service starting")
             while True:
+                # TODO - periodically check if the worker instance is tracked as alive. exit if not
+                #  doing single worker architecture for now, so not needed
                 if datetime.now() - loop_log_time > timedelta(seconds=30):
                     logger.info("still running - server_count=%s", len(self._servers))
                     loop_log_time = datetime.now()

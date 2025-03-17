@@ -71,7 +71,9 @@ class RabbitMessageProvider(MessageProvider):
 
         # Declare queue
         result = self._channel.queue.declare(
-            queue=self._queue_name or "", exclusive=True, auto_delete=True
+            queue=self._queue_name or "",
+            # exclusive=True,
+            auto_delete=True,
         )
         if not result:
             logger.error("Unable to declare queue with name %s", self._queue_name)

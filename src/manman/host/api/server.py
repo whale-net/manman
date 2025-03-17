@@ -8,7 +8,7 @@ from manman.util import get_sqlalchemy_session
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the worker api
 router = APIRouter(
-    prefix="/workapi"
+    prefix="/workerdal"
 )  # , dependencies=[Depends(has_basic_worker_authz)])
 
 

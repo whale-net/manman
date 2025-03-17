@@ -75,7 +75,11 @@ class Server:
 
     @property
     def rmq_queue_name(self) -> str:
-        return f"game-server-instance.{self._instance.game_server_instance_id}"
+        return self.generate_rmq_queue_name(self._instance.game_server_instance_id)
+
+    @staticmethod
+    def generate_rmq_queue_name(game_server_instance_id: int):
+        return f"game-server-instance.{game_server_instance_id}"
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running

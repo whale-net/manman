@@ -34,6 +34,7 @@ k8s_resource(workload='rabbitmq-dev', port_forwards='15672:15672')
 docker_build(
     'manman',
     context='.',
+    build_args={"COMPILE_CORES": "2"},
     ignore=['.git', 'data', 'dist', '.venv', 'manman.log', 'manman.warnings.log', 'build', 'bin']
 )
 db_url = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
@@ -48,9 +49,14 @@ k8s_yaml(
             'image.name=manman',
             'image.tag=dev',
             'env.db.url={}'.format(db_url),
+            'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
+            # needed to be string? wtf
+            'env.rabbitmq.port="5672"',
+            'env.rabbitmq.user=rabbit',
+            'env.rabbitmq.password=password',
             'namespace={}'.format(namespace),
             # # for local dev, require manual migration and protect against bad models being used
-            # 'deployment.skip_migration=true',
+            'deployment.skip_migration=true'
             # 'deployment.skip_migration_check=false'
         ]
     )
