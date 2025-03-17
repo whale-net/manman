@@ -1,20 +1,18 @@
 import logging
 import os
+import ssl
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.host.api import fastapp
-from manman.util import (
-    get_sqlalchemy_engine,
-    init_sql_alchemy_engine,
-)
+from manman.util import get_sqlalchemy_engine, init_rabbitmq, init_sql_alchemy_engine
 
 app = typer.Typer()
 # fileConfig("logging.ini", disable_existing_loggers=False)
@@ -23,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 @app.command()
 def start(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
     # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
     port: int = 8000,
     # workers: int = 1,
@@ -31,8 +34,23 @@ def start(
 ):
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
-
     # init_auth_api_client(auth_url)
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+    virtual_host = f"manman-{app_env}" if app_env else "/"
+
+    # Initialize with AMQPStorm connection parameters
+    init_rabbitmq(
+        host=rabbitmq_host,
+        port=rabbitmq_port,
+        username=rabbitmq_username,
+        password=rabbitmq_password,
+        virtual_host=virtual_host,
+        # ssl_enabled=True,  # Enable SSL based on original intent
+        ssl_enabled=False,  # Disable SSL for local development
+        ssl_context=context,
+    )
 
     # TODO running via string doesn't initialize engine because separate process
     # TODO - does running in this way cause blocking issues with concurrent requests?

@@ -49,9 +49,14 @@ k8s_yaml(
             'image.name=manman',
             'image.tag=dev',
             'env.db.url={}'.format(db_url),
+            'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
+            # needed to be string? wtf
+            'env.rabbitmq.port="5672"',
+            'env.rabbitmq.user=rabbit',
+            'env.rabbitmq.password=password',
             'namespace={}'.format(namespace),
             # # for local dev, require manual migration and protect against bad models being used
-            # 'deployment.skip_migration=true',
+            'deployment.skip_migration=true'
             # 'deployment.skip_migration_check=false'
         ]
     )

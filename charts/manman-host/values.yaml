@@ -15,7 +15,14 @@ deployment:
   skip_migration_check: true
 
 env:
-  environment: dev
+  rabbitmq:
+    port: 5672
+    host: <rabbitmq_host>
+    user: <rabbitmq_user>
+    password: <rabbitmq_password>
+  # change this to the environment you are deploying to
+  app_env: dev
+
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>
 #  otelCollector:
