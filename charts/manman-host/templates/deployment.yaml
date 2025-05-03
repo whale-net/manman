@@ -71,13 +71,13 @@ spec:
             - name: MANMAN_RABBITMQ_HOST
               value: {{ .Values.env.rabbitmq.host }}
             - name: MANMAN_RABBITMQ_PORT
-              value: "{{ .Values.env.rabbitmq.port }}"
+              value: {{ .Values.env.rabbitmq.port | quote }}
             - name: MANMAN_RABBITMQ_USER
               value: {{ .Values.env.rabbitmq.user }}
             - name: MANMAN_RABBITMQ_PASSWORD
               value: {{ .Values.env.rabbitmq.password }}
             - name: MANMAN_RABBITMQ_ENABLE_SSL
-              value: {{ .Values.env.rabbitmq.enable_ssl }}
+              value: {{ .Values.env.rabbitmq.enable_ssl | quote }}
             - name: APP_ENV
               value: {{ .Values.env.app_env }}
 {{/*                valueFrom:*/}}
