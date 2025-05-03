@@ -47,6 +47,7 @@ def callback(
     rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
     app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    enable_ssl: Annotated[bool, typer.Option(envvar="MANMAN_ENABLE_SSL")] = False,
 ):
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
@@ -60,7 +61,7 @@ def callback(
         password=rabbitmq_password,
         virtual_host=virtual_host,
         # ssl_enabled=True,  # Enable SSL based on original intent
-        ssl_enabled=False,  # Disable SSL for local development
+        ssl_enabled=enable_ssl,  # Disable SSL for local development
         ssl_context=context,
     )
 
