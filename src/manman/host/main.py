@@ -2,14 +2,14 @@ import logging
 import os
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.host.api import fastapp
 from manman.util import (
     get_rabbitmq_ssl_options,
@@ -73,7 +73,7 @@ def start(
     # need to scale local api instance
     # uvicorn.run("manman.host.api:fastapp",
     #  port=port, workers=workers, reload=auto_reload)
-    uvicorn.run(fastapp, port=port)
+    uvicorn.run(fastapp, host="0.0.0.0", port=port)
 
 
 # TODO - should these not be ran by host?
