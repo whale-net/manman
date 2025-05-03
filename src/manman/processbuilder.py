@@ -3,7 +3,6 @@ import enum
 import logging
 import os
 import subprocess
-from queue import Queue
 from typing import Optional
 
 from manman.util import log_stream
@@ -23,7 +22,6 @@ class ProcessBuilder:
         self._executable: str = executable
         self._args: list[str] = []
         self._parameter_stdin: list[str] = []
-        self._stdin_queue: Queue[str] = Queue()
         self._stdin_delay_seconds = stdin_delay_seconds
         self._process_start_time: datetime.datetime | None = None
 
@@ -67,7 +65,7 @@ class ProcessBuilder:
 
         return command, stdinput
 
-    def execute(self, wait: bool = False, extra_env: Optional[dict[str, str]] = None):
+    def run(self, wait: bool = False, extra_env: Optional[dict[str, str]] = None):
         command_base = os.path.basename(self._executable)
         logger.info("About to start executing [%s]", command_base)
 
@@ -107,6 +105,7 @@ class ProcessBuilder:
         self._proc = proc
 
         # TODO - is this the right place to do this?
+        # used by steamcmd to ensure it finishes before starting game server
         if wait:
             logger.info("waiting for process to finish")
             self._proc.wait()
@@ -141,11 +140,15 @@ class ProcessBuilder:
         log_stream(self._proc.stdout, logger=logger)
         log_stream(self._proc.stderr, logger=logger, prefix="stderr:")
 
-    @property
-    def stdin_queue(self) -> Queue[str]:
-        """
-        for runtime (after process initialization) stdinput
-
-        :return: _description_
-        """
-        return self._stdin_queue
+    def write_stdin(self, input: str):
+        status = self.status
+        if self.status != ProcessBuilderStatus.RUNNING:
+            logger.warning(
+                "process is %s, cannot write to stdin. ignored input", status.name
+            )
+            return
+        if not input.endswith("\n"):
+            input = input + "\n"
+        self._proc.stdin.write(input.encode(encoding="ascii"))
+        self._proc.stdin.flush()
+        logger.info("wrote to stdin: %s", input)

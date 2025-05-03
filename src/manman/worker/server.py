@@ -129,6 +129,7 @@ class Server:
             self._instance.game_server_instance_id,
             stdin_command,
         )
+        self._proc.write_stdin(stdin_command)
 
     def _shutdown(self):
         # TODO kill
@@ -179,7 +180,7 @@ class Server:
             # TODO - temp workaround for env var, need to come from config
             extra_env = env_list_to_dict(self._config.env_var)
             logger.info("extra_env=%s", extra_env)
-            self._proc.execute(extra_env=extra_env)
+            self._proc.run(extra_env=extra_env)
         except Exception as e:
             logger.exception(e)
             self._shutdown()
