@@ -140,15 +140,15 @@ class ProcessBuilder:
         log_stream(self._proc.stdout, logger=logger)
         log_stream(self._proc.stderr, logger=logger, prefix="stderr:")
 
-    def write_stdin(self, input: str):
+    def write_stdin(self, stdin_command: str):
         status = self.status
         if self.status != ProcessBuilderStatus.RUNNING:
             logger.warning(
                 "process is %s, cannot write to stdin. ignored input", status.name
             )
             return
-        if not input.endswith("\n"):
-            input = input + "\n"
-        self._proc.stdin.write(input.encode(encoding="ascii"))
+        if not stdin_command.endswith("\n"):
+            stdin_command = stdin_command + "\n"
+        self._proc.stdin.write(stdin_command.encode(encoding="ascii"))
         self._proc.stdin.flush()
-        logger.info("wrote to stdin: %s", input)
+        logger.info("wrote to stdin: %s", stdin_command)
