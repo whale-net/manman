@@ -3,14 +3,14 @@ import os
 import ssl
 from typing import Optional
 
+import alembic
+import alembic.command
+import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
-import alembic
-import alembic.command
-import alembic.config
 from manman.host.api import fastapp
 from manman.util import get_sqlalchemy_engine, init_rabbitmq, init_sql_alchemy_engine
 
