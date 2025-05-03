@@ -33,6 +33,4 @@ async def has_basic_worker_authz(
 
 
 async def inject_rmq_channel():
-    channel = get_rabbitmq_connection().channel()
-    yield channel
-    channel.close()
+    return get_rabbitmq_connection().channel()

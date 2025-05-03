@@ -8,7 +8,7 @@ from requests import ConnectionError
 
 # from sqlalchemy.orm import Session
 from manman.api_client import WorkerAPIClient
-from manman.models import CommandType, GameServerConfig
+from manman.models import Command, CommandType, GameServerConfig
 from manman.repository.rabbit import RabbitMessageProvider
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
@@ -97,25 +97,7 @@ class WorkerService:
                 self._servers_lock.release()
 
                 # process commands
-                # TODO - offload to another function
-                commands = self._message_provider.get_commands()
-                if commands is not None:
-                    for command in commands:
-                        logger.info("received command %s", command)
-                        if command.command_type == CommandType.START:
-                            # for now, just taking in the id from the arg list as-is until better typing TODO
-                            if len(command.command_args) != 1:
-                                logger.warning(
-                                    "too many args, just want ID %s",
-                                    command.command_args,
-                                )
-                                continue
-                            self._create_server(int(command.command_args[0]))
-                        elif command.command_type == CommandType.STOP:
-                            # TODO - stop the server?
-                            logger.info("stop requested %s, but ignored", command)
-                        else:
-                            logger.warning("unknown command for worker %s", command)
+                self._process_commands()
 
                 # no need to spin
                 time.sleep(0.1)
@@ -165,4 +147,75 @@ class WorkerService:
         # TODO - not thread safe, but this is the only thread working on it for now
         self._servers_lock.acquire()
         self._servers.append(server)
+        self._servers_lock.release()
+
+    def _process_commands(self):
+        commands = self._message_provider.get_commands()
+        if commands is not None:
+            for command in commands:
+                logger.info("received command %s", command)
+                if command.command_type == CommandType.START:
+                    self.__handle_start_command(command)
+                elif command.command_type == CommandType.STOP:
+                    self.__handle_stop_command(command)
+                elif command.command_type == CommandType.STDIN:
+                    self.__handle_stdin_command(command)
+                else:
+                    logger.warning("unknown command for worker %s", command)
+
+    def __handle_start_command(self, command: Command):
+        # for now, just taking in the id from the arg list as-is until better typing TODO
+        if len(command.command_args) != 1:
+            logger.warning(
+                "too many args, just want ID %s",
+                command.command_args,
+            )
+            return
+        self._servers_lock.acquire()
+        game_server_config_id = int(command.command_args[0])
+
+        can_start = True
+        for server in self._servers:
+            if server._config.game_server_config_id == game_server_config_id:
+                logger.warning(
+                    "server with app_id %s already running, ignoring create request",
+                    server._config.game_server_config_id,
+                )
+                can_start = False
+                break
+        self._servers_lock.release()
+        if can_start:
+            self._create_server(game_server_config_id)
+            # don't pass command through, doing creation in service layer for now
+
+    def __handle_stop_command(self, command: Command):
+        if len(command.command_args) != 1:
+            logger.warning(
+                "too many args, just want ID %s",
+                command.command_args,
+            )
+            return
+        game_server_config_id = int(command.command_args[0])
+        self._servers_lock.acquire()
+        for server in self._servers:
+            if server._config.game_server_config_id == game_server_config_id:
+                logger.info("stopping server %s", server.instance)
+                # pass command through
+                server.execute_command(command)
+        self._servers_lock.release()
+
+    def __handle_stdin_command(self, command: Command):
+        if len(command.command_args) < 1:
+            logger.warning(
+                "too few args, at least need ID %s",
+                command.command_args,
+            )
+            return
+        game_server_config_id = int(command.command_args[0])
+        self._servers_lock.acquire()
+        for server in self._servers:
+            if server._config.game_server_config_id == game_server_config_id:
+                logger.info("sending stdin to server %s", server.instance)
+                # chain command
+                server.execute_command(command.command_args[1])
         self._servers_lock.release()

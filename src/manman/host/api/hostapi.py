@@ -84,8 +84,46 @@ async def start_game_server(
 
         # Publish the command to the worker's queue
         channel.basic.publish(body=message, exchange=exchange, routing_key=queue_name)
+        # for now, explicitly close the channel
+        channel.close()
 
         return {
             "status": "success",
             "message": f"Start command sent to worker {worker.worker_id}",
+        }
+
+
+@router.post("/gameserver/{id}/stop", dependencies=[Depends(inject_rmq_channel)])
+async def stop_game_server(
+    id: int,
+    channel: Annotated[Channel, Depends(inject_rmq_channel)],
+):
+    """
+    Stop all running game server instances for the current worker.
+    """
+    with get_sqlalchemy_session() as sess:
+        worker = await get_current_worker(sess)
+
+        command = Command(command_type=CommandType.STOP, command_args=[str(id)])
+
+        # Set exchange and queue name using the worker's ID
+        exchange = WorkerService.RMQ_EXCHANGE
+        queue_name = WorkerService.generate_rmq_queue_name(worker.worker_id)
+
+        # Ensure the queue exists and is bound to the exchange
+        channel.queue.declare(queue=queue_name, auto_delete=True)
+        channel.queue.bind(exchange=exchange, queue=queue_name, routing_key=queue_name)
+
+        # Serialize the command to JSON
+        message = command.model_dump_json()
+
+        # Publish the command to the worker's queue
+        channel.basic.publish(body=message, exchange=exchange, routing_key=queue_name)
+
+        # for now, explicitly close the channel
+        channel.close()
+
+        return {
+            "status": "success",
+            "message": f"Stop command sent to worker {worker.worker_id}",
         }

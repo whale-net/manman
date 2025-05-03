@@ -95,9 +95,46 @@ class Server:
     def is_shutdown(self) -> bool:
         return self._instance.end_date is not None
 
-    def shutdown(self):
+    def __handle_stop_command(self) -> None:
+        if not self.__is_started:
+            logger.error(
+                "stop command received before start command, current_status = %s",
+                self._proc.status,
+            )
+            raise RuntimeError("server not started, cannot stop")
+        if self.__is_stopped:
+            logger.error(
+                "stop command received after stop command, current_status = %s",
+                self._proc.status,
+            )
+            raise RuntimeError("server already stopped, cannot stop again")
+        logger.info(
+            "stop command received for instance %s",
+            self._instance.game_server_instance_id,
+        )
+        self.__is_stopped = True
+
+    def __handle_stdin_command(self, command: Command) -> None:
+        if len(command.command_args) < 2:
+            logger.warning(
+                "too few args, need config ID and commands %s",
+                command.command_args,
+            )
+            return
+
+        # for now going to merge them all together blindly
+        stdin_command = " ".join(command.command_args[1:])
+        logger.info(
+            "stdin command received for instance %s: %s",
+            self._instance.game_server_instance_id,
+            stdin_command,
+        )
+
+    def _shutdown(self):
         # TODO kill
         if not self.is_shutdown:
+            if not self.__is_stopped:
+                logger.warning("shutdown called before stop command")
             logger.info(
                 "shutting down instance %s", self._instance.game_server_instance_id
             )
@@ -111,16 +148,7 @@ class Server:
 
     def execute_command(self, command: Command) -> None:
         if command.command_type == CommandType.STOP:
-            if self.__is_started:
-                logger.info(
-                    "killing server instance %s", self._instance.game_server_instance_id
-                )
-                # main run loop will handle shutdown gracefully, just set this
-                self.__is_stopped = True
-            else:
-                logger.warning(
-                    "server stopped before it was started, ignoring shutdown command"
-                )
+            self.__handle_stop_command()
         elif command.command_type == CommandType.START:
             # do nothing, started through service
             logger.info(
@@ -129,8 +157,7 @@ class Server:
             )
             pass
         elif command.command_type == CommandType.STDIN:
-            # TODO - send to process builder
-            pass
+            self.__handle_stdin_command(command)
         else:
             logger.warning("unknown command type %s", command.command_type)
 
@@ -155,7 +182,7 @@ class Server:
             self._proc.execute(extra_env=extra_env)
         except Exception as e:
             logger.exception(e)
-            self.shutdown()
+            self._shutdown()
             raise
 
         status = self._proc.status
@@ -173,6 +200,6 @@ class Server:
         # do it one more time to clean up anything leftover
         self._proc.read_output()
         logger.info("instance %s has exited", self._instance.game_server_instance_id)
-        self.shutdown()
+        self._shutdown()
 
         return self
