@@ -1,4 +1,4 @@
-# whale-net python pre-commit v1
+# whale-net python pre-commit v1.1
 
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
@@ -12,10 +12,15 @@ repos:
         - id: check-added-large-files
         - id: mixed-line-ending
           args: [ --fix=lf ]
-  # TODO - isort?
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        name: isort (python)
+        args: [ --profile, black ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.9.9
+    rev: v0.11.7
     hooks:
       # Run the linter.
       - id: ruff
