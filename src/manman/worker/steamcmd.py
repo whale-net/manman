@@ -61,5 +61,5 @@ class SteamCMD:
         pb.add_parameter("+app_update", str(app_id))
         pb.add_parameter("+exit")
 
-        pb.execute(wait=True)
+        pb.run(wait=True)
         logger.info("installed app_id=[%s]", app_id)

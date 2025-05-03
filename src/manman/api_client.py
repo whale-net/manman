@@ -201,7 +201,7 @@ class WorkerAPIClient(APIClientBase):
         auth_api_client: AuthAPIClient,
         sa_client_id: str,
         sa_client_secret: str,
-        api_prefix: str = "/workapi",
+        api_prefix: str = "/workerdal",
     ) -> None:
         self._auth_api_client = auth_api_client
         self._sa_client_id = sa_client_id
@@ -276,3 +276,12 @@ class WorkerAPIClient(APIClientBase):
         if response.status_code != 200:
             raise RuntimeError(response.content)
         return Worker.model_validate_json(response.content)
+
+    def close_other_workers(self, worker: Worker):
+        response = self._session.put(
+            "/worker/shutdown/other",
+            data=worker.model_dump_json(),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return

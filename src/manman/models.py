@@ -2,12 +2,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import (
-    # using postgres.ARRAY I guess
+from sqlalchemy import (  # using postgres.ARRAY I guess; MetaData,; ForeignKey,
     ARRAY,
     Column,
-    # MetaData,
-    # ForeignKey,
     Index,
     String,
 )

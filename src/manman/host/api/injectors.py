@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException
 
 from manman.api_client import AccessToken
-from manman.util import get_auth_api_client
+from manman.util import get_auth_api_client, get_rabbitmq_connection
 
 
 # using builtin fastapi classes is not helpful because my token provider endpoint is elsewhere
@@ -30,3 +30,7 @@ async def has_basic_worker_authz(
 ):
     if "manman-worker" not in token.roles:
         raise HTTPException(status_code=401, detail="access token missing proper role")
+
+
+async def inject_rmq_channel():
+    return get_rabbitmq_connection().channel()

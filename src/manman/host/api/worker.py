@@ -3,12 +3,13 @@ from fastapi import APIRouter
 from sqlalchemy.sql.functions import current_timestamp
 
 from manman.models import Worker
+from manman.repository.workerdal import close_other_workers
 from manman.util import get_sqlalchemy_session
 
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the server api
 router = APIRouter(
-    prefix="/workapi"
+    prefix="/workerdal"
 )  # , dependencies=[Depends(has_basic_worker_authz)])
 
 
@@ -45,3 +46,9 @@ async def worker_shutdown(instance: Worker) -> Worker:
 
     # print(current_instance.end_date)
     return current_instance
+
+
+@router.put("/worker/shutdown/other")
+async def worker_shutdown_other(instance: Worker):
+    # TODO - make this work 3/16 7 pm
+    close_other_workers(instance.worker_id)
