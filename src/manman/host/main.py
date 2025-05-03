@@ -1,18 +1,22 @@
 import logging
 import os
-import ssl
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.host.api import fastapp
-from manman.util import get_sqlalchemy_engine, init_rabbitmq, init_sql_alchemy_engine
+from manman.util import (
+    get_rabbitmq_ssl_options,
+    get_sqlalchemy_engine,
+    init_rabbitmq,
+    init_sql_alchemy_engine,
+)
 
 app = typer.Typer()
 # fileConfig("logging.ini", disable_existing_loggers=False)
@@ -31,13 +35,17 @@ def start(
     # workers: int = 1,
     # auto_reload: bool = False,
     should_run_migration_check: Optional[bool] = True,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
 ):
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
     # init_auth_api_client(auth_url)
 
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
     # Initialize with AMQPStorm connection parameters
@@ -47,16 +55,24 @@ def start(
         username=rabbitmq_username,
         password=rabbitmq_password,
         virtual_host=virtual_host,
-        # ssl_enabled=True,  # Enable SSL based on original intent
-        ssl_enabled=False,  # Disable SSL for local development
-        ssl_context=context,
+        ssl_enabled=enable_ssl,
+        ssl_options=get_rabbitmq_ssl_options(
+            hostname=rabbitmq_ssl_hostname,
+        )
+        if enable_ssl
+        else None,
     )
 
-    # TODO running via string doesn't initialize engine because separate process
-    # TODO - does running in this way cause blocking issues with concurrent requests?
-    # this would be a nice development enhancement, but may not matter if we scale out. TBD
-    # gunicorn + uvicorn worker is preferred if need to scale local api instance
-    # uvicorn.run("manman.host.api:fastapp", port=port, workers=workers, reload=auto_reload)
+    # TODO running via string doesn't initialize
+    # engine because separate process
+    # TODO - does running in this way cause blocking
+    # issues with concurrent requests?
+    # this would be a nice development enhancement,
+    # but may not matter if we scale out. TBD
+    # gunicorn + uvicorn worker is preferred if
+    # need to scale local api instance
+    # uvicorn.run("manman.host.api:fastapp",
+    #  port=port, workers=workers, reload=auto_reload)
     uvicorn.run(fastapp, port=port)
 
 

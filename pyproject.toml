@@ -13,7 +13,7 @@ dependencies = [
     "requests>=2.32.3",
     "sqlalchemy>=2.0.38",
     "sqlmodel>=0.0.22",
-    "typer>=0.15.1",
+    "typer[slim]>=0.15.3",
     "uvicorn>=0.34.0",
 ]
 
@@ -27,3 +27,8 @@ worker = "manman.worker.main:app"
 
 [tool.ruff.lint]
 extend-select = ["I"]
+# pyflakes, pycodestyle, isort
+select = ["F", "E", "W", "I001"]
+
+[tool.ruff]
+line-length = 88

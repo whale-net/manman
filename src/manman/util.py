@@ -1,6 +1,7 @@
 import concurrent.futures
 import io
 import logging
+import ssl
 import threading
 from typing import Optional
 
@@ -72,11 +73,6 @@ def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
     # TODO : apply lessons from fcm on session management. this doesn't seem right.
     if session is not None:
         return session
-    # if __GLOBALS.get("session") is None:
-    #     # expire_on_commit allows usage of objects after session context closes
-    #     # __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"], expire_on_commit=False)
-    #     __GLOBALS["session"] = sessionmaker(bind=__GLOBALS["engine"])
-    # return __GLOBALS["session"]()
     return Session(get_sqlalchemy_engine())
 
 
@@ -88,7 +84,7 @@ def init_rabbitmq(
     password: str,
     virtual_host: str = "/",
     ssl_enabled: bool = False,
-    ssl_context=None,
+    ssl_options=None,
 ):
     """Initialize RabbitMQ connection using AMQPStorm."""
     __GLOBALS["rmq_parameters"] = {
@@ -98,7 +94,7 @@ def init_rabbitmq(
         "password": password,
         "virtual_host": virtual_host,
         "ssl": ssl_enabled,
-        "ssl_options": ssl_context,
+        "ssl_options": ssl_options,
     }
 
     rmq_connection = amqpstorm.Connection(
@@ -108,10 +104,28 @@ def init_rabbitmq(
         password=password,
         virtual_host=virtual_host,
         ssl=ssl_enabled,
-        ssl_options=ssl_context,
+        ssl_options=ssl_options,
     )
     __GLOBALS["rmq_connection"] = rmq_connection
     logger.info("rmq connection established")
+
+
+def get_rabbitmq_ssl_options(hostname: str) -> dict:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+    if hostname is None or len(hostname) == 0:
+        raise RuntimeError(
+            "SSL is enabled but no hostname provided. "
+            "Please set MANMAN_RABBITMQ_SSL_HOSTNAME"
+        )
+    ssl_options = {
+        #'context': ssl.create_default_context(cafile='ca_certificate.pem'),
+        "context": context,
+        "server_hostname": hostname,
+        #'check_hostname': True,        # New 2.8.0, default is False
+        #'verify_mode': 'required',     # New 2.8.0, default is 'none'
+    }
+    return ssl_options
 
 
 def get_rabbitmq_connection() -> amqpstorm.Connection:

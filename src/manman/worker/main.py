@@ -1,12 +1,11 @@
 import logging
 import os
-import ssl
 
 import amqpstorm
 import typer
 from typing_extensions import Annotated, Optional
 
-from manman.util import get_rabbitmq_connection, init_rabbitmq
+from manman.util import get_rabbitmq_connection, get_rabbitmq_ssl_options, init_rabbitmq
 from manman.worker.service import WorkerService
 
 app = typer.Typer()
@@ -50,9 +49,10 @@ def callback(
     enable_ssl: Annotated[
         bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
     ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
 ):
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
     # Initialize with AMQPStorm connection parameters
@@ -62,9 +62,10 @@ def callback(
         username=rabbitmq_username,
         password=rabbitmq_password,
         virtual_host=virtual_host,
-        # ssl_enabled=True,  # Enable SSL based on original intent
-        ssl_enabled=enable_ssl,  # Disable SSL for local development
-        ssl_context=context,
+        ssl_enabled=enable_ssl,
+        ssl_options=get_rabbitmq_ssl_options(rabbitmq_ssl_hostname)
+        if enable_ssl
+        else None,
     )
 
     # init basic logging config

@@ -21,6 +21,7 @@ env:
     user: <rabbitmq_user>
     password: <rabbitmq_password>
     enable_ssl: false
+    ssl_hostname: <rabbitmq_ssl_hostname>
   # change this to the environment you are deploying to
   app_env: dev
 
