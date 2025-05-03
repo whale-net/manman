@@ -73,7 +73,7 @@ def start(
     # need to scale local api instance
     # uvicorn.run("manman.host.api:fastapp",
     #  port=port, workers=workers, reload=auto_reload)
-    uvicorn.run(fastapp, port=port)
+    uvicorn.run(fastapp, host="0.0.0.0", port=port)
 
 
 # TODO - should these not be ran by host?
