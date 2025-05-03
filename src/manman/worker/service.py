@@ -217,5 +217,5 @@ class WorkerService:
             if server._config.game_server_config_id == game_server_config_id:
                 logger.info("sending stdin to server %s", server.instance)
                 # chain command
-                server.execute_command(command.command_args[1])
+                server.execute_command(command)
         self._servers_lock.release()
