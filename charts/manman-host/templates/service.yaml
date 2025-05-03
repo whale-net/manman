@@ -4,9 +4,11 @@ metadata:
   name: manman-host-{{ .Values.env.app_env }}
   namespace: {{ .Values.namespace }}
 spec:
+  type: ClusterIP
   selector:
     app: manman-host-{{ .Values.env.app_env }}
   ports:
     - protocol: TCP
       port: 8000
       targetPort: 8000
+      name: http
