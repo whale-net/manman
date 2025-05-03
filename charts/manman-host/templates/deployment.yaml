@@ -78,6 +78,8 @@ spec:
               value: {{ .Values.env.rabbitmq.password }}
             - name: MANMAN_RABBITMQ_ENABLE_SSL
               value: {{ .Values.env.rabbitmq.enable_ssl | quote }}
+            - name: MANMAN_RABBITMQ_SSL_HOSTNAME
+              value: {{ .Values.env.rabbitmq.ssl_hostname | quote }}
             - name: APP_ENV
               value: {{ .Values.env.app_env }}
 {{/*                valueFrom:*/}}
