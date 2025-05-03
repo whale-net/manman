@@ -51,7 +51,7 @@ k8s_yaml(
             'env.db.url={}'.format(db_url),
             'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
             # needed to be string? wtf
-            'env.rabbitmq.port="5672"',
+            'env.rabbitmq.port=5672',
             'env.rabbitmq.user=rabbit',
             'env.rabbitmq.password=password',
             'namespace={}'.format(namespace),
