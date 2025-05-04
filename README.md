@@ -15,6 +15,41 @@ easier deployment (maybe?)
 fun fact: according to https://en.wiktionary.org/wiki/manman, manman is mother in haitian creole, and is the act of observing in tagalog
 this project is the mother and observer to all the little workers
 
+architecture
+```mermaid
+---
+config:
+  theme: redux
+---
+graph TD
+    worker-svc["worker service"]
+    servers["server"]@{ shape: procs}
+    server-subproc["steamcmd & ./gameserver"]@{ shape: subproc}
+
+    worker-svc --> servers --> server-subproc
+
+    http-ingress[/"http-ingress"\]
+    host-api["host-api"]
+    host-dal-api["host-dal-api"]
+    worker-svc & servers --> http-ingress --> host-dal-api
+    http-ingress --> host-api
+
+    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the dal-api<br>via the http-ingress"]@{ shape: comment }
+
+    http-ingress-comment -.- http-ingress
+
+    database["manman"]@{ shape: db}
+    host-api & host-dal-api --> database
+
+    rmq{{"rabbitmq"}}
+    rmq <--> worker-svc & servers & host-api
+
+
+    slack-bot["slack-bot"]
+    slack-bot --> host-api
+
+```
+
 ### features
 
 - runs servers in server manager service (manman-worker)
