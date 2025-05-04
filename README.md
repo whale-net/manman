@@ -34,9 +34,7 @@ graph TD
     worker-svc & servers --> http-ingress --> host-dal-api
     http-ingress --> host-api
 
-    http-ingress-comment["NOTE: worker-svc/servers<br>
-    will only use the dal-api<br>
-    via the http-ingress"]@{ shape: comment }
+    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the dal-api<br>via the http-ingress"]@{ shape: comment }
 
     http-ingress-comment -.- http-ingress
 
