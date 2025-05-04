@@ -15,22 +15,43 @@ easier deployment (maybe?)
 fun fact: according to https://en.wiktionary.org/wiki/manman, manman is mother in haitian creole, and is the act of observing in tagalog
 this project is the mother and observer to all the little workers
 
+architecture
 ```mermaid
 ---
 config:
   theme: redux
 ---
-flowchart TD
-    worker-svc["worker service"] --> servers["server"] & http-ingress[/"http-ingress"\]
-    servers --> server-subproc["steamcmd & ./gameserver"] & http-ingress
-    rmq{{"rabbitmq"}} <--> worker-svc & servers & host-api["host-api"]
-    host-api --> database["manman"]
-    host-dal-api["host-dal-api"] --> database
-    http-ingress --> host-api & host-dal-api
-    slack-bot["slack-bot"] --> host-api
-    servers@{ shape: procs}
-    server-subproc@{ shape: subproc}
-    database@{ shape: db}
+graph TD
+    worker-svc["worker service"]
+    servers["server"]@{ shape: procs}
+    server-subproc["steamcmd & ./gameserver"]@{ shape: subproc}
+
+    worker-svc --> servers --> server-subproc
+
+    http-ingress[/"http-ingress"\]
+    host-api["host-api"]
+    host-dal-api["host-dal-api"]
+    worker-svc & servers --> http-ingress --> host-dal-api
+    http-ingress --> host-api
+
+    http-ingress-comment["
+        NOTE: worker-svc/servers
+        will only use the dal-api
+        via the http-ingress
+    "]@{ shape: comment }
+
+    http-ingress-comment -.- http-ingress
+
+    database["manman"]@{ shape: db}
+    host-api & host-dal-api --> database
+
+    rmq{{"rabbitmq"}}
+    rmq <--> worker-svc & servers & host-api
+
+
+    slack-bot["slack-bot"]
+    slack-bot --> host-api
+
 ```
 
 ### features
