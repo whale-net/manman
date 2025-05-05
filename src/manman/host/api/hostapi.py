@@ -167,3 +167,16 @@ async def stdin_game_server(
             "status": "success",
             "message": f"Stdin command sent to worker {worker.worker_id}",
         }
+
+
+@router.get("/gameserver/instances/active")
+async def get_active_game_server_instances(
+    worker: Annotated[Worker, Depends(worker_current)],
+) -> list[GameServerInstance]:
+    """
+    Get all active game server instances for the current worker.
+    """
+    with get_sqlalchemy_session() as sess:
+        worker = await get_current_worker(sess)
+        instances = await get_current_instances(worker.worker_id, sess)
+        return instances
