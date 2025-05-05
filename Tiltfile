@@ -54,6 +54,7 @@ k8s_yaml(
             'env.rabbitmq.port=5672',
             'env.rabbitmq.user=rabbit',
             'env.rabbitmq.password=password',
+            #'env.rabbitmq.enable_ssl=true',
             'namespace={}'.format(namespace),
             # # for local dev, require manual migration and protect against bad models being used
             'deployment.skip_migration=true'
