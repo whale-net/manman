@@ -34,6 +34,7 @@ class Server:
         rabbitmq_connection: Connection,
         root_install_directory: str,
         config: GameServerConfig,
+        worker_id: int,
     ) -> None:
         # Extra status trackers to handle shutdown
         # and to provide expected state which may be useful for debugging later
@@ -42,6 +43,7 @@ class Server:
 
         self._wapi = wapi
         self._config = config
+        self._worker_id = worker_id
 
         self._instance = self._wapi.game_server_instance_create(config)
         self._game_server = self._wapi.game_server(self._config.game_server_id)

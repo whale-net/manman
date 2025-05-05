@@ -133,6 +133,7 @@ class WorkerService:
             rabbitmq_connection=self._rabbitmq_connection,
             root_install_directory=self._install_dir,
             config=config,
+            worker_id=self._worker_instance.worker_id,
         )
         future = self._threadpool.submit(
             server.run,

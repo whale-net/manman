@@ -37,6 +37,10 @@ class Worker(Base, table=True):
     created_date: datetime = Field(default=current_timestamp())
     end_date: Optional[datetime] = Field(nullable=True)
 
+    last_heartbeat: Optional[datetime] = Field(nullable=True)
+    # TODO FIGURE THIS OUT
+    # game_server_instances: Mapped["GameServerInstance"] = relationship(
+
 
 # do I need server table? -> yes, but make worker manage state
 # make health check contain server info for trueups
@@ -48,6 +52,11 @@ class GameServerInstance(Base, table=True):
     )
     created_date: datetime = Field(default=current_timestamp(), exclude=True)
     end_date: Optional[datetime] = Field(nullable=True)
+
+    # should not be nullable, but for now it is
+    worker_id: int = Field(foreign_key="workers.worker_id", index=True, nullable=True)
+    # todo investigate this
+    # worker: Mapped["Worker"] = relationship(back_populates="game_server_instances")
 
     def get_thread_name(self, extra: Optional[str] = None) -> str:
         extra_str = "-" + extra if extra is not None else ""
