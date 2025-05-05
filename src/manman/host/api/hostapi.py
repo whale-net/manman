@@ -53,7 +53,7 @@ async def get_current_instances(
             .where(GameServerInstance.worker_id == worker_id)
             .where(GameServerInstance.end_date.is_(None))
         )
-        results = sess.exec(stmt).scalars().all()
+        results = sess.exec(stmt).all()
         # If a session is provided, we don't want to expunge the instances
         if session is None:
             for instance in results:
