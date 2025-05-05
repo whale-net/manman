@@ -27,7 +27,7 @@ class SteamCMD:
         self._password = password
 
         if steamcmd_executable is not None:
-            raise Exception("steamcmd_executable is not supported, use the env var")
+            raise NotImplementedError("steamcmd_executable is not supported, use the env var")
         env_steamcmd_executable = os.environ.get("STEAMCMD_EXECUTABLE")
         self._steamcmd_executable = (
             env_steamcmd_executable or SteamCMD.DEFAULT_EXECUTABLE
