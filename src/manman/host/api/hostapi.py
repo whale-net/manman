@@ -177,6 +177,5 @@ async def get_active_game_server_instances(
     Get all active game server instances for the current worker.
     """
     with get_sqlalchemy_session() as sess:
-        worker = await get_current_worker(sess)
         instances = await get_current_instances(worker.worker_id, sess)
         return instances
