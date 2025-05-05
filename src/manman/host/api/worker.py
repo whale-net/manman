@@ -52,3 +52,24 @@ async def worker_shutdown(instance: Worker) -> Worker:
 async def worker_shutdown_other(instance: Worker):
     # TODO - make this work 3/16 7 pm
     close_other_workers(instance.worker_id)
+
+
+# heartbeat
+@router.put("/worker/heartbeat")
+async def worker_heartbeat(instance: Worker):
+    with get_sqlalchemy_session() as sess:
+        stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)
+        current_instance = sess.scalar(stmt)
+        if current_instance is None:
+            raise Exception("instance is None")
+        if current_instance.end_date is not None:
+            raise Exception("instance already closed on server")
+
+        current_instance.last_heartbeat = current_timestamp()
+        sess.add(current_instance)
+        sess.flush()
+        sess.refresh(current_instance)
+        sess.expunge(current_instance)
+        sess.commit()
+
+    return current_instance
