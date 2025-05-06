@@ -235,10 +235,13 @@ class WorkerAPIClient(APIClientBase):
         return GameServerConfig.model_validate_json(response.content)
 
     def game_server_instance_create(
-        self, config: GameServerConfig
+        self,
+        config: GameServerConfig,
+        worker_id: int,
     ) -> GameServerInstance:
         instance = GameServerInstance(
-            game_server_config_id=config.game_server_config_id
+            game_server_config_id=config.game_server_config_id,
+            worker_id=worker_id,
         )
         # TODO - there is probably a way to centralize this without it being stupid
         response = self._session.post(

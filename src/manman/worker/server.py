@@ -45,7 +45,7 @@ class Server:
         self._config = config
         self._worker_id = worker_id
 
-        self._instance = self._wapi.game_server_instance_create(config)
+        self._instance = self._wapi.game_server_instance_create(config, self._worker_id)
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
 
