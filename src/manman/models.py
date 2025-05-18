@@ -13,7 +13,7 @@ from sqlalchemy import (  # using postgres.ARRAY I guess; MetaData,; ForeignKey,
 from sqlalchemy.sql.functions import current_timestamp
 
 # from sqlalchemy.dialects import postgresql
-from sqlmodel import Field, MetaData, SQLModel
+from sqlmodel import Field, MetaData, Relationship, SQLModel
 
 # SQLModel.metadata = MetaData(schema="manman")
 
@@ -41,20 +41,31 @@ class Worker(Base, table=True):
     # TODO FIGURE THIS OUT
     # game_server_instances: Mapped["GameServerInstance"] = relationship(
 
+    game_server_instances: list["GameServerInstance"] = Relationship(
+        back_populates="worker"
+        # TODO - lazy? make everything lazy? probably yes, in most situations I'd think
+    )
+
 
 # do I need server table? -> yes, but make worker manage state
 # make health check contain server info for trueups
 class GameServerInstance(Base, table=True):
     __tablename__ = "game_server_instances"
     game_server_instance_id: int = Field(primary_key=True)
+
     game_server_config_id: int = Field(
         foreign_key="game_server_configs.game_server_config_id", index=True
     )
+    # TODO - does htis do anything?
+    game_server_config: "GameServerConfig" = Relationship()
+
     created_date: datetime = Field(default=current_timestamp(), exclude=True)
     end_date: Optional[datetime] = Field(nullable=True)
 
     # should not be nullable, but for now it is
     worker_id: int = Field(foreign_key="workers.worker_id", index=True, nullable=True)
+    worker: Optional[Worker] = Relationship(back_populates="game_server_instances")
+
     # todo investigate this
     # worker: Mapped["Worker"] = relationship(back_populates="game_server_instances")
 

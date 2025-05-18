@@ -6,7 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, desc, select
 
 from manman.host.api.injectors import inject_rmq_channel
-from manman.host.request_models import StdinCommandRequest
+from manman.host.request_models import (
+    CurrentInstanceResponse,  # TODO - move this
+    StdinCommandRequest,
+)
 from manman.models import Command, CommandType, GameServerInstance, Worker
 from manman.util import get_sqlalchemy_session
 from manman.worker.service import WorkerService
@@ -47,18 +50,22 @@ async def worker_current() -> Worker:
 async def get_current_instances(
     worker_id: int, session: Optional[Session] = None
 ) -> list[GameServerInstance]:
-    with get_sqlalchemy_session(session) as sess:
-        stmt = (
-            select(GameServerInstance)
-            .where(GameServerInstance.worker_id == worker_id)
-            .where(GameServerInstance.end_date.is_(None))
-        )
-        results = sess.exec(stmt).all()
-        # If a session is provided, we don't want to expunge the instances
-        if session is None:
-            for instance in results:
-                sess.expunge(instance)
-        return results
+    # TODO - don't re-use a session in the context manager if one is provided
+    #        doing so will cause the session to be closed when the context manager exits
+    #        #35
+    sess = get_sqlalchemy_session(session)
+    stmt = (
+        select(GameServerInstance)
+        .where(GameServerInstance.worker_id == worker_id)
+        .where(GameServerInstance.end_date.is_(None))
+    )
+    results = sess.exec(stmt).all()
+    # If a session is provided, we don't want to expunge the instances
+    if session is None:
+        for instance in results:
+            sess.expunge(instance)
+        sess.close()
+    return results
 
 
 @router.post("/gameserver/{id}/start", dependencies=[Depends(inject_rmq_channel)])
@@ -172,10 +179,11 @@ async def stdin_game_server(
 @router.get("/gameserver/instances/active")
 async def get_active_game_server_instances(
     worker: Annotated[Worker, Depends(worker_current)],
-) -> list[GameServerInstance]:
+) -> CurrentInstanceResponse:
     """
     Get all active game server instances for the current worker.
     """
     with get_sqlalchemy_session() as sess:
         instances = await get_current_instances(worker.worker_id, sess)
-        return instances
+        # TODO fix this when coming back to this
+        return CurrentInstanceResponse.from_instances(instances)
