@@ -56,7 +56,7 @@ class GameServerInstance(Base, table=True):
     game_server_config_id: int = Field(
         foreign_key="game_server_configs.game_server_config_id", index=True
     )
-    # TODO - does htis do anything?
+
     game_server_config: "GameServerConfig" = Relationship()
 
     created_date: datetime = Field(default=current_timestamp(), exclude=True)

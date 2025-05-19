@@ -251,7 +251,6 @@ async def get_active_game_server_instances(
     """
     with get_sqlalchemy_session() as sess:
         instances = await get_current_instances(worker.worker_id, sess)
-        # TODO fix this when coming back to this
         return CurrentInstanceResponse.from_instances(instances)
 
 
