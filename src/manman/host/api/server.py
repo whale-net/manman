@@ -16,7 +16,9 @@ router = APIRouter(
 async def server_instance_create(body: GameServerInstance) -> GameServerInstance:
     with get_sqlalchemy_session() as sess:
         # TODO validate gaem_server_config_id exists
-        server = GameServerInstance(game_server_config_id=body.game_server_config_id)
+        server = GameServerInstance(
+            game_server_config_id=body.game_server_config_id, worker_id=body.worker_id
+        )
         sess.add(server)
         sess.flush()
         sess.expunge(server)

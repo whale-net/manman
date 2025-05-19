@@ -90,6 +90,15 @@ def create_migration(migration_message: Optional[str] = None):
     _create_migration(get_sqlalchemy_engine(), message=migration_message)
 
 
+@app.command()
+def run_downgrade(target: str):
+    config = _get_alembic_config()
+    engine = get_sqlalchemy_engine()
+    with engine.begin() as conn:
+        config.attributes["connection"] = conn
+        alembic.command.downgrade(config, target)
+
+
 @app.callback()
 def callback(
     db_connection_string: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_URL")],

@@ -1,4 +1,4 @@
-from manman.models import Base
+from manman.models import Base, GameServerConfig, GameServerInstance, Worker
 
 
 class StdinCommandRequest(Base):
@@ -7,3 +7,28 @@ class StdinCommandRequest(Base):
     """
 
     commands: list[str]
+
+
+class CurrentInstanceResponse(Base):
+    """
+    Response to the worker to start a game server instance.
+    """
+
+    game_server_instances: list[GameServerInstance]
+    workers: list[Worker]
+    configs: list[GameServerConfig]
+
+    @classmethod
+    def from_instances(
+        cls, instances: list[GameServerInstance]
+    ) -> "CurrentInstanceResponse":
+        workers = {instance.worker_id: instance.worker for instance in instances}
+        configs = {
+            instance.game_server_config_id: instance.game_server_config
+            for instance in instances
+        }
+        return cls(
+            game_server_instances=instances,
+            workers=list(workers.values()),
+            configs=list(configs.values()),
+        )
