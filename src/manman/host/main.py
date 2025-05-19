@@ -2,14 +2,14 @@ import logging
 import os
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.host.api import fastapp
 from manman.util import (
     get_rabbitmq_ssl_options,
@@ -88,6 +88,15 @@ def create_migration(migration_message: Optional[str] = None):
     if os.environ.get("ENVIRONMENT", "DEV") == "PROD":
         raise RuntimeError("cannot create revisions in production")
     _create_migration(get_sqlalchemy_engine(), message=migration_message)
+
+
+@app.command()
+def run_downgrade(target: str):
+    config = _get_alembic_config()
+    engine = get_sqlalchemy_engine()
+    with engine.begin() as conn:
+        config.attributes["connection"] = conn
+        alembic.command.downgrade(config, target)
 
 
 @app.callback()

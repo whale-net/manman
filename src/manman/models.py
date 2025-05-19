@@ -105,6 +105,7 @@ class GameServerConfig(Base, table=True):
     game_server_config_id: int = Field(primary_key=True)
     game_server_id: int = Field(foreign_key="game_servers.game_server_id", index=True)
     is_default: bool = Field(default=False)
+    is_visible: bool = Field(default=True)
 
     name: str = Field()
     executable: str = Field()

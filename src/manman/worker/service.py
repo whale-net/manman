@@ -219,4 +219,5 @@ class WorkerService:
                 logger.info("sending stdin to server %s", server.instance)
                 # chain command
                 server.execute_command(command)
+                break
         self._servers_lock.release()
