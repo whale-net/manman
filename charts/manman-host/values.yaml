@@ -22,13 +22,22 @@ apis:
     port: 8000
     command: "start-worker-dal-api"
 
-  # Status API
+  # Status API (read-only HTTP endpoints)
   status:
     enabled: true
     name: manman-status
     replicas: 1
     port: 8000
     command: "start-status-api"
+
+# Configuration for background processors (pub/sub services)
+processors:
+  # Status Event Processor (handles status-related messages)
+  status:
+    enabled: true
+    name: manman-status-processor
+    replicas: 1
+    command: "start-status-processor"
 
 # Ingress configuration (primarily for development)
 ingress:

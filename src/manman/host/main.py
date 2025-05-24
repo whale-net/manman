@@ -182,6 +182,41 @@ def start_worker_dal_api(
     uvicorn.run(worker_dal_app, host="0.0.0.0", port=port)
 
 
+@app.command()
+def start_status_processor(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    should_run_migration_check: Optional[bool] = True,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
+):
+    """Start the status event processor that handles status-related pub/sub messages."""
+    _init_common_services(
+        rabbitmq_host=rabbitmq_host,
+        rabbitmq_port=rabbitmq_port,
+        rabbitmq_username=rabbitmq_username,
+        rabbitmq_password=rabbitmq_password,
+        app_env=app_env,
+        enable_ssl=enable_ssl,
+        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
+        should_run_migration_check=should_run_migration_check,
+    )
+
+    # Start the status event processor (pub/sub only, no HTTP server)
+    from manman.host.status_processor import StatusEventProcessor
+    from manman.util import get_rabbitmq_connection
+
+    processor = StatusEventProcessor(get_rabbitmq_connection())
+    processor.run()
+
+
 # TODO - should these not be ran by host?
 @app.command()
 def run_migration():

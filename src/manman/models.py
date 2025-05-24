@@ -136,6 +136,9 @@ class CommandType(Enum):
     START = "START"
     STDIN = "STDIN"
     STOP = "STOP"
+    HEARTBEAT = "HEARTBEAT"
+    SERVER_STARTED = "SERVER_STARTED"
+    SERVER_STOPPED = "SERVER_STOPPED"
 
 
 # {"command_type":"START", "command_args": ["1"]}
