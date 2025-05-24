@@ -2,14 +2,14 @@ import logging
 import os
 from typing import Optional
 
+import alembic
+import alembic.command
+import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
-import alembic
-import alembic.command
-import alembic.config
 from manman.util import (
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
