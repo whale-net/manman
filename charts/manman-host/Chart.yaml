@@ -1,6 +1,6 @@
 apiVersion: v2
 name: manman-host
-description: API service for manman
+description: ManMan API services - Experience API and Worker DAL API
 
 type: application
 

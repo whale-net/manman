@@ -1,0 +1,66 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.ingress.name | default (printf "manman-ingress-%s" .Values.env.app_env) }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: manman-{{ .Values.env.app_env }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- if .Values.ingress.rules }}
+    {{- range .Values.ingress.rules }}
+    - host: {{ .host }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ .serviceName }}
+                port:
+                  number: {{ .servicePort }}
+          {{- end }}
+    {{- end }}
+    {{- else }}
+    {{/* Auto-generate rules based on enabled APIs */}}
+    - host: {{ .Values.ingress.host | default "localhost" }}
+      http:
+        paths:
+          {{- if .Values.apis.experience.enabled }}
+          - path: /experience
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-%s-service" .Values.apis.experience.name .Values.env.app_env }}
+                port:
+                  number: {{ .Values.apis.experience.port }}
+          {{- end }}
+          {{- if .Values.apis.workerDal.enabled }}
+          - path: /workerdal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-%s-service" .Values.apis.workerDal.name .Values.env.app_env }}
+                port:
+                  number: {{ .Values.apis.workerDal.port }}
+          {{- end }}
+          {{- if .Values.apis.status.enabled }}
+          - path: /status
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-%s-service" .Values.apis.status.name .Values.env.app_env }}
+                port:
+                  number: {{ .Values.apis.status.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

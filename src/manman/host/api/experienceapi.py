@@ -20,7 +20,7 @@ from manman.models import (
 from manman.util import get_sqlalchemy_session
 from manman.worker.service import WorkerService
 
-router = APIRouter(prefix="/host")
+router = APIRouter(prefix="/experience")
 
 
 @router.get("/health")
