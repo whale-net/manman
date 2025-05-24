@@ -22,6 +22,14 @@ apis:
     port: 8000
     command: "start-worker-dal-api"
 
+  # Status API
+  status:
+    enabled: true
+    name: manman-status
+    replicas: 1
+    port: 8000
+    command: "start-status-api"
+
 # Ingress configuration (primarily for development)
 ingress:
   # Enable/disable ingress

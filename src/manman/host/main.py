@@ -94,6 +94,45 @@ def start_experience_api(
 
 
 @app.command()
+def start_status_api(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    port: int = 8000,
+    should_run_migration_check: Optional[bool] = True,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
+):
+    """Start the status API that provides status and monitoring functionality."""
+    _init_common_services(
+        rabbitmq_host=rabbitmq_host,
+        rabbitmq_port=rabbitmq_port,
+        rabbitmq_username=rabbitmq_username,
+        rabbitmq_password=rabbitmq_password,
+        app_env=app_env,
+        enable_ssl=enable_ssl,
+        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
+        should_run_migration_check=should_run_migration_check,
+    )
+
+    # Create FastAPI app with status routes
+    from fastapi import FastAPI
+
+    from manman.host.api.statusapi import router as status_router
+
+    status_app = FastAPI(title="ManMan Status API")
+    status_app.include_router(status_router)
+
+    uvicorn.run(status_app, host="0.0.0.0", port=port)
+
+
+@app.command()
 def start_worker_dal_api(
     rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
     rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],

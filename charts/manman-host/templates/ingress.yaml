@@ -53,5 +53,14 @@ spec:
                 port:
                   number: {{ .Values.apis.workerDal.port }}
           {{- end }}
+          {{- if .Values.apis.status.enabled }}
+          - path: /status
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-%s-service" .Values.apis.status.name .Values.env.app_env }}
+                port:
+                  number: {{ .Values.apis.status.port }}
+          {{- end }}
     {{- end }}
 {{- end }}
