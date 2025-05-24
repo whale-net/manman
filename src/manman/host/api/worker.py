@@ -13,6 +13,12 @@ router = APIRouter(
 )  # , dependencies=[Depends(has_basic_worker_authz)])
 
 
+# TODO - fix this
+# @router.get("/health")
+# async def health() -> str:
+#     return "OK"
+
+
 @router.post("/worker/create")
 async def worker_create() -> Worker:
     with get_sqlalchemy_session() as sess:
