@@ -5,8 +5,8 @@ from amqpstorm import Channel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, desc, select
 
-from manman.host.api.injectors import inject_rmq_channel
-from manman.host.request_models import (
+from manman.host.api.shared.injectors import inject_rmq_channel
+from manman.host.api.shared.models import (
     CurrentInstanceResponse,  # TODO - move this
     StdinCommandRequest,
 )

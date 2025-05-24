@@ -2,14 +2,14 @@ import logging
 import os
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.util import (
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
@@ -85,7 +85,7 @@ def start_experience_api(
     # Create FastAPI app with only host/experience routes
     from fastapi import FastAPI
 
-    from manman.host.api.experienceapi import router as experience_router
+    from manman.host.api.experience import router as experience_router
 
     experience_app = FastAPI(title="ManMan Experience API")
     experience_app.include_router(experience_router)
@@ -124,7 +124,7 @@ def start_status_api(
     # Create FastAPI app with status routes
     from fastapi import FastAPI
 
-    from manman.host.api.statusapi import router as status_router
+    from manman.host.api.status import router as status_router
 
     status_app = FastAPI(title="ManMan Status API")
     status_app.include_router(status_router)
@@ -163,8 +163,7 @@ def start_worker_dal_api(
     # Create FastAPI app with only worker DAL routes
     from fastapi import FastAPI
 
-    from manman.host.api.server import router as server_router
-    from manman.host.api.worker import router as worker_router
+    from manman.host.api.worker_dal import server_router, worker_router
 
     worker_dal_app = FastAPI(
         title="ManMan Worker DAL API",
