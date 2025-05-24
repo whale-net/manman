@@ -49,10 +49,10 @@ class Server:
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
 
-        self._message_provider = RabbitMessageProvider(
+        self._command_message_provider = RabbitMessageProvider(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
-            queue_name=self.rmq_queue_name,
+            queue_name=self.command_queue_name,
         )
 
         self._root_install_directory = root_install_directory
@@ -75,13 +75,13 @@ class Server:
     def instance(self) -> GameServerInstance:
         return self._instance
 
-    @property
-    def rmq_queue_name(self) -> str:
-        return self.generate_rmq_queue_name(self._instance.game_server_instance_id)
-
     @staticmethod
-    def generate_rmq_queue_name(game_server_instance_id: int):
+    def generate_command_queue_name(game_server_instance_id: int):
         return f"game-server-instance.{game_server_instance_id}"
+
+    @property
+    def command_queue_name(self) -> str:
+        return self.generate_command_queue_name(self._instance.game_server_instance_id)
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running
@@ -143,7 +143,7 @@ class Server:
             )
             self._proc.stop()
             self._instance = self._wapi.game_server_instance_shutdown(self._instance)
-            self._message_provider.shutdown()
+            self._command_message_provider.shutdown()
             logger.info(
                 "shutdown complete for instance %s",
                 self._instance.game_server_instance_id,
@@ -192,7 +192,7 @@ class Server:
         while status != ProcessBuilderStatus.STOPPED and not self.__is_stopped:
             # TODO - make this available through property or something
             self._proc.read_output()
-            commands = self._message_provider.get_commands()
+            commands = self._command_message_provider.get_commands()
             if len(commands) > 0:
                 logger.info("commands received: %s", commands)
                 for command in commands:

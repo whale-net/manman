@@ -6,7 +6,7 @@ import typer
 from typing_extensions import Annotated, Optional
 
 from manman.util import get_rabbitmq_connection, get_rabbitmq_ssl_options, init_rabbitmq
-from manman.worker.service import WorkerService
+from manman.worker.worker_service import WorkerService
 
 app = typer.Typer()
 logger = logging.getLogger(__name__)

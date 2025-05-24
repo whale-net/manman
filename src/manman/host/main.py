@@ -16,6 +16,8 @@ from manman.util import (
     init_rabbitmq,
     init_sql_alchemy_engine,
 )
+from manman.worker.server import Server
+from manman.worker.worker_service import WorkerService
 
 app = typer.Typer()
 # fileConfig("logging.ini", disable_existing_loggers=False)
@@ -52,6 +54,20 @@ def _init_common_services(
         if enable_ssl
         else None,
     )
+
+    # declare rabbitmq exchanges
+    from manman.util import get_rabbitmq_connection
+
+    rmq_connection = get_rabbitmq_connection()
+
+    exchanges = [Server.RMQ_EXCHANGE, WorkerService.RMQ_EXCHANGE]
+    for exchange in exchanges:
+        rmq_connection.channel().exchange.declare(
+            exchange=exchange,
+            exchange_type="topic",
+            durable=True,
+        )
+        logger.info("Exchange declared %s", exchange)
 
 
 @app.command()

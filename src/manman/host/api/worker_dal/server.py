@@ -8,11 +8,11 @@ from manman.util import get_sqlalchemy_session
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the worker api
 router = APIRouter(
-    prefix="/workerdal"
+    prefix="/server"
 )  # , dependencies=[Depends(has_basic_worker_authz)])
 
 
-@router.post("/server/instance/create")
+@router.post("/instance/create")
 async def server_instance_create(body: GameServerInstance) -> GameServerInstance:
     with get_sqlalchemy_session() as sess:
         # TODO validate gaem_server_config_id exists
@@ -27,7 +27,7 @@ async def server_instance_create(body: GameServerInstance) -> GameServerInstance
     return server
 
 
-@router.put("/server/instance/shutdown")
+@router.put("/instance/shutdown")
 async def server_instance_shutdown(instance: GameServerInstance) -> GameServerInstance:
     with get_sqlalchemy_session() as sess:
         # TODO - move check that it's not already dead to trigger
@@ -52,7 +52,7 @@ async def server_instance_shutdown(instance: GameServerInstance) -> GameServerIn
     return current_instance
 
 
-@router.get("/server/config/{id}")
+@router.get("/config/{id}")
 async def server_config(id: int) -> GameServerConfig:
     with get_sqlalchemy_session() as sess:
         config = sess.get_one(GameServerConfig, id)
@@ -60,7 +60,7 @@ async def server_config(id: int) -> GameServerConfig:
     return config
 
 
-@router.get("/server/{id}")
+@router.get("/{id}")
 async def server(id: int) -> GameServer:
     with get_sqlalchemy_session() as sess:
         config = sess.get_one(GameServer, id)

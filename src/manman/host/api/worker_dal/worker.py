@@ -9,7 +9,7 @@ from manman.util import get_sqlalchemy_session
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the server api
 router = APIRouter(
-    prefix="/workerdal"
+    prefix="/worker"
 )  # , dependencies=[Depends(has_basic_worker_authz)])
 
 
@@ -19,7 +19,7 @@ router = APIRouter(
 #     return "OK"
 
 
-@router.post("/worker/create")
+@router.post("/create")
 async def worker_create() -> Worker:
     with get_sqlalchemy_session() as sess:
         worker = Worker()
@@ -31,7 +31,7 @@ async def worker_create() -> Worker:
     return worker
 
 
-@router.put("/worker/shutdown")
+@router.put("/shutdown")
 async def worker_shutdown(instance: Worker) -> Worker:
     with get_sqlalchemy_session() as sess:
         # TODO - move check that it's not already dead to trigger
@@ -54,14 +54,14 @@ async def worker_shutdown(instance: Worker) -> Worker:
     return current_instance
 
 
-@router.put("/worker/shutdown/other")
+@router.put("/shutdown/other")
 async def worker_shutdown_other(instance: Worker):
     # TODO - make this work 3/16 7 pm
     close_other_workers(instance.worker_id)
 
 
 # heartbeat
-@router.put("/worker/heartbeat")
+@router.put("/heartbeat")
 async def worker_heartbeat(instance: Worker):
     with get_sqlalchemy_session() as sess:
         stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)

@@ -18,7 +18,7 @@ from manman.models import (
     Worker,
 )
 from manman.util import get_sqlalchemy_session
-from manman.worker.service import WorkerService
+from manman.worker.worker_service import WorkerService
 
 router = APIRouter(prefix="/experience")
 
@@ -113,7 +113,7 @@ async def start_game_server(
 
         # Set exchange and queue name using the worker's ID
         exchange = WorkerService.RMQ_EXCHANGE
-        queue_name = WorkerService.generate_rmq_queue_name(worker.worker_id)
+        queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
 
         # Ensure the queue exists and is bound to the exchange
         channel.queue.declare(queue=queue_name, auto_delete=True)
@@ -166,7 +166,7 @@ async def stop_game_server(
 
         # Set exchange and queue name using the worker's ID
         exchange = WorkerService.RMQ_EXCHANGE
-        queue_name = WorkerService.generate_rmq_queue_name(worker.worker_id)
+        queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
 
         # Ensure the queue exists and is bound to the exchange
         channel.queue.declare(queue=queue_name, auto_delete=True)
@@ -216,7 +216,7 @@ async def stdin_game_server(
 
         # Set exchange and queue name using the worker's ID
         exchange = WorkerService.RMQ_EXCHANGE
-        queue_name = WorkerService.generate_rmq_queue_name(worker.worker_id)
+        queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
 
         # Ensure the queue exists and is bound to the exchange
         channel.queue.declare(queue=queue_name, auto_delete=True)

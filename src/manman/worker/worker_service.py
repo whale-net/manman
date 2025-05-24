@@ -60,19 +60,19 @@ class WorkerService:
         self._rabbitmq_connection = rabbitmq_connection
         self._message_provider = RabbitMessageProvider(
             connection=self._rabbitmq_connection,
-            exchange=WorkerService.RMQ_EXCHANGE,
-            queue_name=self.rmq_queue_name,
+            exchange=WorkerService.RMQ_EXCHANGE,  # Changed from RMQ_EXCHANGE
+            queue_name=self.command_queue_name,
         )
 
         self._futures = []
 
-    @property
-    def rmq_queue_name(self) -> str:
-        return self.generate_rmq_queue_name(self._worker_instance.worker_id)
-
     @staticmethod
-    def generate_rmq_queue_name(worker_id: int) -> str:
-        return f"worker.{worker_id}"
+    def generate_command_queue_name(worker_id: int) -> str:
+        return f"worker-instance.{worker_id}"
+
+    @property
+    def command_queue_name(self) -> str:
+        return self.generate_command_queue_name(self._worker_instance.worker_id)
 
     def run(self):
         loop_log_time = datetime.now()
