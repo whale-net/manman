@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from enum import Enum
 from typing import Optional
 
@@ -34,10 +34,10 @@ class Worker(Base, table=True):
     __tablename__ = "workers"
     worker_id: int = Field(primary_key=True)
     # ip_addr: Mapped[str] = mapped_column(String(15))
-    created_date: datetime = Field(default=current_timestamp())
-    end_date: Optional[datetime] = Field(nullable=True)
+    created_date: datetime.datetime = Field(default=current_timestamp())
+    end_date: Optional[datetime.datetime] = Field(nullable=True)
 
-    last_heartbeat: Optional[datetime] = Field(nullable=True)
+    last_heartbeat: Optional[datetime.datetime] = Field(nullable=True)
     # TODO FIGURE THIS OUT
     # game_server_instances: Mapped["GameServerInstance"] = relationship(
 
@@ -59,8 +59,8 @@ class GameServerInstance(Base, table=True):
 
     game_server_config: "GameServerConfig" = Relationship()
 
-    created_date: datetime = Field(default=current_timestamp(), exclude=True)
-    end_date: Optional[datetime] = Field(nullable=True)
+    created_date: datetime.datetime = Field(default=current_timestamp(), exclude=True)
+    end_date: Optional[datetime.datetime] = Field(nullable=True)
 
     # should not be nullable, but for now it is
     worker_id: int = Field(foreign_key="workers.worker_id", index=True, nullable=True)
@@ -146,3 +146,29 @@ class CommandType(Enum):
 class Command(Base):
     command_type: CommandType = Field()
     command_args: list[str] = Field(default=[])
+
+
+# See https://github.com/whale-net/friendly-computing-machine/blob/main/docs/manman_subscribe.md
+class StatusType(Enum):
+    CREATED = "CREATED"
+    # Optional, can go from CREATED -> RUNNING
+    INITIALIZING = "INITIALIZING"
+    RUNNING = "RUNNING"
+    LOST = "LOST"
+    COMPLETE = "COMPLETE"
+    CRASHED = "CRASHED"
+
+
+class StatusInfo(Base):
+    class_name: str = Field()
+    status_type: StatusType = Field()
+    as_of: datetime.datetime = Field(default=current_timestamp())
+
+    @classmethod
+    def create(
+        cls,
+        class_name: str,
+        status_type: StatusType,
+    ) -> "StatusInfo":
+        as_of = datetime.datetime.now(datetime.timezone.utc)
+        return cls(class_name=class_name, status_type=status_type, as_of=as_of)

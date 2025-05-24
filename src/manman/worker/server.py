@@ -17,7 +17,7 @@ from manman.models import (
     ServerType,
 )
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
-from manman.repository.rabbit import RabbitMessageProvider
+from manman.repository.rabbit import RabbitCommandSubscriber
 from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD
 
@@ -49,7 +49,7 @@ class Server:
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
 
-        self._command_message_provider = RabbitMessageProvider(
+        self._command_message_provider = RabbitCommandSubscriber(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
             queue_name=self.command_queue_name,
@@ -76,12 +76,20 @@ class Server:
         return self._instance
 
     @staticmethod
-    def generate_command_queue_name(game_server_instance_id: int):
+    def _generate_common_queue_prefix(game_server_instance_id: int) -> str:
         return f"game-server-instance.{game_server_instance_id}"
+
+    @staticmethod
+    def generate_command_queue_name(game_server_instance_id: int):
+        return Server._generate_common_queue_prefix(game_server_instance_id) + ".cmd"
 
     @property
     def command_queue_name(self) -> str:
         return self.generate_command_queue_name(self._instance.game_server_instance_id)
+
+    @staticmethod
+    def generate_status_queue_name(game_server_instance_id: int):
+        return Server._generate_common_queue_prefix(game_server_instance_id) + ".status"
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running

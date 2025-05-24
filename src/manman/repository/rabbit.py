@@ -6,12 +6,36 @@ from typing import Optional
 
 from amqpstorm import Connection, Message
 
-from manman.models import Command
+from manman.models import Command, StatusInfo
 
 logger = logging.getLogger(__name__)
 
 
-class MessageProvider(abc.ABC):
+class MessagePublisher(abc.ABC):
+    """
+    Abstract base class for message providers.
+    This class defines the interface for sending messages.
+    """
+
+    @abc.abstractmethod
+    def publish(self, command: Command) -> None:
+        """
+        Publish a message to the message provider.
+
+        :param command: The command to be published.
+        """
+        pass
+
+    @abc.abstractmethod
+    def shutdown(self) -> None:
+        """
+        Shutdown the message provider.
+        This method should clean up any resources used by the message provider.
+        """
+        pass
+
+
+class MessageSubscriber(abc.ABC):
     """
     Abstract base class for message providers.
     This class defines the interface for receiving messages.
@@ -37,7 +61,59 @@ class MessageProvider(abc.ABC):
         pass
 
 
-class RabbitMessageProvider(MessageProvider):
+class RabbitStatusPublisher(MessagePublisher):
+    """
+    A message provider that sends commands to a RabbitMQ queue.
+
+    This class sets up a connection to RabbitMQ, declares an exchange and
+    a queue, and provides a method to publish messages to the queue.
+    """
+
+    def __init__(self, connection: Connection, exchange: str, queue_name: str) -> None:
+        """
+        :param connection: An AMQPStorm connection to the RabbitMQ server.
+        :param exchange: Exchange to bind to
+        """
+        self._exchange = exchange
+        self._channel = connection.channel()
+        self._queue_name = queue_name
+
+        # Declare queue
+        result = self._channel.queue.declare(
+            queue=self._queue_name,
+            auto_delete=True,
+        )
+        if not result:
+            logger.error("Unable to declare queue with name %s", self._queue_name)
+            raise RuntimeError("Failed to create queue")
+        self._queue_name = result["queue"]
+        logger.info("Queue declared %s", self._queue_name)
+        logger.info("Rabbit message publisher created %s", self._exchange)
+
+    def publish(self, status: StatusInfo) -> None:
+        message = status.model_dump_json()
+        self._channel.basic.publish(
+            body=message,
+            exchange=self._exchange,
+            routing_key=self._queue_name,
+            # do not batch, send immediately
+            # immediate=True,
+        )
+        logger.info("Message published to exchange %s", self._exchange)
+        logger.debug("Message: %s", message)
+
+    def shutdown(self) -> None:
+        logger.info("Shutting down RabbitMessagePublisher...")
+        try:
+            # Close the channel
+            if self._channel.is_open:
+                self._channel.close()
+                logger.info("Channel closed.")
+        except Exception as e:
+            logger.exception("Error closing channel: %s", e)
+
+
+class RabbitCommandSubscriber(MessageSubscriber):
     """
     A message provider that retrieves commands from a RabbitMQ queue.
 
@@ -63,11 +139,6 @@ class RabbitMessageProvider(MessageProvider):
         self._queue_name = queue_name
         self._exchange = exchange
         self._channel = connection.channel()
-
-        # Declare exchange
-        # self._channel.exchange.declare(
-        #     exchange=self._exchange, exchange_type="direct", durable=True
-        # )
 
         # Declare queue
         result = self._channel.queue.declare(
@@ -112,7 +183,7 @@ class RabbitMessageProvider(MessageProvider):
         )
         self._rabbit_thread.start()
 
-        logger.info("Rabbit message provider created %s", self._name)
+        logger.info("Rabbit message subscriber created %s", self._name)
 
     def _start_consuming(self):
         logger.info("Starting to consume")
@@ -137,7 +208,7 @@ class RabbitMessageProvider(MessageProvider):
         return commands
 
     def shutdown(self) -> None:
-        logger.info("Shutting down RabbitMessageProvider...")
+        logger.info("Shutting down RabbitMessageSubscriber...")
 
         try:
             # Cancel the consumer
