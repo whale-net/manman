@@ -40,29 +40,44 @@ docker_build(
 db_url = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
 if build_env == 'custom':
     db_url = os.getenv('MANMAN_POSTGRES_URL') or db_url
+
+# Control which APIs to deploy in dev (can be overridden with env vars)
+enable_experience_api = os.getenv('MANMAN_ENABLE_EXPERIENCE_API', 'true').lower() == 'true'
+enable_worker_dal_api = os.getenv('MANMAN_ENABLE_WORKER_DAL_API', 'true').lower() == 'true'
+
+# Build the helm set arguments
+helm_set_args = [
+    'image.name=manman',
+    'image.tag=dev',
+    'env.db.url={}'.format(db_url),
+    'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
+    # needed to be string? wtf
+    'env.rabbitmq.port=5672',
+    'env.rabbitmq.user=rabbit',
+    'env.rabbitmq.password=password',
+    #'env.rabbitmq.enable_ssl=true',
+    'namespace={}'.format(namespace),
+    # for local dev, require manual migration and protect against bad models being used
+    'migrations.skip_migration=true',
+    # Control which APIs to deploy
+    'apis.experience.enabled={}'.format(str(enable_experience_api).lower()),
+    'apis.workerDal.enabled={}'.format(str(enable_worker_dal_api).lower())
+]
+
 k8s_yaml(
     helm(
         'charts/manman-host',
         name='manman-host',
         namespace=namespace,
-        set=[
-            'image.name=manman',
-            'image.tag=dev',
-            'env.db.url={}'.format(db_url),
-            'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
-            # needed to be string? wtf
-            'env.rabbitmq.port=5672',
-            'env.rabbitmq.user=rabbit',
-            'env.rabbitmq.password=password',
-            #'env.rabbitmq.enable_ssl=true',
-            'namespace={}'.format(namespace),
-            # # for local dev, require manual migration and protect against bad models being used
-            'deployment.skip_migration=true'
-            # 'deployment.skip_migration_check=false'
-        ]
+        set=helm_set_args
     )
 )
-k8s_resource(workload='manman-host-deployment-{}'.format(app_env), port_forwards='8000:8000')
+
+# Port forward for Experience API (user-facing)
+k8s_resource(workload='manman-experience-{}'.format(app_env), port_forwards='8000:8000')
+
+# Port forward for Worker DAL API (internal API for workers)
+k8s_resource(workload='manman-worker-dal-{}'.format(app_env), port_forwards='8001:8000')
 
 # this should be a docker compose becauset hat is how I will actually deploy it
 #local_resource(

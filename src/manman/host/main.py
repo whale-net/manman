@@ -2,15 +2,14 @@ import logging
 import os
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
-from manman.host.api import fastapp
+import alembic
+import alembic.command
+import alembic.config
 from manman.util import (
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
@@ -23,28 +22,19 @@ app = typer.Typer()
 logger = logging.getLogger(__name__)
 
 
-@app.command()
-def start(
-    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
-    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
-    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
-    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
-    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
-    # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],
-    port: int = 8000,
-    # workers: int = 1,
-    # auto_reload: bool = False,
-    should_run_migration_check: Optional[bool] = True,
-    enable_ssl: Annotated[
-        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
-    ] = False,
-    rabbitmq_ssl_hostname: Annotated[
-        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
-    ] = None,
+def _init_common_services(
+    rabbitmq_host: str,
+    rabbitmq_port: int,
+    rabbitmq_username: str,
+    rabbitmq_password: str,
+    app_env: Optional[str],
+    enable_ssl: bool,
+    rabbitmq_ssl_hostname: Optional[str],
+    should_run_migration_check: bool,
 ):
+    """Initialize common services required by both APIs."""
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
-    # init_auth_api_client(auth_url)
 
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
@@ -63,17 +53,85 @@ def start(
         else None,
     )
 
-    # TODO running via string doesn't initialize
-    # engine because separate process
-    # TODO - does running in this way cause blocking
-    # issues with concurrent requests?
-    # this would be a nice development enhancement,
-    # but may not matter if we scale out. TBD
-    # gunicorn + uvicorn worker is preferred if
-    # need to scale local api instance
-    # uvicorn.run("manman.host.api:fastapp",
-    #  port=port, workers=workers, reload=auto_reload)
-    uvicorn.run(fastapp, host="0.0.0.0", port=port)
+
+@app.command()
+def start_experience_api(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    port: int = 8000,
+    should_run_migration_check: Optional[bool] = True,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
+):
+    """Start the experience API (host layer) that provides game server management and user-facing functionality."""
+    _init_common_services(
+        rabbitmq_host=rabbitmq_host,
+        rabbitmq_port=rabbitmq_port,
+        rabbitmq_username=rabbitmq_username,
+        rabbitmq_password=rabbitmq_password,
+        app_env=app_env,
+        enable_ssl=enable_ssl,
+        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
+        should_run_migration_check=should_run_migration_check,
+    )
+
+    # Create FastAPI app with only host/experience routes
+    from fastapi import FastAPI
+
+    from manman.host.api.hostapi import router as host_router
+
+    experience_app = FastAPI(title="ManMan Experience API")
+    experience_app.include_router(host_router)
+
+    uvicorn.run(experience_app, host="0.0.0.0", port=port)
+
+
+@app.command()
+def start_worker_dal_api(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    port: int = 8000,
+    should_run_migration_check: Optional[bool] = True,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
+):
+    """Start the worker DAL API that provides data access endpoints for worker services."""
+    _init_common_services(
+        rabbitmq_host=rabbitmq_host,
+        rabbitmq_port=rabbitmq_port,
+        rabbitmq_username=rabbitmq_username,
+        rabbitmq_password=rabbitmq_password,
+        app_env=app_env,
+        enable_ssl=enable_ssl,
+        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
+        should_run_migration_check=should_run_migration_check,
+    )
+
+    # Create FastAPI app with only worker DAL routes
+    from fastapi import FastAPI
+
+    from manman.host.api.server import router as server_router
+    from manman.host.api.worker import router as worker_router
+
+    worker_dal_app = FastAPI(title="ManMan Worker DAL API")
+    worker_dal_app.include_router(server_router)
+    worker_dal_app.include_router(worker_router)
+
+    uvicorn.run(worker_dal_app, host="0.0.0.0", port=port)
 
 
 # TODO - should these not be ran by host?

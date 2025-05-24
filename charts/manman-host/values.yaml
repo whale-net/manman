@@ -4,15 +4,42 @@ image:
 
 namespace: manman
 
-deployment:
-  name: manman-host-deployment
-  # TODO - note that this will be problematic when replicas > 1 because of the migrations
-  # this can be fixed by switching to job
-  replicas: 1
+# Configuration for which APIs to deploy
+apis:
+  # Experience API (host layer)
+  experience:
+    enabled: true
+    name: manman-experience
+    replicas: 1
+    port: 8000
+    command: "start-experience-api"
 
-  # run the migration, skip the check
+  # Worker DAL API
+  workerDal:
+    enabled: true
+    name: manman-worker-dal
+    replicas: 1
+    port: 8000
+    command: "start-worker-dal-api"
+
+# Migration configuration
+migrations:
+  # Set to true to skip running migrations entirely
   skip_migration: false
-  skip_migration_check: true
+  # Timeout for migration job in seconds (5 minutes)
+  timeout: 300
+
+# ArgoCD specific configuration
+argocd:
+  # Sync timeout for the entire application (10 minutes)
+  syncTimeout: 600
+  # Retry configuration
+  retry:
+    limit: 3
+    backoff:
+      duration: 30s
+      factor: 2
+      maxDuration: 3m
 
 env:
   rabbitmq:
