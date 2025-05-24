@@ -85,10 +85,10 @@ def start_experience_api(
     # Create FastAPI app with only host/experience routes
     from fastapi import FastAPI
 
-    from manman.host.api.hostapi import router as host_router
+    from manman.host.api.experienceapi import router as experience_router
 
     experience_app = FastAPI(title="ManMan Experience API")
-    experience_app.include_router(host_router)
+    experience_app.include_router(experience_router)
 
     uvicorn.run(experience_app, host="0.0.0.0", port=port)
 
@@ -127,7 +127,10 @@ def start_worker_dal_api(
     from manman.host.api.server import router as server_router
     from manman.host.api.worker import router as worker_router
 
-    worker_dal_app = FastAPI(title="ManMan Worker DAL API")
+    worker_dal_app = FastAPI(
+        title="ManMan Worker DAL API",
+        root_path="/workerdal",  # Configure root path for reverse proxy
+    )
     worker_dal_app.include_router(server_router)
     worker_dal_app.include_router(worker_router)
 
