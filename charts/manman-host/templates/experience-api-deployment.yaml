@@ -42,7 +42,7 @@ spec:
             - --no-should-run-migration-check
           livenessProbe:
             httpGet:
-              path: /host/health
+              path: /experience/health
               port: {{ .Values.apis.experience.port }}
             initialDelaySeconds: 15
             periodSeconds: 10
