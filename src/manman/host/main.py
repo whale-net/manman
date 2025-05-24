@@ -86,9 +86,11 @@ def start_experience_api(
     from fastapi import FastAPI
 
     from manman.host.api.experience import router as experience_router
+    from manman.host.api.shared import add_health_check
 
     experience_app = FastAPI(title="ManMan Experience API")
     experience_app.include_router(experience_router)
+    add_health_check(experience_app, prefix="/experience")
 
     uvicorn.run(experience_app, host="0.0.0.0", port=port)
 
@@ -124,10 +126,12 @@ def start_status_api(
     # Create FastAPI app with status routes
     from fastapi import FastAPI
 
+    from manman.host.api.shared import add_health_check
     from manman.host.api.status import router as status_router
 
     status_app = FastAPI(title="ManMan Status API")
     status_app.include_router(status_router)
+    add_health_check(status_app, prefix="/status")
 
     uvicorn.run(status_app, host="0.0.0.0", port=port)
 
@@ -163,6 +167,7 @@ def start_worker_dal_api(
     # Create FastAPI app with only worker DAL routes
     from fastapi import FastAPI
 
+    from manman.host.api.shared import add_health_check
     from manman.host.api.worker_dal import server_router, worker_router
 
     worker_dal_app = FastAPI(
@@ -171,6 +176,8 @@ def start_worker_dal_api(
     )
     worker_dal_app.include_router(server_router)
     worker_dal_app.include_router(worker_router)
+    # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
+    add_health_check(worker_dal_app)
 
     uvicorn.run(worker_dal_app, host="0.0.0.0", port=port)
 

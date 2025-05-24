@@ -23,11 +23,6 @@ from manman.worker.service import WorkerService
 router = APIRouter(prefix="/experience")
 
 
-@router.get("/health")
-async def health() -> str:
-    return "OK"
-
-
 # TODO - this whole thing needs rethnking ,but just going to hack it together for now
 async def get_current_worker(session: Optional[Session] = None) -> Worker:
     with get_sqlalchemy_session(session) as sess:
