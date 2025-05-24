@@ -27,11 +27,11 @@ spec:
           image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
           resources:
             requests:
-              cpu: 100m
+              cpu: 50m
               memory: 128Mi
             limits:
               cpu: 100m
-              memory: 128Mi
+              memory: 256Mi
           ports:
             - containerPort: {{ .Values.apis.workerDal.port }}
               name: http
@@ -40,14 +40,14 @@ spec:
             - {{ .Values.apis.workerDal.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
-        #   livenessProbe:
-        #     httpGet:
-        #       path: /health
-        #       port: {{ .Values.apis.workerDal.port }}
-        #     initialDelaySeconds: 15
-        #     periodSeconds: 10
-        #     timeoutSeconds: 5
-        #     failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /workerdal/health
+              port: {{ .Values.apis.workerDal.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           # TODO - improve how secrets are sourced in this template
           env:
             - name: MANMAN_POSTGRES_URL
