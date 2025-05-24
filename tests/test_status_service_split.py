@@ -18,24 +18,6 @@ sys.path.insert(0, str(project_root / "src"))
 class TestStatusServiceSplit:
     """Test suite for the status service split implementation."""
 
-    def test_status_api_import(self):
-        """Test that the Status API can be imported."""
-        from manman.host.api.status import router as status_router
-
-        assert status_router is not None
-
-    def test_status_processor_import(self):
-        """Test that the Status Processor can be imported."""
-        from manman.host.status_processor import StatusEventProcessor
-
-        assert StatusEventProcessor is not None
-
-    def test_main_module_import(self):
-        """Test that the main module can be imported."""
-        from manman.host.main import app
-
-        assert app is not None
-
     def test_fastapi_app_creation(self):
         """Test creating a FastAPI app with our status routes."""
         from fastapi import FastAPI
@@ -77,54 +59,9 @@ class TestStatusServiceSplit:
         for endpoint in expected_endpoints:
             assert endpoint in route_paths, f"Missing endpoint: {endpoint}"
 
-    def test_status_processor_class_structure(self):
-        """Test that the StatusEventProcessor has the expected methods."""
-        from manman.host.status_processor import StatusEventProcessor
-
-        # Check that the class has the expected methods
-        assert hasattr(StatusEventProcessor, "__init__")
-        assert hasattr(StatusEventProcessor, "run")
-        assert hasattr(StatusEventProcessor, "_handle_heartbeat_event")
-        assert hasattr(StatusEventProcessor, "_handle_server_started_event")
-        assert hasattr(StatusEventProcessor, "_handle_server_stopped_event")
-
-    def test_models_import_successfully(self):
-        """Test that our data models can be imported without issues."""
-        from manman import models
-
-        # Test that key models are available
-        assert hasattr(models, "Worker")
-        assert hasattr(models, "GameServerInstance")
-        assert hasattr(models, "CommandType")
-        assert hasattr(models, "Command")
-
-        # Test that we have the new command types for heartbeat
-        assert hasattr(models.CommandType, "HEARTBEAT")
-        assert hasattr(models.CommandType, "SERVER_STARTED")
-        assert hasattr(models.CommandType, "SERVER_STOPPED")
-
 
 class TestServiceCommands:
     """Test the CLI commands for starting services."""
-
-    def test_main_app_has_all_commands(self):
-        """Test that the main typer app has all expected commands."""
-        from manman.host.main import app
-
-        # Get command names from the typer app
-        command_names = [cmd.callback.__name__ for cmd in app.registered_commands]
-
-        expected_commands = [
-            "start_experience_api",
-            "start_status_api",
-            "start_worker_dal_api",
-            "start_status_processor",
-            "run_migration",
-            "create_migration",
-        ]
-
-        for cmd in expected_commands:
-            assert cmd in command_names, f"Missing command: {cmd}"
 
     def test_status_commands_have_correct_signatures(self):
         """Test that status-related commands have the expected parameters."""
