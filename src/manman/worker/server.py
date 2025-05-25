@@ -4,8 +4,6 @@ from typing import Self
 
 from amqpstorm import Connection
 
-from manman.api_client import WorkerAPIClient
-
 # import sqlalchemy
 # from sqlalchemy.orm import Session
 # from pydantic import BaseModel
@@ -17,6 +15,7 @@ from manman.models import (
     ServerType,
 )
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
+from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq import RabbitCommandSubscriber
 from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD

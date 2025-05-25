@@ -263,6 +263,15 @@ class WorkerAPIClient(APIClientBase):
             raise RuntimeError(response.content)
         return GameServerInstance.model_validate_json(response.content)
 
+    def server_heartbeat(self, instance: GameServerInstance) -> GameServerInstance:
+        response = self._session.get(
+            "/server/instance/heartbeat",
+            data=instance.model_dump_json(),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return GameServerInstance.model_validate_json(response.content)
+
     def worker_create(self):
         response = self._session.post(
             "/worker/create",
@@ -274,6 +283,15 @@ class WorkerAPIClient(APIClientBase):
     def worker_shutdown(self, worker: Worker):
         response = self._session.put(
             "/worker/shutdown",
+            data=worker.model_dump_json(),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(response.content)
+        return Worker.model_validate_json(response.content)
+
+    def worker_heartbeat(self, worker: Worker):
+        response = self._session.get(
+            "/worker/heartbeat",
             data=worker.model_dump_json(),
         )
         if response.status_code != 200:

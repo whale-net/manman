@@ -67,8 +67,7 @@ class GameServerInstance(ManManBase, table=True):
     worker_id: int = Field(foreign_key="workers.worker_id", index=True, nullable=True)
     worker: Optional[Worker] = Relationship(back_populates="game_server_instances")
 
-    # todo investigate this
-    # worker: Mapped["Worker"] = relationship(back_populates="game_server_instances")
+    last_heartbeat: Optional[datetime.datetime] = Field(nullable=True)
 
     def get_thread_name(self, extra: Optional[str] = None) -> str:
         extra_str = "-" + extra if extra is not None else ""

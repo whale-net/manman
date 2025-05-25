@@ -61,7 +61,7 @@ async def worker_shutdown_other(instance: Worker):
 
 
 # heartbeat
-@router.put("/heartbeat")
+@router.get("/heartbeat")
 async def worker_heartbeat(instance: Worker):
     with get_sqlalchemy_session() as sess:
         stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)

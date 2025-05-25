@@ -1,7 +1,9 @@
+import datetime
+
 import sqlalchemy
 from fastapi import APIRouter
-from sqlalchemy.sql.functions import current_timestamp
 
+# from sqlalchemy.sql.functions import current_timestamp
 from manman.models import GameServer, GameServerConfig, GameServerInstance
 from manman.util import get_sqlalchemy_session
 
@@ -42,7 +44,7 @@ async def server_instance_shutdown(instance: GameServerInstance) -> GameServerIn
         if current_instance.end_date is not None:
             raise Exception("instance already closed on server")
 
-        current_instance.end_date = current_timestamp()
+        current_instance.end_date = datetime.datetime.now(datetime.timezone.utc)
         sess.add(current_instance)
         sess.flush()
         sess.refresh(current_instance)
@@ -50,6 +52,26 @@ async def server_instance_shutdown(instance: GameServerInstance) -> GameServerIn
         sess.commit()
 
     return current_instance
+
+
+@router.get("/instance/{id}")
+async def server_instance(id: int) -> GameServerInstance:
+    with get_sqlalchemy_session() as sess:
+        instance = sess.get_one(GameServerInstance, id)
+        sess.expunge(instance)
+    return instance
+
+
+@router.get("/instance/heartbeat/{id}")
+async def server_instance_heartbeat(id: int) -> GameServerInstance:
+    with get_sqlalchemy_session() as sess:
+        instance = sess.get_one(GameServerInstance, id)
+        instance.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
+        sess.add(instance)
+        sess.flush()
+        sess.expunge(instance)
+        sess.commit()
+    return instance
 
 
 @router.get("/config/{id}")

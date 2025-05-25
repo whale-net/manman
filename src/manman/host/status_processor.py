@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from amqpstorm import Connection
 from sqlmodel import select
@@ -72,7 +72,7 @@ class StatusEventProcessor:
                 self._check_worker_heartbeats()
 
                 # Small sleep to avoid busy waiting
-                time.sleep(0.25)
+                time.sleep(0.5)
 
         except KeyboardInterrupt:
             logger.info("Received shutdown signal")
@@ -158,27 +158,39 @@ class StatusEventProcessor:
     def _check_worker_heartbeats(self):
         """Check for stale worker heartbeats and send worker lost notifications."""
         try:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             heartbeat_threshold = current_time - timedelta(seconds=5)
 
             with get_sqlalchemy_session() as session:
-                # Subquery to get the latest status for each worker
+                # Common Table Expression to get the latest status for each worker
+                from sqlalchemy import and_, func
 
-                # TODO 5/25 pick up here - this is not working
-                # the stale workers are not being detected
-                # force stale worker by just killing terminal window
-                # am I not setting the heartbeat?
+                # CTE to get the latest status timestamp for each worker
+                latest_status_cte = (
+                    select(
+                        StatusInfo.worker_id,
+                        func.max(StatusInfo.as_of).label("latest_as_of"),
+                    )
+                    .where(StatusInfo.worker_id.is_not(None))
+                    .group_by(StatusInfo.worker_id)
+                ).cte("latest_status_times")
 
+                # Join back to get the actual status records for the latest timestamps
                 latest_status_subquery = (
                     select(
                         StatusInfo.worker_id, StatusInfo.status_type, StatusInfo.as_of
                     )
+                    .join(
+                        latest_status_cte,
+                        and_(
+                            StatusInfo.worker_id == latest_status_cte.c.worker_id,
+                            StatusInfo.as_of == latest_status_cte.c.latest_as_of,
+                        ),
+                    )
                     .where(StatusInfo.worker_id.is_not(None))
-                    .order_by(StatusInfo.worker_id, StatusInfo.as_of.desc())
-                    .distinct(StatusInfo.worker_id)
                 ).subquery()
 
-                # Find workers with stale heartbeats that are currently in a RUNNING status
+                # Find workers with stale heartbeats that are currently in an active status
                 stale_workers = session.exec(
                     select(Worker)
                     .join(
@@ -187,8 +199,11 @@ class StatusEventProcessor:
                     )
                     .where(
                         Worker.last_heartbeat < heartbeat_threshold,
-                        Worker.end_date.is_(None),  # Only check active workers
-                        latest_status_subquery.c.status_type in ACTIVE_STATUS_TYPES,
+                        # Only check active workers
+                        Worker.end_date.is_(None),
+                        # who have active status types.
+                        # If it's completed, or lost/crashed we don't care about it
+                        latest_status_subquery.c.status_type.in_(ACTIVE_STATUS_TYPES),
                     )
                 ).all()
 

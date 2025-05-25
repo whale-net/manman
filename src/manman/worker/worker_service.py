@@ -6,8 +6,6 @@ from threading import Lock
 from amqpstorm import Connection
 from requests import ConnectionError
 
-# from sqlalchemy.orm import Session
-from manman.api_client import WorkerAPIClient
 from manman.models import (
     Command,
     CommandType,
@@ -15,6 +13,9 @@ from manman.models import (
     StatusInfoBase,
     StatusType,
 )
+
+# from sqlalchemy.orm import Session
+from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
@@ -104,6 +105,7 @@ class WorkerService:
 
     def run(self):
         loop_log_time = datetime.now()
+        loop_heartbeat_time = datetime.now()
         try:
             logger.info("worker service starting")
             # TODO - https://github.com/whale-net/manman/issues/44
@@ -115,9 +117,13 @@ class WorkerService:
             while True:
                 # TODO - periodically check if the worker instance is tracked as alive. exit if not
                 #  doing single worker architecture for now, so not needed
-                if datetime.now() - loop_log_time > timedelta(seconds=30):
+                now = datetime.now()
+                if now - loop_log_time > timedelta(seconds=30):
                     logger.info("still running - server_count=%s", len(self._servers))
-                    loop_log_time = datetime.now()
+                    loop_log_time = now
+                if now - loop_heartbeat_time > timedelta(seconds=2):
+                    self._wapi.worker_heartbeat(self._worker_instance)
+                    loop_heartbeat_time = now
 
                 # prune servers
                 self._servers_lock.acquire()
