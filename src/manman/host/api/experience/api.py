@@ -20,7 +20,7 @@ from manman.models import (
 from manman.util import get_sqlalchemy_session
 from manman.worker.worker_service import WorkerService
 
-router = APIRouter(prefix="/experience")
+router = APIRouter()
 
 
 # TODO - this whole thing needs rethnking ,but just going to hack it together for now
