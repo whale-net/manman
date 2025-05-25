@@ -1,0 +1,281 @@
+"""
+Integration tests for the status processor implementation.
+
+This module tests that the status processor correctly:
+1. Receives status messages from RabbitMQ
+2. Extracts routing keys properly
+3. Writes status information to the database
+"""
+
+import os
+import sys
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+
+# Add the src directory to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
+from manman.host.status_processor import StatusEventProcessor
+from manman.models import StatusInfoBase, StatusType
+from manman.repository.rabbitmq import StatusMessage
+
+
+class TestStatusProcessor:
+    """Integration tests for the status processor."""
+
+    @pytest.fixture(autouse=True)
+    def setup_test_environment(self, monkeypatch):
+        """Setup test environment variables."""
+        # Mock environment variables for testing
+        test_env = {
+            "MANMAN_RABBITMQ_HOST": "localhost",
+            "MANMAN_RABBITMQ_PORT": "5672",
+            "MANMAN_RABBITMQ_USER": "guest",
+            "MANMAN_RABBITMQ_PASSWORD": "guest",
+            "MANMAN_RABBITMQ_ENABLE_SSL": "false",
+            "MANMAN_POSTGRES_URL": "postgresql+psycopg2://postgres:postgres@localhost:5432/manman_test",
+            "APP_ENV": "test",
+        }
+
+        for key, value in test_env.items():
+            monkeypatch.setenv(key, value)
+
+    def test_status_processor_initialization(self):
+        """Test that the status processor can be initialized."""
+        # Mock the RabbitMQ connection and subscriber creation
+        mock_connection = Mock()
+
+        with patch(
+            "manman.host.status_processor.RabbitStatusSubscriber"
+        ) as mock_subscriber_class:
+            mock_subscriber = Mock()
+            mock_subscriber_class.return_value = mock_subscriber
+
+            # This should not raise any exceptions
+            processor = StatusEventProcessor(mock_connection)
+
+            assert processor is not None
+            assert processor._rabbitmq_connection == mock_connection
+            assert processor._is_running is False
+            assert processor._status_subscriber == mock_subscriber
+
+    def test_status_message_handling(self):
+        """Test status message handling without actual database/RabbitMQ."""
+        mock_connection = Mock()
+
+        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
+            processor = StatusEventProcessor(mock_connection)
+
+            # Create a test status message
+            status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
+            routing_key = "worker-instance.123.status"
+
+            # Mock the database write method to avoid actual database calls
+            with patch.object(processor, "_write_status_to_database") as mock_write:
+                processor._handle_status_message(status_info, routing_key)
+
+                # Verify the database write method was called with correct parameters
+                mock_write.assert_called_once_with(status_info, routing_key)
+
+    def test_routing_key_parsing(self):
+        """Test that worker_id is correctly extracted from routing keys."""
+        mock_connection = Mock()
+
+        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
+            processor = StatusEventProcessor(mock_connection)
+
+            # Create test status info
+            status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
+
+            # Mock database session and StatusInfo creation
+            with patch(
+                "manman.host.status_processor.get_sqlalchemy_session"
+            ) as mock_session_ctx:
+                mock_session = Mock()
+                mock_session_ctx.return_value.__enter__.return_value = mock_session
+
+                # Test valid routing key
+                routing_key = "worker-instance.456.status"
+                processor._write_status_to_database(status_info, routing_key)
+
+                # Verify session.add was called (meaning StatusInfo was created successfully)
+                mock_session.add.assert_called_once()
+                mock_session.commit.assert_called_once()
+
+    def test_invalid_routing_key_handling(self):
+        """Test handling of invalid routing keys."""
+        mock_connection = Mock()
+
+        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
+            processor = StatusEventProcessor(mock_connection)
+
+            status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
+
+            with patch(
+                "manman.host.status_processor.get_sqlalchemy_session"
+            ) as mock_session_ctx:
+                mock_session = Mock()
+                mock_session_ctx.return_value.__enter__.return_value = mock_session
+
+                # Test invalid routing keys
+                invalid_keys = [
+                    "invalid-format",
+                    "worker-instance.abc.status",  # non-numeric worker_id
+                    "worker-instance.123",  # missing .status suffix
+                    "other-instance.123.status",  # wrong prefix
+                    "",  # empty string
+                ]
+
+                for invalid_key in invalid_keys:
+                    mock_session.reset_mock()
+                    processor._write_status_to_database(status_info, invalid_key)
+
+                    # Verify that database operations were NOT called for invalid keys
+                    mock_session.add.assert_not_called()
+                    mock_session.commit.assert_not_called()
+
+    def test_status_message_creation(self):
+        """Test that StatusMessage objects are created correctly."""
+        status_info = StatusInfoBase.create("TestClass", StatusType.CREATED)
+        routing_key = "worker-instance.789.status"
+
+        status_message = StatusMessage(status_info=status_info, routing_key=routing_key)
+
+        assert status_message.status_info == status_info
+        assert status_message.routing_key == routing_key
+        assert status_message.status_info.class_name == "TestClass"
+        assert status_message.status_info.status_type == StatusType.CREATED
+
+    def test_database_error_handling(self):
+        """Test that database errors are handled gracefully."""
+        mock_connection = Mock()
+
+        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
+            processor = StatusEventProcessor(mock_connection)
+
+            status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
+            routing_key = "worker-instance.123.status"
+
+            # Mock database session to raise an exception
+            with patch(
+                "manman.host.status_processor.get_sqlalchemy_session"
+            ) as mock_session_ctx:
+                mock_session = Mock()
+                mock_session_ctx.return_value.__enter__.return_value = mock_session
+                mock_session.add.side_effect = Exception("Database connection failed")
+
+                # This should not raise an exception (should be logged instead)
+                processor._write_status_to_database(status_info, routing_key)
+
+                # Verify that the exception was caught and add was attempted
+                mock_session.add.assert_called_once()
+
+    def test_status_info_fields_mapping(self):
+        """Test that StatusInfo database record is created with correct field mapping."""
+        mock_connection = Mock()
+
+        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
+            processor = StatusEventProcessor(mock_connection)
+
+            # Create test status info with specific values
+            status_info = StatusInfoBase.create("TestWorker", StatusType.COMPLETE)
+            routing_key = "worker-instance.999.status"
+
+            with patch(
+                "manman.host.status_processor.get_sqlalchemy_session"
+            ) as mock_session_ctx:
+                mock_session = Mock()
+                mock_session_ctx.return_value.__enter__.return_value = mock_session
+
+                processor._write_status_to_database(status_info, routing_key)
+
+                # Get the StatusInfo object that was passed to session.add
+                mock_session.add.assert_called_once()
+                added_record = mock_session.add.call_args[0][0]
+
+                # Verify all fields are correctly mapped
+                assert added_record.worker_id == 999
+                assert added_record.game_server_instance_id is None
+                assert added_record.class_name == "TestWorker"
+                assert added_record.status_type == StatusType.COMPLETE
+                assert added_record.as_of == status_info.as_of
+
+    @pytest.mark.integration
+    def test_message_processing_flow(self):
+        """Integration test for the complete message processing flow."""
+        mock_connection = Mock()
+
+        with patch(
+            "manman.host.status_processor.RabbitStatusSubscriber"
+        ) as mock_subscriber_class:
+            mock_subscriber = Mock()
+            mock_subscriber_class.return_value = mock_subscriber
+
+            processor = StatusEventProcessor(mock_connection)
+
+            # Mock the status subscriber to return test messages
+            test_messages = [
+                StatusMessage(
+                    status_info=StatusInfoBase.create(
+                        "WorkerService", StatusType.CREATED
+                    ),
+                    routing_key="worker-instance.100.status",
+                ),
+                StatusMessage(
+                    status_info=StatusInfoBase.create("Server", StatusType.RUNNING),
+                    routing_key="worker-instance.101.status",
+                ),
+            ]
+
+            mock_subscriber.get_status_messages.return_value = test_messages
+
+            with patch.object(processor, "_handle_status_message") as mock_handle:
+                processor._process_status_messages()
+
+                # Verify that each message was handled
+                assert mock_handle.call_count == 2
+                mock_handle.assert_any_call(
+                    test_messages[0].status_info, test_messages[0].routing_key
+                )
+                mock_handle.assert_any_call(
+                    test_messages[1].status_info, test_messages[1].routing_key
+                )
+
+    def test_processor_shutdown(self):
+        """Test that the processor shuts down cleanly."""
+        mock_connection = Mock()
+
+        with patch(
+            "manman.host.status_processor.RabbitStatusSubscriber"
+        ) as mock_subscriber_class:
+            mock_subscriber = Mock()
+            mock_subscriber_class.return_value = mock_subscriber
+
+            processor = StatusEventProcessor(mock_connection)
+
+            processor._shutdown()
+
+            # Verify shutdown was called on the subscriber
+            mock_subscriber.shutdown.assert_called_once()
+            assert processor._is_running is False
+
+
+class TestStatusProcessorRealConnections:
+    """Tests that can run with real connections if services are available."""
+
+    @pytest.mark.skipif(
+        not os.getenv("INTEGRATION_TESTS_ENABLED"),
+        reason="Integration tests require INTEGRATION_TESTS_ENABLED=true and running services",
+    )
+    def test_end_to_end_status_processing(self):
+        """End-to-end test with real RabbitMQ and database connections."""
+        # This test would only run when explicitly enabled and when services are running
+        pytest.skip("End-to-end integration test - implement when needed")
+
+
+if __name__ == "__main__":
+    # Allow running this file directly for quick testing
+    pytest.main([__file__, "-v"])

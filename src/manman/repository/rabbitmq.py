@@ -2,11 +2,19 @@ import abc
 import logging
 import queue
 import threading
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from amqpstorm import Connection, Message
 
 from manman.models import Command, StatusInfoBase
+
+
+class StatusMessage(NamedTuple):
+    """Container for status message with routing information."""
+
+    status_info: StatusInfoBase
+    routing_key: str
+
 
 logger = logging.getLogger(__name__)
 
@@ -329,27 +337,34 @@ class RabbitStatusSubscriber:
     def _message_handler(self, message: Message):
         try:
             status_info = StatusInfoBase.model_validate_json(message.body)
-            self._status_queue.put(status_info)
+            # Capture routing key from the message
+            routing_key = message.method.get("routing_key", "")
+            status_message = StatusMessage(
+                status_info=status_info, routing_key=routing_key
+            )
+            self._status_queue.put(status_message)
             logger.debug(
-                "Status message received and queued: %s", status_info.class_name
+                "Status message received and queued: %s from routing key: %s",
+                status_info.class_name,
+                routing_key,
             )
             # No need to ack as no_ack=True is set
         except Exception as e:
             logger.exception("Error processing status message: %s", e)
             logger.error("Message body was: %s", message.body)
 
-    def get_status_messages(self) -> list[StatusInfoBase]:
+    def get_status_messages(self) -> list[StatusMessage]:
         """
         Retrieve a list of status messages from the subscriber.
         This method returns all available messages and is non-blocking.
 
-        :return: List of StatusInfo objects
+        :return: List of StatusMessage objects containing status info and routing key
         """
         status_messages = []
         while not self._status_queue.empty():
             try:
-                status_info: StatusInfoBase = self._status_queue.get(timeout=1)
-                status_messages.append(status_info)
+                status_message: StatusMessage = self._status_queue.get(timeout=1)
+                status_messages.append(status_message)
             except queue.Empty:
                 break
         return status_messages
