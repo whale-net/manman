@@ -3,9 +3,11 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from amqpstorm import Connection
-from sqlmodel import func, not_, select
+from sqlmodel import not_, select
 
 from manman.models import (
+    ACTIVE_STATUS_TYPES,
+    OBSERVED_STATUS_TYPES,
     StatusInfo,
     StatusType,
     Worker,
@@ -43,6 +45,8 @@ class StatusEventProcessor:
         # Publisher for sending worker lost notifications
         # Use "worker" exchange for consistency with worker status messages
 
+        # NOTE: consumers of this data should be using the external exchagne
+        # and subscribe to the topics they want
         self._external_status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange="external",
@@ -98,43 +102,40 @@ class StatusEventProcessor:
             heartbeat_max_lookback = current_time - timedelta(hours=1)
 
             with get_sqlalchemy_session() as session:
-                # it really hurts me to do a group by here, but we need to do it to avoid
-                # fucking up the stupid fucking ORM mapping shit
-                # I have literally no idea how to fix this and have spent more time fixing this single query than I did
-                # trying to write this entire module from scratch
-                # I have no idaa why I continue to use an ORM.
-                # every day that I use an ORM is a day I hate myself more
-                # this would be done already if I had just written the SQL manually
-                # like seriously, how am I fuckiung supposed to know what to use for none checks
-                # when the types are so fucked up that I can't even drill in to understand the functio nusage
-                # and the words are so generic (because fucking making them slightly more specific I guess)
-                # that I can't even search for them
-                # serisously, try searching for "sqlmodel is not none" and see what useufl garbage you get
-                # fuckign hate this shit.
+                inner = select(StatusInfo).alias("i")
                 last_status = (
-                    select(StatusInfo.worker_id, func.max(StatusInfo.as_of))
-                    .where(not_(StatusInfo.worker_id.is_(None)))
-                    .group_by(StatusInfo.worker_id)
+                    select(StatusInfo).where(
+                        not_(StatusInfo.worker_id.is_(None)),
+                        not_(
+                            select(inner)
+                            .where(
+                                inner.c.worker_id == StatusInfo.worker_id,
+                                inner.c.as_of > StatusInfo.as_of,
+                            )
+                            .exists()
+                        ),
+                    )
                 ).subquery()
 
                 candidate_workers = (
-                    select(Worker, last_status.c)
+                    select(Worker, last_status.c.status_type)
                     .join(last_status)
                     .where(
                         Worker.last_heartbeat > heartbeat_max_lookback,
                         Worker.last_heartbeat < heartbeat_threshold,
                         Worker.end_date.is_(None),
+                        last_status.c.status_type.in_(ACTIVE_STATUS_TYPES),
                     )
                 )
 
-                print(session.exec(candidate_workers).all())
-                stale_workers = []
-                for worker in stale_workers:
+                stale_workers = session.exec(candidate_workers).all()
+                for worker, current_status in stale_workers:
                     logger.warning(
-                        "Worker %s heartbeat is stale (last: %s, threshold: %s), marking as LOST",
+                        "Worker %s heartbeat is stale (last: %s, threshold: %s), marking as LOST from %s",
                         worker.worker_id,
                         worker.last_heartbeat,
                         heartbeat_threshold,
+                        current_status,
                     )
 
                     # Send worker lost notification
@@ -155,6 +156,7 @@ class StatusEventProcessor:
             )
 
             self._external_status_publisher.publish_external(lost_status)
+            self._write_status_to_database(lost_status)
             logger.info("Worker lost notification sent for worker %s", worker_id)
 
         except Exception as e:
@@ -195,7 +197,12 @@ class StatusEventProcessor:
                     status_info.status_type,
                     status_info.as_of,
                 )
-                self._write_status_to_database(status_info)
+                if status_info.status_type in OBSERVED_STATUS_TYPES:
+                    # If the status is in OBSERVED_STATUS_TYPES, we don't want to write it to the database
+                    # as it is already being handled by the status processor and written when processed
+                    continue
+                else:
+                    self._write_status_to_database(status_info)
         except Exception as e:
             logger.exception("Error processing external status messages: %s", e)
 
