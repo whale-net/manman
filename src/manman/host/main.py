@@ -1,6 +1,8 @@
+import json
 import logging
 import logging.config
 import os
+from pathlib import Path
 from typing import Optional
 
 import sqlalchemy
@@ -70,6 +72,23 @@ def _init_common_services(
         logger.info("Exchange declared %s", exchange)
 
 
+def _generate_openapi_spec(app, service_name: str):
+    """Generate and save OpenAPI specification for a FastAPI app."""
+    output_path = Path("./openapi-specs")
+    output_path.mkdir(exist_ok=True)
+
+    # Generate OpenAPI spec
+    openapi_spec = app.openapi()
+
+    # Save to file with service name
+    spec_file = output_path / f"{service_name}.json"
+    with open(spec_file, "w") as f:
+        json.dump(openapi_spec, f, indent=2)
+
+    logger.info(f"OpenAPI spec saved to: {spec_file}")
+    print(f"OpenAPI spec saved to: {spec_file}")
+
+
 @app.command()
 def start_experience_api(
     rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
@@ -85,6 +104,12 @@ def start_experience_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
+    generate_openapi: Annotated[
+        bool,
+        typer.Option(
+            help="Generate OpenAPI spec and exit instead of running the server"
+        ),
+    ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     _init_common_services(
@@ -108,6 +133,11 @@ def start_experience_api(
     experience_app.include_router(experience_router)
     add_health_check(experience_app)
 
+    # If OpenAPI generation is requested, generate spec and exit
+    if generate_openapi:
+        _generate_openapi_spec(experience_app, "experience-api")
+        return
+
     uvicorn.run(experience_app, host="0.0.0.0", port=port)
 
 
@@ -126,6 +156,12 @@ def start_status_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
+    generate_openapi: Annotated[
+        bool,
+        typer.Option(
+            help="Generate OpenAPI spec and exit instead of running the server"
+        ),
+    ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
     _init_common_services(
@@ -149,6 +185,11 @@ def start_status_api(
     status_app.include_router(status_router)
     add_health_check(status_app)
 
+    # If OpenAPI generation is requested, generate spec and exit
+    if generate_openapi:
+        _generate_openapi_spec(status_app, "status-api")
+        return
+
     uvicorn.run(status_app, host="0.0.0.0", port=port)
 
 
@@ -167,6 +208,12 @@ def start_worker_dal_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
+    generate_openapi: Annotated[
+        bool,
+        typer.Option(
+            help="Generate OpenAPI spec and exit instead of running the server"
+        ),
+    ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     _init_common_services(
@@ -194,6 +241,11 @@ def start_worker_dal_api(
     worker_dal_app.include_router(worker_router)
     # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
     add_health_check(worker_dal_app)
+
+    # If OpenAPI generation is requested, generate spec and exit
+    if generate_openapi:
+        _generate_openapi_spec(worker_dal_app, "worker-dal-api")
+        return
 
     uvicorn.run(worker_dal_app, host="0.0.0.0", port=port)
 
