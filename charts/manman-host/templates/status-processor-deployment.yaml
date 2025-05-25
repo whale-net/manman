@@ -37,7 +37,20 @@ spec:
             - {{ .Values.processors.status.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
-          # No health check needed for processors - they're not HTTP services
+          ports:
+            - containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
           env:
             - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}

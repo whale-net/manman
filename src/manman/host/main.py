@@ -1,5 +1,6 @@
 import logging
 import os
+import threading  # Add threading import
 from typing import Optional
 
 import sqlalchemy
@@ -224,10 +225,29 @@ def start_status_processor(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
     )
+    logger.info("Starting status event processor...")
 
     # Start the status event processor (pub/sub only, no HTTP server)
+    from fastapi import FastAPI  # Add FastAPI import
+
+    from manman.host.api.shared import (
+        add_health_check,  # Ensure this import is present or add it
+    )
     from manman.host.status_processor import StatusEventProcessor
     from manman.util import get_rabbitmq_connection
+
+    # Define and run health check API in a separate thread
+    health_check_app = FastAPI(title="ManMan Status Processor Health Check")
+    add_health_check(health_check_app)
+
+    def run_health_check_server():
+        uvicorn.run(
+            health_check_app, host="0.0.0.0", port=8000, log_config=None
+        )  # Hardcoded port 8000
+
+    health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
+    health_check_thread.start()
+    logger.info("Health check API for status processor started on port 8000")
 
     processor = StatusEventProcessor(get_rabbitmq_connection())
     processor.run()

@@ -8,7 +8,13 @@ from requests import ConnectionError
 
 # from sqlalchemy.orm import Session
 from manman.api_client import WorkerAPIClient
-from manman.models import Command, CommandType, GameServerConfig, StatusInfo, StatusType
+from manman.models import (
+    Command,
+    CommandType,
+    GameServerConfig,
+    StatusInfoBase,
+    StatusType,
+)
 from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
@@ -73,7 +79,7 @@ class WorkerService:
 
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfo.create(self.__class__.__name__, StatusType.CREATED),
+            status=StatusInfoBase.create(self.__class__.__name__, StatusType.CREATED),
         )
 
     @staticmethod
@@ -102,7 +108,9 @@ class WorkerService:
             logger.info("worker service starting")
             # TODO - https://github.com/whale-net/manman/issues/44
             self._status_publisher.publish(
-                status=StatusInfo.create(self.__class__.__name__, StatusType.RUNNING),
+                status=StatusInfoBase.create(
+                    self.__class__.__name__, StatusType.RUNNING
+                ),
             )
             while True:
                 # TODO - periodically check if the worker instance is tracked as alive. exit if not
@@ -136,7 +144,7 @@ class WorkerService:
         self._wapi.worker_shutdown(self._worker_instance)
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfo.create(self.__class__.__name__, StatusType.COMPLETE),
+            status=StatusInfoBase.create(self.__class__.__name__, StatusType.COMPLETE),
         )
         self._command_provider.shutdown()
         self._status_publisher.shutdown()

@@ -4,6 +4,7 @@ from typing import Optional
 
 from sqlalchemy import (  # using postgres.ARRAY I guess; MetaData,; ForeignKey,
     ARRAY,
+    CheckConstraint,  # Add CheckConstraint
     Column,
     Index,
     String,
@@ -22,7 +23,7 @@ class ServerType(Enum):
     STEAM = 1
 
 
-class Base(SQLModel):
+class ManManBase(SQLModel):
     metadata = MetaData(schema="manman")
     # type_annotation_map = {
     #     dict[str, Any]: JSON,
@@ -30,7 +31,7 @@ class Base(SQLModel):
     # }
 
 
-class Worker(Base, table=True):
+class Worker(ManManBase, table=True):
     __tablename__ = "workers"
     worker_id: int = Field(primary_key=True)
     # ip_addr: Mapped[str] = mapped_column(String(15))
@@ -49,7 +50,7 @@ class Worker(Base, table=True):
 
 # do I need server table? -> yes, but make worker manage state
 # make health check contain server info for trueups
-class GameServerInstance(Base, table=True):
+class GameServerInstance(ManManBase, table=True):
     __tablename__ = "game_server_instances"
     game_server_instance_id: int = Field(primary_key=True)
 
@@ -74,7 +75,7 @@ class GameServerInstance(Base, table=True):
         return f"server[{self.game_server_instance_id}{extra_str}]"
 
 
-class GameServer(Base, table=True):
+class GameServer(ManManBase, table=True):
     __tablename__ = "game_servers"
     game_server_id: int = Field(primary_key=True)
     name: str = Field()
@@ -100,7 +101,7 @@ class GameServer(Base, table=True):
     )
 
 
-class GameServerConfig(Base, table=True):
+class GameServerConfig(ManManBase, table=True):
     __tablename__ = "game_server_configs"
     game_server_config_id: int = Field(primary_key=True)
     game_server_id: int = Field(foreign_key="game_servers.game_server_id", index=True)
@@ -143,7 +144,7 @@ class CommandType(Enum):
 # {"command_type":"START", "command_args": []}
 # {"command_type":"STOP", "command_args": []}
 # TODO subclass for each comamnd type + parent class factory based on enum
-class Command(Base):
+class Command(ManManBase):
     command_type: CommandType = Field()
     command_args: list[str] = Field(default=[])
 
@@ -159,7 +160,7 @@ class StatusType(Enum):
     CRASHED = "CRASHED"
 
 
-class StatusInfo(Base):
+class StatusInfoBase(ManManBase):
     class_name: str = Field()
     status_type: StatusType = Field()
     as_of: datetime.datetime = Field(default=current_timestamp())
@@ -169,6 +170,43 @@ class StatusInfo(Base):
         cls,
         class_name: str,
         status_type: StatusType,
-    ) -> "StatusInfo":
+    ) -> "StatusInfoBase":
         as_of = datetime.datetime.now(datetime.timezone.utc)
         return cls(class_name=class_name, status_type=status_type, as_of=as_of)
+
+
+### BACK TO TABLES
+
+
+class StatusInfo(StatusInfoBase, table=True):
+    __tablename__ = "status_info"
+    status_info_id: int = Field(primary_key=True)
+
+    worker_id: Optional[int] = Field(  # Made Optional
+        default=None, foreign_key="workers.worker_id", index=True
+    )
+    worker: Optional[Worker] = Relationship()  # Made Optional
+
+    game_server_instance_id: Optional[int] = Field(  # Made Optional
+        default=None,
+        foreign_key="game_server_instances.game_server_instance_id",
+        index=True,
+    )
+    game_server_instance: Optional[GameServerInstance] = Relationship()  # Made Optional
+
+    __table_args__ = (
+        CheckConstraint(
+            "(worker_id IS NULL AND game_server_instance_id IS NOT NULL) OR "
+            "(worker_id IS NOT NULL AND game_server_instance_id IS NULL)",
+            name="chk_status_info_target_not_null",
+        ),
+        Index(
+            "ix_status_info_as_of_game_server_instance_worker",
+            "as_of",
+            "game_server_instance_id",
+            "worker_id",
+        ),
+        # Preserve existing indexes if any, or add them here if needed
+        # e.g., Index("ix_status_info_worker_id", "worker_id"),
+        # Index("ix_status_info_game_server_instance_id", "game_server_instance_id"),
+    )

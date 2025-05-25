@@ -6,7 +6,7 @@ from typing import Optional
 
 from amqpstorm import Connection, Message
 
-from manman.models import Command, StatusInfo
+from manman.models import Command, StatusInfoBase
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class RabbitStatusPublisher(MessagePublisher):
         logger.info("Queue declared %s", self._queue_name)
         logger.info("Rabbit message publisher created %s", self._exchange)
 
-    def publish(self, status: StatusInfo) -> None:
+    def publish(self, status: StatusInfoBase) -> None:
         message = status.model_dump_json()
         self._channel.basic.publish(
             body=message,
@@ -242,3 +242,141 @@ class RabbitCommandSubscriber(MessageSubscriber):
                 logger.info("Channel closed.")
         except Exception as e:
             logger.exception("Error closing channel: %s", e)
+
+
+class RabbitStatusSubscriber:
+    """
+    A message subscriber that retrieves status messages from a RabbitMQ queue.
+
+    This class sets up a connection to RabbitMQ, declares an exchange and
+    a queue, and starts consuming messages from the queue in a separate
+    thread. It uses AMQPStorm's thread-safe connection internally, managed
+    in its own thread, to continuously listen for messages. Received messages are
+    parsed as `StatusInfo` objects and placed in an internal queue for retrieval
+    by the `get_status_messages` method.
+
+    Supports both exact routing key matches and wildcard patterns when used with topic exchanges.
+    """
+
+    def __init__(
+        self,
+        connection: Connection,
+        exchange: str,
+        routing_key: str = "",
+        queue_name: Optional[str] = None,
+    ) -> None:
+        """
+        :param connection: An AMQPStorm connection to the RabbitMQ server.
+        :param exchange: Exchange to bind to
+        :param routing_key: Routing key pattern for message filtering (supports wildcards with topic exchanges)
+        :param queue_name: Name of queue to bind to the exchange. If None, a random name will be generated.
+        """
+        self._queue_name = queue_name
+        self._exchange = exchange
+        self._routing_key = routing_key
+        self._channel = connection.channel()
+
+        # Declare queue
+        result = self._channel.queue.declare(
+            queue=self._queue_name or "",
+            auto_delete=True,
+        )
+        if not result:
+            logger.error("Unable to declare queue with name %s", self._queue_name)
+            raise RuntimeError("Failed to create queue")
+
+        self._queue_name = result["queue"]
+        logger.info("Status queue declared %s", self._queue_name)
+
+        # Bind the queue to the exchange with routing key
+        self._channel.queue.bind(
+            exchange=self._exchange,
+            queue=self._queue_name,
+            routing_key=self._routing_key,
+        )
+        logger.info(
+            "Queue %s bound to exchange %s with routing key '%s'",
+            self._queue_name,
+            self._exchange,
+            self._routing_key,
+        )
+
+        self._name = f"rmq-status-{self._exchange}-{self._queue_name}"
+        self._status_queue = queue.Queue()
+        self._consumer_tag = None
+
+        # Set up consumption
+        self._consumer_tag = self._channel.basic.consume(
+            callback=self._message_handler,
+            queue=self._queue_name,
+            no_ack=True,  # equivalent to auto_ack=True in pika
+        )
+
+        # Start consuming in a separate thread
+        self._rabbit_thread = threading.Thread(
+            target=self._start_consuming,
+            name=self._name,
+            daemon=True,
+        )
+        self._rabbit_thread.start()
+
+        logger.info("Rabbit status subscriber created %s", self._name)
+
+    def _start_consuming(self):
+        logger.info("Starting to consume status messages")
+        self._channel.start_consuming()
+
+    def _message_handler(self, message: Message):
+        try:
+            status_info = StatusInfoBase.model_validate_json(message.body)
+            self._status_queue.put(status_info)
+            logger.debug(
+                "Status message received and queued: %s", status_info.class_name
+            )
+            # No need to ack as no_ack=True is set
+        except Exception as e:
+            logger.exception("Error processing status message: %s", e)
+            logger.error("Message body was: %s", message.body)
+
+    def get_status_messages(self) -> list[StatusInfoBase]:
+        """
+        Retrieve a list of status messages from the subscriber.
+        This method returns all available messages and is non-blocking.
+
+        :return: List of StatusInfo objects
+        """
+        status_messages = []
+        while not self._status_queue.empty():
+            try:
+                status_info: StatusInfoBase = self._status_queue.get(timeout=1)
+                status_messages.append(status_info)
+            except queue.Empty:
+                break
+        return status_messages
+
+    def shutdown(self) -> None:
+        logger.info("Shutting down RabbitStatusSubscriber...")
+
+        try:
+            # Cancel the consumer
+            if self._consumer_tag and self._channel.is_open:
+                self._channel.basic.cancel(self._consumer_tag)
+                logger.info("Status consumer cancelled.")
+        except Exception as e:
+            logger.exception("Error cancelling status consumer: %s", e)
+
+        try:
+            # Stop consuming
+            if self._channel.is_open:
+                self._channel.stop_consuming()
+                logger.info("Stopped consuming status messages.")
+        except Exception as e:
+            logger.exception("Error stopping consuming: %s", e)
+
+        try:
+            # Close the channel
+            if self._channel.is_open:
+                self._channel.close()
+                logger.info("Status channel closed.")
+        except Exception as e:
+            logger.exception("Error closing status channel: %s", e)
