@@ -8,7 +8,6 @@ from sqlmodel import select
 from manman.models import (
     ACTIVE_STATUS_TYPES,
     StatusInfo,
-    StatusInfoBase,
     StatusType,
     Worker,
 )
@@ -36,8 +35,10 @@ class StatusEventProcessor:
         self._status_subscriber = RabbitStatusSubscriber(
             connection=self._rabbitmq_connection,
             exchange="worker",  # Same exchange that workers publish to
-            routing_key="worker-instance.*.status",  # Wildcard pattern for all workers
-            queue_name="status-processor-queue",  # Our own queue name
+            # TODO - reference worker class or something for this
+            routing_key="worker-instance.*.status",
+            # our queue name
+            queue_name="status-processor-queue",
         )
 
         # Publisher for sending worker lost notifications
@@ -84,72 +85,43 @@ class StatusEventProcessor:
         try:
             status_messages = self._status_subscriber.get_status_messages()
             for status_message in status_messages:
+                print(status_message.status_info)
+                print(status_message.status_info.status_type)
                 self._handle_status_message(
-                    status_message.status_info, status_message.routing_key
+                    status_message.status_info,
                 )
         except Exception as e:
             logger.exception("Error processing status messages: %s", e)
 
-    def _handle_status_message(self, status_info: StatusInfoBase, routing_key: str):
+    def _handle_status_message(self, status_info: StatusInfo):
         """Handle a single status message - logs it and writes to database."""
         logger.info(
-            "Status update received: class=%s, status=%s, timestamp=%s, routing_key=%s",
+            "Status update received: class=%s, status=%s, timestamp=%s",
             status_info.class_name,
-            status_info.status_type.value,
+            status_info.status_type,
             status_info.as_of,
-            routing_key,
         )
 
         # For now, keep the print for debugging
         print(
-            f"[STATUS] {status_info.class_name}: {status_info.status_type.value} at {status_info.as_of} (routing_key: {routing_key})"
+            f"[STATUS] {status_info.class_name}: {status_info.status_type.value} at {status_info.as_of}"
         )
 
         # Write to database
-        self._write_status_to_database(status_info, routing_key)
+        self._write_status_to_database(status_info)
 
-    def _write_status_to_database(self, status_info: StatusInfoBase, routing_key: str):
+    def _write_status_to_database(self, status_info: StatusInfo):
         """Write status message to the database."""
         try:
-            # Extract worker_id from routing key
-            # Expected format: worker-instance.{worker_id}.status
-            worker_id = None
-            if routing_key.startswith("worker-instance.") and routing_key.endswith(
-                ".status"
-            ):
-                parts = routing_key.split(".")
-                if len(parts) == 3:
-                    try:
-                        worker_id = int(parts[1])  # Convert to integer
-                    except ValueError:
-                        logger.warning(
-                            "Invalid worker_id in routing key: %s", routing_key
-                        )
-                        return
-
-            if not worker_id:
-                logger.warning(
-                    "Could not extract worker_id from routing key: %s", routing_key
-                )
-                return
-
-            # Create StatusInfo object for database
-            status_record = StatusInfo(
-                worker_id=worker_id,
-                game_server_instance_id=None,  # For now, only handling worker status
-                class_name=status_info.class_name,
-                status_type=status_info.status_type,
-                as_of=status_info.as_of,
-            )
-
             # Write to database
             with get_sqlalchemy_session() as session:
-                session.add(status_record)
+                session.add(status_info)
                 session.commit()
                 logger.debug(
-                    "Status written to database: worker_id=%s, class=%s",
-                    worker_id,
+                    "Status written to database: %s, %s, %s",
                     status_info.class_name,
+                    status_info.status_type.value,
+                    status_info.as_of,
                 )
 
         except Exception as e:
@@ -219,16 +191,19 @@ class StatusEventProcessor:
                     status_record = StatusInfo(
                         worker_id=worker.worker_id,
                         game_server_instance_id=None,
+                        # this is currently status_event_processor, but should probably be the
+                        # worker class name. For now, going to keep this as-is, because this may end up
+                        # working better for us in the long run
                         class_name="StatusEventProcessor",
                         status_type=StatusType.LOST,
                         as_of=current_time,
                     )
-                    session.add(status_record)
+                    # write asap, do not batch. unsure if good idea but it's how
+                    # it's being done for now
+                    self._write_status_to_database(status_record)
 
                     # Send worker lost notification
                     self._send_worker_lost_notification(worker.worker_id)
-
-                session.commit()
 
         except Exception as e:
             logger.exception("Error checking worker heartbeats: %s", e)
@@ -237,10 +212,11 @@ class StatusEventProcessor:
         """Send a worker lost notification via RabbitMQ."""
         try:
             # Create a status message indicating the worker is lost
-            lost_status = StatusInfoBase(
+            lost_status = StatusInfo(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
-                as_of=datetime.utcnow(),
+                as_of=datetime.now(timezone.utc),
+                worker_id=worker_id,
             )
 
             # Publish the worker lost status message to the status exchange

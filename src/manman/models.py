@@ -2,6 +2,7 @@ import datetime
 from enum import Enum
 from typing import Optional
 
+from pydantic import field_validator, model_validator
 from sqlalchemy import (  # using postgres.ARRAY I guess; MetaData,; ForeignKey,
     ARRAY,
     CheckConstraint,  # Add CheckConstraint
@@ -164,28 +165,24 @@ ACTIVE_STATUS_TYPES = {
     StatusType.INITIALIZING,
     StatusType.RUNNING,
 }
-
-
-class StatusInfoBase(ManManBase):
-    class_name: str = Field()
-    status_type: StatusType = Field()
-    as_of: datetime.datetime = Field(default=current_timestamp())
-
-    @classmethod
-    def create(
-        cls,
-        class_name: str,
-        status_type: StatusType,
-    ) -> "StatusInfoBase":
-        as_of = datetime.datetime.now(datetime.timezone.utc)
-        return cls(class_name=class_name, status_type=status_type, as_of=as_of)
+# Although a little strange, these are types that cannot be produced by a running system
+# and must be observed by the status processor
+OBSERVED_STATUS_TYPES = {
+    StatusType.LOST,
+    StatusType.CRASHED,
+}
 
 
 ### BACK TO TABLES
 
 
-class StatusInfo(StatusInfoBase, table=True):
+class StatusInfo(ManManBase, table=True):
     __tablename__ = "status_info"
+
+    class_name: str = Field()
+    status_type: StatusType = Field()
+    as_of: datetime.datetime = Field(default=current_timestamp())
+
     status_info_id: int = Field(primary_key=True)
 
     worker_id: Optional[int] = Field(  # Made Optional
@@ -199,6 +196,20 @@ class StatusInfo(StatusInfoBase, table=True):
         index=True,
     )
     game_server_instance: Optional[GameServerInstance] = Relationship()  # Made Optional
+
+    @field_validator("status_type", mode="before")
+    @classmethod
+    def validate_status_type(cls, v):
+        """Convert string status type to enum if necessary."""
+        if isinstance(v, str):
+            try:
+                return StatusType(v)
+            except ValueError:
+                raise ValueError(f"Invalid status type: {v}")
+        elif isinstance(v, StatusType):
+            return v
+        else:
+            raise ValueError(f"Invalid status type: {v}")
 
     __table_args__ = (
         CheckConstraint(
@@ -216,3 +227,34 @@ class StatusInfo(StatusInfoBase, table=True):
         # e.g., Index("ix_status_info_worker_id", "worker_id"),
         # Index("ix_status_info_game_server_instance_id", "game_server_instance_id"),
     )
+
+    @model_validator(mode="after")
+    def validate_target_exclusivity(self):
+        """Ensure exactly one of worker_id or game_server_instance_id is set."""
+        worker_set = self.worker_id is not None
+        instance_set = self.game_server_instance_id is not None
+
+        if worker_set and instance_set:
+            raise ValueError("Cannot set both worker_id and game_server_instance_id")
+
+        if not worker_set and not instance_set:
+            raise ValueError("Must set either worker_id or game_server_instance_id")
+
+        return self
+
+    @classmethod
+    def create(
+        cls,
+        class_name: str,
+        status_type: StatusType,
+        worker_id: Optional[int] = None,
+        game_server_instance_id: Optional[int] = None,
+    ) -> "StatusInfo":
+        as_of = datetime.datetime.now(datetime.timezone.utc)
+        return cls(
+            class_name=class_name,
+            status_type=status_type,
+            as_of=as_of,
+            worker_id=worker_id,
+            game_server_instance_id=game_server_instance_id,
+        )

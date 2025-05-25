@@ -10,7 +10,7 @@ from manman.models import (
     Command,
     CommandType,
     GameServerConfig,
-    StatusInfoBase,
+    StatusInfo,
     StatusType,
 )
 
@@ -80,7 +80,11 @@ class WorkerService:
 
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfoBase.create(self.__class__.__name__, StatusType.CREATED),
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.CREATED,
+                worker_id=self._worker_instance.worker_id,
+            ),
         )
 
     @staticmethod
@@ -110,8 +114,10 @@ class WorkerService:
             logger.info("worker service starting")
             # TODO - https://github.com/whale-net/manman/issues/44
             self._status_publisher.publish(
-                status=StatusInfoBase.create(
-                    self.__class__.__name__, StatusType.RUNNING
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.RUNNING,
+                    worker_id=self._worker_instance.worker_id,
                 ),
             )
             while True:
@@ -150,7 +156,11 @@ class WorkerService:
         self._wapi.worker_shutdown(self._worker_instance)
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfoBase.create(self.__class__.__name__, StatusType.COMPLETE),
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.COMPLETE,
+                worker_id=self._worker_instance.worker_id,
+            ),
         )
         self._command_provider.shutdown()
         self._status_publisher.shutdown()

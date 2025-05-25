@@ -6,13 +6,13 @@ from typing import NamedTuple, Optional
 
 from amqpstorm import Connection, Message
 
-from manman.models import Command, StatusInfoBase
+from manman.models import Command, StatusInfo
 
 
 class StatusMessage(NamedTuple):
     """Container for status message with routing information."""
 
-    status_info: StatusInfoBase
+    status_info: StatusInfo
     routing_key: str
 
 
@@ -102,12 +102,6 @@ class RabbitStatusPublisher(MessagePublisher):
         self._channel.queue.bind(
             exchange=exchange, queue=self._queue_name, routing_key=routing_key
         )
-        # TODO - link this up at some point properly, but avoid circular imports
-        self._channel.queue.bind(
-            exchange=exchange,
-            queue="status-processor-queue",
-            routing_key=routing_key,
-        )
         if not result:
             logger.error("Unable to declare queue with name %s", self._queue_name)
             raise RuntimeError("Failed to create queue")
@@ -115,7 +109,7 @@ class RabbitStatusPublisher(MessagePublisher):
         logger.info("Queue declared %s", self._queue_name)
         logger.info("Rabbit message publisher created %s", self._exchange)
 
-    def publish(self, status: StatusInfoBase) -> None:
+    def publish(self, status: StatusInfo) -> None:
         message = status.model_dump_json()
         self._channel.basic.publish(
             body=message,
@@ -342,7 +336,8 @@ class RabbitStatusSubscriber:
 
     def _message_handler(self, message: Message):
         try:
-            status_info = StatusInfoBase.model_validate_json(message.body)
+            status_info = StatusInfo.model_validate_json(message.body)
+
             # Capture routing key from the message
             routing_key = message.method.get("routing_key", "")
             status_message = StatusMessage(
