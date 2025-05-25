@@ -47,3 +47,12 @@ def test_field_validator_create_invalid_string():
             status_type="INVALID_STATUS",  # Invalid string
             worker_id=1,
         )
+
+
+def test_field_validator_create_invalid_id():
+    """Test the status_type field validator."""
+
+    with pytest.raises(ValueError):
+        StatusInfo.create(
+            "TestClass", StatusType.RUNNING, worker_id=1, game_server_instance_id=1
+        )

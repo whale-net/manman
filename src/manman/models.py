@@ -2,7 +2,6 @@ import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import field_validator, model_validator
 from sqlalchemy import (  # using postgres.ARRAY I guess; MetaData,; ForeignKey,
     ARRAY,
     CheckConstraint,  # Add CheckConstraint
@@ -179,6 +178,37 @@ OBSERVED_STATUS_TYPES = {
 class StatusInfo(ManManBase, table=True):
     __tablename__ = "status_info"
 
+    def __init__(self, **data):
+        """
+        Custom init to handle status_type validation.
+        This is necessary because Pydantic's field_validator
+        is not called during the __init__ method for whatever reason
+        when table=True is set (or some other sqlmodel behavior)
+
+        This is frustrating, but can be worked around by doing the validation here.
+        Ideally, we do what fcm does with models, but that is a lot of work
+        and not sure if worth it. For now, this is a good enough solution.
+        """
+        # Handle status_type validation before calling super().__init__
+        if "status_type" in data:
+            status_type = data["status_type"]
+            if isinstance(status_type, str):
+                try:
+                    data["status_type"] = StatusType(status_type)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid status type: {status_type}. Must be a valid StatusType."
+                    )
+            elif not isinstance(status_type, StatusType):
+                raise ValueError(f"Invalid status type: {status_type}")
+
+        super().__init__(**data)
+
+        # validate target exclusivity after init
+        # This is necessary because Pydantic's model_validator is not called
+        # for whatever reason
+        self._validate_target_exclusivity(self)
+
     class_name: str = Field()
     status_type: StatusType = Field()
     as_of: datetime.datetime = Field(default=current_timestamp())
@@ -214,11 +244,11 @@ class StatusInfo(ManManBase, table=True):
         # Index("ix_status_info_game_server_instance_id", "game_server_instance_id"),
     )
 
-    @model_validator(mode="after")
-    def validate_target_exclusivity(self):
+    @staticmethod
+    def _validate_target_exclusivity(info: "StatusInfo") -> "StatusInfo":
         """Ensure exactly one of worker_id or game_server_instance_id is set."""
-        worker_set = self.worker_id is not None
-        instance_set = self.game_server_instance_id is not None
+        worker_set = info.worker_id is not None
+        instance_set = info.game_server_instance_id is not None
 
         if worker_set and instance_set:
             raise ValueError("Cannot set both worker_id and game_server_instance_id")
@@ -226,23 +256,7 @@ class StatusInfo(ManManBase, table=True):
         if not worker_set and not instance_set:
             raise ValueError("Must set either worker_id or game_server_instance_id")
 
-        return self
-
-    @field_validator("status_type")
-    @classmethod
-    def validate_status_type(cls, v) -> StatusType:
-        """Convert string status type to enum if necessary."""
-        if isinstance(v, str):
-            try:
-                return StatusType(v)
-            except ValueError:
-                raise ValueError(
-                    f"Invalid status type: {v}. Must be a valid StatusType."
-                )
-        elif isinstance(v, StatusType):
-            return v
-        else:
-            raise ValueError(f"Invalid status type: {v}")
+        return info
 
     @classmethod
     def create(
