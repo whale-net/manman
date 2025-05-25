@@ -160,6 +160,13 @@ class StatusType(Enum):
     CRASHED = "CRASHED"
 
 
+ACTIVE_STATUS_TYPES = {
+    StatusType.CREATED,
+    StatusType.INITIALIZING,
+    StatusType.RUNNING,
+}
+
+
 class StatusInfoBase(ManManBase):
     class_name: str = Field()
     status_type: StatusType = Field()

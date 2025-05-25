@@ -5,7 +5,13 @@ from datetime import datetime, timedelta
 from amqpstorm import Connection
 from sqlmodel import select
 
-from manman.models import StatusInfo, StatusInfoBase, StatusType, Worker
+from manman.models import (
+    ACTIVE_STATUS_TYPES,
+    StatusInfo,
+    StatusInfoBase,
+    StatusType,
+    Worker,
+)
 from manman.repository.rabbitmq import RabbitStatusPublisher, RabbitStatusSubscriber
 from manman.util import get_sqlalchemy_session
 
@@ -36,6 +42,9 @@ class StatusEventProcessor:
 
         # Publisher for sending worker lost notifications
         # Use "worker" exchange for consistency with worker status messages
+
+        # TODO 5/25 - use different status pblisher for sending worker lost notifications
+        # this should send StatusNotification messages which include worker or instnace id
         self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange="worker",
@@ -63,7 +72,7 @@ class StatusEventProcessor:
                 self._check_worker_heartbeats()
 
                 # Small sleep to avoid busy waiting
-                time.sleep(0.1)
+                time.sleep(0.25)
 
         except KeyboardInterrupt:
             logger.info("Received shutdown signal")
@@ -153,11 +162,33 @@ class StatusEventProcessor:
             heartbeat_threshold = current_time - timedelta(seconds=5)
 
             with get_sqlalchemy_session() as session:
-                # Find active workers with stale heartbeats
+                # Subquery to get the latest status for each worker
+
+                # TODO 5/25 pick up here - this is not working
+                # the stale workers are not being detected
+                # force stale worker by just killing terminal window
+                # am I not setting the heartbeat?
+
+                latest_status_subquery = (
+                    select(
+                        StatusInfo.worker_id, StatusInfo.status_type, StatusInfo.as_of
+                    )
+                    .where(StatusInfo.worker_id.is_not(None))
+                    .order_by(StatusInfo.worker_id, StatusInfo.as_of.desc())
+                    .distinct(StatusInfo.worker_id)
+                ).subquery()
+
+                # Find workers with stale heartbeats that are currently in a RUNNING status
                 stale_workers = session.exec(
-                    select(Worker).where(
+                    select(Worker)
+                    .join(
+                        latest_status_subquery,
+                        Worker.worker_id == latest_status_subquery.c.worker_id,
+                    )
+                    .where(
                         Worker.last_heartbeat < heartbeat_threshold,
                         Worker.end_date.is_(None),  # Only check active workers
+                        latest_status_subquery.c.status_type in ACTIVE_STATUS_TYPES,
                     )
                 ).all()
 
