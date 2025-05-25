@@ -1,16 +1,16 @@
 import logging
+import logging.config
 import os
-import threading  # Add threading import
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.util import (
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
@@ -38,7 +38,6 @@ def _init_common_services(
     """Initialize common services required by both APIs."""
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
-
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
     # Initialize with AMQPStorm connection parameters
@@ -228,25 +227,28 @@ def start_status_processor(
     logger.info("Starting status event processor...")
 
     # Start the status event processor (pub/sub only, no HTTP server)
-    from fastapi import FastAPI  # Add FastAPI import
+    # TODO - re-add health check API
+    # from fastapi import FastAPI  # Add FastAPI import
 
-    from manman.host.api.shared import (
-        add_health_check,  # Ensure this import is present or add it
-    )
+    # from manman.host.api.shared import (
+    #     add_health_check,  # Ensure this import is present or add it
+    # )
     from manman.host.status_processor import StatusEventProcessor
     from manman.util import get_rabbitmq_connection
 
     # Define and run health check API in a separate thread
-    health_check_app = FastAPI(title="ManMan Status Processor Health Check")
-    add_health_check(health_check_app)
+    # health_check_app = FastAPI(title="ManMan Status Processor Health Check")
+    # add_health_check(health_check_app)
 
-    def run_health_check_server():
-        uvicorn.run(
-            health_check_app, host="0.0.0.0", port=8000, log_config=None
-        )  # Hardcoded port 8000
+    # def run_health_check_server():
+    #     uvicorn.run(
+    #         health_check_app, host="0.0.0.0", port=8000,
+    #     )
 
-    health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
-    health_check_thread.start()
+    # health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
+    # health_check_thread.start()
+
+    # for some reason these logs aren't being emit
     logger.info("Health check API for status processor started on port 8000")
 
     processor = StatusEventProcessor(get_rabbitmq_connection())

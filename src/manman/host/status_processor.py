@@ -7,7 +7,6 @@ from sqlmodel import not_, select
 
 from manman.models import (
     ACTIVE_STATUS_TYPES,
-    OBSERVED_STATUS_TYPES,
     StatusInfo,
     StatusType,
     Worker,
@@ -95,6 +94,8 @@ class StatusEventProcessor:
             logger.info("Received shutdown signal")
         finally:
             self._shutdown()
+
+    # TODO - check for workers that are lost and have an end date so we can crash them
 
     def _check_worker_heartbeats(self):
         """
@@ -187,6 +188,7 @@ class StatusEventProcessor:
                     status_info.as_of,
                 )
                 self._external_status_publisher.publish_external(status_info)
+                self._write_status_to_database(status_info)
         except Exception as e:
             logger.exception("Error processing status messages: %s", e)
 
@@ -202,12 +204,9 @@ class StatusEventProcessor:
                     status_info.status_type,
                     status_info.as_of,
                 )
-                if status_info.status_type in OBSERVED_STATUS_TYPES:
-                    # If the status is in OBSERVED_STATUS_TYPES, we don't want to write it to the database
-                    # as it is already being handled by the status processor and written when processed
-                    continue
-                else:
-                    self._write_status_to_database(status_info)
+                # do not write to database here, just consume it as an example
+                # should match DB
+                logger.info("processing external status message %s", status_info)
         except Exception as e:
             logger.exception("Error processing external status messages: %s", e)
 
