@@ -17,7 +17,7 @@ from manman.models import (
     ServerType,
 )
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
-from manman.repository.rabbit import RabbitCommandSubscriber
+from manman.repository.rabbitmq import RabbitCommandSubscriber
 from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD
 

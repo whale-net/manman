@@ -69,19 +69,30 @@ class RabbitStatusPublisher(MessagePublisher):
     a queue, and provides a method to publish messages to the queue.
     """
 
-    def __init__(self, connection: Connection, exchange: str, queue_name: str) -> None:
+    @staticmethod
+    def get_internal_queue_name(queue_name: str) -> str:
+        """
+        Generate a unique internal queue name based on the provided queue name.
+        This is used to ensure that the queue name is unique across different instances.
+        """
+        return f"{queue_name}"
+
+    def __init__(self, connection: Connection, exchange: str, routing_key: str) -> None:
         """
         :param connection: An AMQPStorm connection to the RabbitMQ server.
         :param exchange: Exchange to bind to
         """
         self._exchange = exchange
         self._channel = connection.channel()
-        self._queue_name = queue_name
+        self._queue_name = routing_key
 
         # Declare queue
         result = self._channel.queue.declare(
             queue=self._queue_name,
             auto_delete=True,
+        )
+        self._channel.queue.bind(
+            exchange=exchange, queue=self._queue_name, routing_key=routing_key
         )
         if not result:
             logger.error("Unable to declare queue with name %s", self._queue_name)
@@ -96,8 +107,6 @@ class RabbitStatusPublisher(MessagePublisher):
             body=message,
             exchange=self._exchange,
             routing_key=self._queue_name,
-            # do not batch, send immediately
-            # immediate=True,
         )
         logger.info("Message published to exchange %s", self._exchange)
         logger.debug("Message: %s", message)

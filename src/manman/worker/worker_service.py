@@ -9,7 +9,7 @@ from requests import ConnectionError
 # from sqlalchemy.orm import Session
 from manman.api_client import WorkerAPIClient
 from manman.models import Command, CommandType, GameServerConfig, StatusInfo, StatusType
-from manman.repository.rabbit import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
 
@@ -61,7 +61,7 @@ class WorkerService:
         self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
-            queue_name=self.status_queue_name,
+            routing_key=self.status_queue_name,
         )
         self._command_provider = RabbitCommandSubscriber(
             connection=self._rabbitmq_connection,
