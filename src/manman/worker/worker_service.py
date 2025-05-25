@@ -17,6 +17,7 @@ from manman.models import (
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
 
@@ -68,13 +69,16 @@ class WorkerService:
         self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
-            routing_key=self.status_queue_name,
+            routing_key_base=self.status_queue_name,
         )
         self._command_provider = RabbitCommandSubscriber(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
             queue_name=self.command_queue_name,
         )
+
+        # heartbeat
+        self._wapi.worker_heartbeat(self._worker_instance)
 
         self._futures = []
 
@@ -88,12 +92,14 @@ class WorkerService:
         )
 
     @staticmethod
-    def _generate_common_queue_prefix(worker_id: int) -> str:
+    def _generate_common_queue_name(worker_id: int) -> str:
         return f"worker-instance.{worker_id}"
 
     @staticmethod
     def generate_command_queue_name(worker_id: int) -> str:
-        return WorkerService._generate_common_queue_prefix(worker_id) + ".cmd"
+        return add_routing_key_prefix(
+            WorkerService._generate_common_queue_name(worker_id), "cmd"
+        )
 
     @property
     def command_queue_name(self) -> str:
@@ -101,7 +107,9 @@ class WorkerService:
 
     @staticmethod
     def generate_status_queue_name(worker_id: int) -> str:
-        return WorkerService._generate_common_queue_prefix(worker_id) + ".status"
+        return add_routing_key_prefix(
+            WorkerService._generate_common_queue_name(worker_id), "status"
+        )
 
     @property
     def status_queue_name(self) -> str:

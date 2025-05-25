@@ -6,12 +6,14 @@ for sending status messages via RabbitMQ.
 """
 
 import logging
+from typing import Optional
 
 from amqpstorm import Connection
 
 from manman.models import StatusInfo
 
 from .base import MessagePublisher
+from .util import add_routing_key_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +26,9 @@ class RabbitStatusPublisher(MessagePublisher):
     a queue, and provides a method to publish messages to the queue.
     """
 
-    @staticmethod
-    def get_internal_queue_name(queue_name: str) -> str:
-        """
-        Generate a unique internal queue name based on the provided queue name.
-        This is used to ensure that the queue name is unique across different instances.
-        """
-        return f"{queue_name}"
-
-    def __init__(self, connection: Connection, exchange: str, routing_key: str) -> None:
+    def __init__(
+        self, connection: Connection, exchange: str, routing_key_base: str
+    ) -> None:
         """
         :param connection: An AMQPStorm connection to the RabbitMQ server.
         :param exchange: Exchange to bind to
@@ -40,32 +36,48 @@ class RabbitStatusPublisher(MessagePublisher):
         """
         self._exchange = exchange
         self._channel = connection.channel()
-        self._queue_name = routing_key
+        self._routing_key = routing_key_base
 
-        # Declare queue
-        result = self._channel.queue.declare(
-            queue=self._queue_name,
-            auto_delete=True,
+        # Declare the exchange
+        self._channel.exchange.declare(
+            exchange=self._exchange,
+            exchange_type="topic",
+            durable=True,
+            auto_delete=False,
         )
-        self._channel.queue.bind(
-            exchange=exchange, queue=self._queue_name, routing_key=routing_key
-        )
-        if not result:
-            logger.error("Unable to declare queue with name %s", self._queue_name)
-            raise RuntimeError("Failed to create queue")
-        self._queue_name = result["queue"]
-        logger.info("Queue declared %s", self._queue_name)
+
         logger.info("Rabbit message publisher created %s", self._exchange)
 
-    def publish(self, status: StatusInfo) -> None:
+    def publish_external(self, status: StatusInfo) -> None:
+        is_worker = status.worker_id is not None
+        is_server = status.game_server_instance_id is not None
+
+        if is_worker:
+            class_type = "worker-instance"
+            id = status.worker_id
+        elif is_server:
+            class_type = "game-server-instance"
+            id = status.game_server_instance_id
+        else:
+            raise ValueError("worker or server must be set")
+
+        suffix = f"{class_type}.{id}"
+        self.publish(status, routing_key_suffix=suffix)
+
+    def publish(
+        self, status: StatusInfo, routing_key_suffix: Optional[str] = None
+    ) -> None:
         message = status.model_dump_json()
         self._channel.basic.publish(
             body=message,
             exchange=self._exchange,
-            routing_key=self._queue_name,
+            routing_key=add_routing_key_suffix(self._routing_key, routing_key_suffix),
         )
-        logger.info("Message published to exchange %s", self._exchange)
-        logger.debug("Message: %s", message)
+        logger.info(
+            "Message published to exchange %s with routing_key %s",
+            self._exchange,
+            self._routing_key,
+        )
 
     def shutdown(self) -> None:
         logger.info("Shutting down RabbitMessagePublisher...")

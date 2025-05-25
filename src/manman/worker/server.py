@@ -17,6 +17,7 @@ from manman.models import (
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq import RabbitCommandSubscriber
+from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD
 
@@ -80,15 +81,24 @@ class Server:
 
     @staticmethod
     def generate_command_queue_name(game_server_instance_id: int):
-        return Server._generate_common_queue_prefix(game_server_instance_id) + ".cmd"
+        return add_routing_key_prefix(
+            Server._generate_common_queue_prefix(game_server_instance_id),
+            "cmd",
+        )
+
+    @staticmethod
+    def generate_status_queue_name(game_server_instance_id: int):
+        return add_routing_key_prefix(
+            Server._generate_common_queue_prefix(game_server_instance_id), "status"
+        )
 
     @property
     def command_queue_name(self) -> str:
         return self.generate_command_queue_name(self._instance.game_server_instance_id)
 
-    @staticmethod
-    def generate_status_queue_name(game_server_instance_id: int):
-        return Server._generate_common_queue_prefix(game_server_instance_id) + ".status"
+    @property
+    def status_queue_name(self) -> str:
+        return self.generate_status_queue_name(self._instance.game_server_instance_id)
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running

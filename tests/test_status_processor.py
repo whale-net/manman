@@ -70,8 +70,8 @@ class TestStatusProcessor:
             assert processor is not None
             assert processor._rabbitmq_connection == mock_rabbitmq_connection
             assert processor._is_running is False
-            assert processor._status_subscriber == mock_subscriber
-            assert processor._status_publisher == mock_publisher
+            assert processor._internal_status_subscriber == mock_subscriber
+            assert processor._external_status_publisher == mock_publisher
 
     def test_status_message_handling(self, mock_rabbitmq_connection):
         """Test status message handling without actual database/RabbitMQ."""
@@ -196,7 +196,7 @@ class TestStatusProcessor:
             mock_subscriber.get_status_messages.return_value = test_messages
 
             with patch.object(processor, "_handle_status_message") as mock_handle:
-                processor._process_status_messages()
+                processor._process_internal_status_messages()
 
                 # Verify that each message was handled
                 assert mock_handle.call_count == 2
