@@ -88,7 +88,7 @@ class TestStatusProcessor:
 
         # Mock the database write method to avoid actual database calls
         with patch.object(processor, "_write_status_to_database") as mock_write:
-            processor._handle_status_message(status_info)
+            processor._write_status_to_database(status_info)
 
             # Verify the database write method was called with correct parameters
             mock_write.assert_called_once_with(status_info)
@@ -195,13 +195,19 @@ class TestStatusProcessor:
 
             mock_subscriber.get_status_messages.return_value = test_messages
 
-            with patch.object(processor, "_handle_status_message") as mock_handle:
+            with patch.object(
+                processor, "_external_status_publisher"
+            ) as mock_publisher:
                 processor._process_internal_status_messages()
 
-                # Verify that each message was handled
-                assert mock_handle.call_count == 2
-                mock_handle.assert_any_call(test_messages[0].status_info)
-                mock_handle.assert_any_call(test_messages[1].status_info)
+                # Verify that each message was published externally
+                assert mock_publisher.publish_external.call_count == 2
+                mock_publisher.publish_external.assert_any_call(
+                    test_messages[0].status_info
+                )
+                mock_publisher.publish_external.assert_any_call(
+                    test_messages[1].status_info
+                )
 
     def test_processor_shutdown(self, mock_rabbitmq_connection):
         """Test that the processor shuts down cleanly."""
@@ -209,17 +215,29 @@ class TestStatusProcessor:
             patch(
                 "manman.host.status_processor.RabbitStatusSubscriber"
             ) as mock_subscriber_class,
-            patch("manman.host.status_processor.RabbitStatusPublisher"),
+            patch(
+                "manman.host.status_processor.RabbitStatusPublisher"
+            ) as mock_publisher_class,
         ):
-            mock_subscriber = Mock()
-            mock_subscriber_class.return_value = mock_subscriber
+            mock_internal_subscriber = Mock()
+            mock_external_consumer = Mock()
+            mock_publisher = Mock()
+
+            # The RabbitStatusSubscriber is called twice - once for internal, once for external
+            mock_subscriber_class.side_effect = [
+                mock_internal_subscriber,
+                mock_external_consumer,
+            ]
+            mock_publisher_class.return_value = mock_publisher
 
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             processor._shutdown()
 
-            # Verify shutdown was called on the subscriber
-            mock_subscriber.shutdown.assert_called_once()
+            # Verify shutdown was called on all components
+            mock_internal_subscriber.shutdown.assert_called_once()
+            mock_external_consumer.shutdown.assert_called_once()
+            mock_publisher.shutdown.assert_called_once()
             assert processor._is_running is False
 
 
