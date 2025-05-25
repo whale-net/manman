@@ -100,3 +100,4 @@ def downgrade() -> None:
     )
     op.drop_table("status_info", schema="manman")
     # ### end Alembic commands ###
+    op.execute("drop type statustype")
