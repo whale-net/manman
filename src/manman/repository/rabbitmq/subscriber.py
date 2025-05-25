@@ -1,138 +1,27 @@
-import abc
+"""
+RabbitMQ subscriber implementations.
+
+This module contains concrete implementations of message subscribers
+for receiving commands and status messages via RabbitMQ.
+"""
+
 import logging
 import queue
 import threading
-from typing import NamedTuple, Optional
+from typing import Optional
 
 from amqpstorm import Connection, Message
 
 from manman.models import Command, StatusInfo
 
-
-class StatusMessage(NamedTuple):
-    """Container for status message with routing information."""
-
-    status_info: StatusInfo
-    routing_key: str
-
+from .base import MessageSubscriber, StatusMessage
 
 logger = logging.getLogger(__name__)
 
 
-class MessagePublisher(abc.ABC):
-    """
-    Abstract base class for message providers.
-    This class defines the interface for sending messages.
-    """
-
-    @abc.abstractmethod
-    def publish(self, command: Command) -> None:
-        """
-        Publish a message to the message provider.
-
-        :param command: The command to be published.
-        """
-        pass
-
-    @abc.abstractmethod
-    def shutdown(self) -> None:
-        """
-        Shutdown the message provider.
-        This method should clean up any resources used by the message provider.
-        """
-        pass
-
-
-class MessageSubscriber(abc.ABC):
-    """
-    Abstract base class for message providers.
-    This class defines the interface for receiving messages.
-    """
-
-    @abc.abstractmethod
-    def get_commands(self) -> list[Command]:
-        """
-        Retrieve a list of messages from the message provider.
-        This method should return a list of messages.
-
-        Non-blocking
-
-        """
-        pass
-
-    @abc.abstractmethod
-    def shutdown(self) -> None:
-        """
-        Shutdown the message provider.
-        This method should clean up any resources used by the message provider.
-        """
-        pass
-
-
-class RabbitStatusPublisher(MessagePublisher):
-    """
-    A message provider that sends commands to a RabbitMQ queue.
-
-    This class sets up a connection to RabbitMQ, declares an exchange and
-    a queue, and provides a method to publish messages to the queue.
-    """
-
-    @staticmethod
-    def get_internal_queue_name(queue_name: str) -> str:
-        """
-        Generate a unique internal queue name based on the provided queue name.
-        This is used to ensure that the queue name is unique across different instances.
-        """
-        return f"{queue_name}"
-
-    def __init__(self, connection: Connection, exchange: str, routing_key: str) -> None:
-        """
-        :param connection: An AMQPStorm connection to the RabbitMQ server.
-        :param exchange: Exchange to bind to
-        """
-        self._exchange = exchange
-        self._channel = connection.channel()
-        self._queue_name = routing_key
-
-        # Declare queue
-        result = self._channel.queue.declare(
-            queue=self._queue_name,
-            auto_delete=True,
-        )
-        self._channel.queue.bind(
-            exchange=exchange, queue=self._queue_name, routing_key=routing_key
-        )
-        if not result:
-            logger.error("Unable to declare queue with name %s", self._queue_name)
-            raise RuntimeError("Failed to create queue")
-        self._queue_name = result["queue"]
-        logger.info("Queue declared %s", self._queue_name)
-        logger.info("Rabbit message publisher created %s", self._exchange)
-
-    def publish(self, status: StatusInfo) -> None:
-        message = status.model_dump_json()
-        self._channel.basic.publish(
-            body=message,
-            exchange=self._exchange,
-            routing_key=self._queue_name,
-        )
-        logger.info("Message published to exchange %s", self._exchange)
-        logger.debug("Message: %s", message)
-
-    def shutdown(self) -> None:
-        logger.info("Shutting down RabbitMessagePublisher...")
-        try:
-            # Close the channel
-            if self._channel.is_open:
-                self._channel.close()
-                logger.info("Channel closed.")
-        except Exception as e:
-            logger.exception("Error closing channel: %s", e)
-
-
 class RabbitCommandSubscriber(MessageSubscriber):
     """
-    A message provider that retrieves commands from a RabbitMQ queue.
+    A message subscriber that retrieves commands from a RabbitMQ queue.
 
     This class sets up a connection to RabbitMQ, declares an exchange and
     a queue, and starts consuming messages from the queue in a separate
