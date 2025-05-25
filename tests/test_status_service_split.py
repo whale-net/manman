@@ -5,14 +5,7 @@ This module tests that our status services can be imported and started correctly
 after splitting the monolithic status service into separate API and processor services.
 """
 
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the src directory to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
 
 
 class TestStatusServiceSplit:

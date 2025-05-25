@@ -85,8 +85,6 @@ class StatusEventProcessor:
         try:
             status_messages = self._status_subscriber.get_status_messages()
             for status_message in status_messages:
-                print(status_message.status_info)
-                print(status_message.status_info.status_type)
                 self._handle_status_message(
                     status_message.status_info,
                 )
