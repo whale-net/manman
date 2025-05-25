@@ -5,31 +5,45 @@ import pytest
 from manman.models import StatusInfo, StatusType
 
 
-def test_field_validator():
+def test_field_validator_create():
     """Test the status_type field validator."""
 
-    status1 = StatusInfo.create("TestClass", StatusType.RUNNING, worker_id=1)
-    assert status1.status_type == StatusType.RUNNING
+    status = StatusInfo.create("TestClass", StatusType.RUNNING, worker_id=1)
+    assert status.status_type == StatusType.RUNNING
 
-    status2 = StatusInfo(
+
+def test_field_validator_init():
+    status = StatusInfo(
         class_name="TestClass",
-        status_type="RUNNING",  # String instead of enum
+        status_type=StatusType.CREATED,
+        worker_id=1,
+        as_of=datetime.datetime.now(datetime.timezone.utc),
+    )
+    assert status.status_type == StatusType.CREATED
+
+
+def test_field_validator_create_string():
+    with pytest.raises(ValueError):
+        StatusInfo.create(
+            class_name="TestClass",
+            status_type="CREATED",
+            worker_id=1,
+        )
+
+
+def test_field_validator_string():
+    status = StatusInfo(
+        class_name="TestClass",
+        status_type="CREATED",
         worker_id=1,
     )
-    assert status2.status_type == StatusType.RUNNING
+    assert status.status_type == StatusType.CREATED
 
-    # Test 3: Invalid string value (should fail)
+
+def test_field_validator_create_invalid_string():
     with pytest.raises(ValueError):
         StatusInfo(
             class_name="TestClass",
             status_type="INVALID_STATUS",  # Invalid string
             worker_id=1,
         )
-
-    status4 = StatusInfo(
-        class_name="TestClass",
-        status_type=StatusType.CREATED,
-        worker_id=1,
-        as_of=datetime.datetime.now(datetime.timezone.utc),
-    )
-    assert status4.status_type == StatusType.CREATED

@@ -197,20 +197,6 @@ class StatusInfo(ManManBase, table=True):
     )
     game_server_instance: Optional[GameServerInstance] = Relationship()  # Made Optional
 
-    @field_validator("status_type", mode="before")
-    @classmethod
-    def validate_status_type(cls, v):
-        """Convert string status type to enum if necessary."""
-        if isinstance(v, str):
-            try:
-                return StatusType(v)
-            except ValueError:
-                raise ValueError(f"Invalid status type: {v}")
-        elif isinstance(v, StatusType):
-            return v
-        else:
-            raise ValueError(f"Invalid status type: {v}")
-
     __table_args__ = (
         CheckConstraint(
             "(worker_id IS NULL AND game_server_instance_id IS NOT NULL) OR "
@@ -242,6 +228,22 @@ class StatusInfo(ManManBase, table=True):
 
         return self
 
+    @field_validator("status_type")
+    @classmethod
+    def validate_status_type(cls, v) -> StatusType:
+        """Convert string status type to enum if necessary."""
+        if isinstance(v, str):
+            try:
+                return StatusType(v)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid status type: {v}. Must be a valid StatusType."
+                )
+        elif isinstance(v, StatusType):
+            return v
+        else:
+            raise ValueError(f"Invalid status type: {v}")
+
     @classmethod
     def create(
         cls,
@@ -251,6 +253,10 @@ class StatusInfo(ManManBase, table=True):
         game_server_instance_id: Optional[int] = None,
     ) -> "StatusInfo":
         as_of = datetime.datetime.now(datetime.timezone.utc)
+        if isinstance(status_type, str):
+            raise ValueError(
+                f"Invalid status type: {status_type}. Must be an instance of StatusType."
+            )
         return cls(
             class_name=class_name,
             status_type=status_type,
