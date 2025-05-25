@@ -102,6 +102,12 @@ class RabbitStatusPublisher(MessagePublisher):
         self._channel.queue.bind(
             exchange=exchange, queue=self._queue_name, routing_key=routing_key
         )
+        # TODO - link this up at some point properly, but avoid circular imports
+        self._channel.queue.bind(
+            exchange=exchange,
+            queue="status-processor-queue",
+            routing_key=routing_key,
+        )
         if not result:
             logger.error("Unable to declare queue with name %s", self._queue_name)
             raise RuntimeError("Failed to create queue")
@@ -287,7 +293,7 @@ class RabbitStatusSubscriber:
         # Declare queue
         result = self._channel.queue.declare(
             queue=self._queue_name or "",
-            auto_delete=True,
+            auto_delete=False,
         )
         if not result:
             logger.error("Unable to declare queue with name %s", self._queue_name)

@@ -43,31 +43,49 @@ class TestStatusProcessor:
         for key, value in test_env.items():
             monkeypatch.setenv(key, value)
 
-    def test_status_processor_initialization(self):
-        """Test that the status processor can be initialized."""
-        # Mock the RabbitMQ connection and subscriber creation
+    @pytest.fixture
+    def mock_rabbitmq_connection(self):
+        """Create a properly mocked RabbitMQ connection."""
         mock_connection = Mock()
 
-        with patch(
-            "manman.host.status_processor.RabbitStatusSubscriber"
-        ) as mock_subscriber_class:
+        # Mock the channel and queue.declare to return proper structure
+        mock_channel = Mock()
+        mock_connection.channel.return_value = mock_channel
+        mock_channel.queue.declare.return_value = {"queue": "test-queue"}
+
+        return mock_connection
+
+    def test_status_processor_initialization(self, mock_rabbitmq_connection):
+        """Test that the status processor can be initialized."""
+        with (
+            patch(
+                "manman.host.status_processor.RabbitStatusSubscriber"
+            ) as mock_subscriber_class,
+            patch(
+                "manman.host.status_processor.RabbitStatusPublisher"
+            ) as mock_publisher_class,
+        ):
             mock_subscriber = Mock()
+            mock_publisher = Mock()
             mock_subscriber_class.return_value = mock_subscriber
+            mock_publisher_class.return_value = mock_publisher
 
             # This should not raise any exceptions
-            processor = StatusEventProcessor(mock_connection)
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             assert processor is not None
-            assert processor._rabbitmq_connection == mock_connection
+            assert processor._rabbitmq_connection == mock_rabbitmq_connection
             assert processor._is_running is False
             assert processor._status_subscriber == mock_subscriber
+            assert processor._status_publisher == mock_publisher
 
-    def test_status_message_handling(self):
+    def test_status_message_handling(self, mock_rabbitmq_connection):
         """Test status message handling without actual database/RabbitMQ."""
-        mock_connection = Mock()
-
-        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
-            processor = StatusEventProcessor(mock_connection)
+        with (
+            patch("manman.host.status_processor.RabbitStatusSubscriber"),
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Create a test status message
             status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
@@ -80,12 +98,13 @@ class TestStatusProcessor:
                 # Verify the database write method was called with correct parameters
                 mock_write.assert_called_once_with(status_info, routing_key)
 
-    def test_routing_key_parsing(self):
+    def test_routing_key_parsing(self, mock_rabbitmq_connection):
         """Test that worker_id is correctly extracted from routing keys."""
-        mock_connection = Mock()
-
-        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
-            processor = StatusEventProcessor(mock_connection)
+        with (
+            patch("manman.host.status_processor.RabbitStatusSubscriber"),
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Create test status info
             status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
@@ -105,12 +124,13 @@ class TestStatusProcessor:
                 mock_session.add.assert_called_once()
                 mock_session.commit.assert_called_once()
 
-    def test_invalid_routing_key_handling(self):
+    def test_invalid_routing_key_handling(self, mock_rabbitmq_connection):
         """Test handling of invalid routing keys."""
-        mock_connection = Mock()
-
-        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
-            processor = StatusEventProcessor(mock_connection)
+        with (
+            patch("manman.host.status_processor.RabbitStatusSubscriber"),
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
 
@@ -149,12 +169,13 @@ class TestStatusProcessor:
         assert status_message.status_info.class_name == "TestClass"
         assert status_message.status_info.status_type == StatusType.CREATED
 
-    def test_database_error_handling(self):
+    def test_database_error_handling(self, mock_rabbitmq_connection):
         """Test that database errors are handled gracefully."""
-        mock_connection = Mock()
-
-        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
-            processor = StatusEventProcessor(mock_connection)
+        with (
+            patch("manman.host.status_processor.RabbitStatusSubscriber"),
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             status_info = StatusInfoBase.create("WorkerService", StatusType.RUNNING)
             routing_key = "worker-instance.123.status"
@@ -173,12 +194,13 @@ class TestStatusProcessor:
                 # Verify that the exception was caught and add was attempted
                 mock_session.add.assert_called_once()
 
-    def test_status_info_fields_mapping(self):
+    def test_status_info_fields_mapping(self, mock_rabbitmq_connection):
         """Test that StatusInfo database record is created with correct field mapping."""
-        mock_connection = Mock()
-
-        with patch("manman.host.status_processor.RabbitStatusSubscriber"):
-            processor = StatusEventProcessor(mock_connection)
+        with (
+            patch("manman.host.status_processor.RabbitStatusSubscriber"),
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Create test status info with specific values
             status_info = StatusInfoBase.create("TestWorker", StatusType.COMPLETE)
@@ -204,17 +226,18 @@ class TestStatusProcessor:
                 assert added_record.as_of == status_info.as_of
 
     @pytest.mark.integration
-    def test_message_processing_flow(self):
+    def test_message_processing_flow(self, mock_rabbitmq_connection):
         """Integration test for the complete message processing flow."""
-        mock_connection = Mock()
-
-        with patch(
-            "manman.host.status_processor.RabbitStatusSubscriber"
-        ) as mock_subscriber_class:
+        with (
+            patch(
+                "manman.host.status_processor.RabbitStatusSubscriber"
+            ) as mock_subscriber_class,
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
             mock_subscriber = Mock()
             mock_subscriber_class.return_value = mock_subscriber
 
-            processor = StatusEventProcessor(mock_connection)
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Mock the status subscriber to return test messages
             test_messages = [
@@ -244,17 +267,18 @@ class TestStatusProcessor:
                     test_messages[1].status_info, test_messages[1].routing_key
                 )
 
-    def test_processor_shutdown(self):
+    def test_processor_shutdown(self, mock_rabbitmq_connection):
         """Test that the processor shuts down cleanly."""
-        mock_connection = Mock()
-
-        with patch(
-            "manman.host.status_processor.RabbitStatusSubscriber"
-        ) as mock_subscriber_class:
+        with (
+            patch(
+                "manman.host.status_processor.RabbitStatusSubscriber"
+            ) as mock_subscriber_class,
+            patch("manman.host.status_processor.RabbitStatusPublisher"),
+        ):
             mock_subscriber = Mock()
             mock_subscriber_class.return_value = mock_subscriber
 
-            processor = StatusEventProcessor(mock_connection)
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             processor._shutdown()
 

@@ -3,9 +3,10 @@ import time
 from datetime import datetime, timedelta
 
 from amqpstorm import Connection
+from sqlmodel import select
 
-from manman.models import StatusInfo, StatusInfoBase
-from manman.repository.rabbitmq import RabbitStatusSubscriber
+from manman.models import StatusInfo, StatusInfoBase, StatusType, Worker
+from manman.repository.rabbitmq import RabbitStatusPublisher, RabbitStatusSubscriber
 from manman.util import get_sqlalchemy_session
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,14 @@ class StatusEventProcessor:
             queue_name="status-processor-queue",  # Our own queue name
         )
 
+        # Publisher for sending worker lost notifications
+        # Use "worker" exchange for consistency with worker status messages
+        self._status_publisher = RabbitStatusPublisher(
+            connection=self._rabbitmq_connection,
+            exchange="worker",
+            routing_key="status-processor.notifications",
+        )
+
         logger.info("Status Event Processor initialized")
 
     def run(self):
@@ -49,6 +58,9 @@ class StatusEventProcessor:
 
                 # Process any available status messages
                 self._process_status_messages()
+
+                # Check for stale worker heartbeats
+                self._check_worker_heartbeats()
 
                 # Small sleep to avoid busy waiting
                 time.sleep(0.1)
@@ -134,14 +146,67 @@ class StatusEventProcessor:
         except Exception as e:
             logger.exception("Error writing status to database: %s", e)
 
-        except Exception as e:
-            logger.exception("Error writing status to database: %s", e)
+    def _check_worker_heartbeats(self):
+        """Check for stale worker heartbeats and send worker lost notifications."""
+        try:
+            current_time = datetime.utcnow()
+            heartbeat_threshold = current_time - timedelta(seconds=5)
 
-        # TODO: Future enhancements:
-        # - Update database with status information
-        # - Trigger alerts for critical status changes
-        # - Maintain metrics and aggregations
-        # - Send notifications to external systems
+            with get_sqlalchemy_session() as session:
+                # Find active workers with stale heartbeats
+                stale_workers = session.exec(
+                    select(Worker).where(
+                        Worker.last_heartbeat < heartbeat_threshold,
+                        Worker.end_date.is_(None),  # Only check active workers
+                    )
+                ).all()
+
+                for worker in stale_workers:
+                    logger.warning(
+                        "Worker %s heartbeat is stale (last: %s, threshold: %s), marking as LOST",
+                        worker.worker_id,
+                        worker.last_heartbeat,
+                        heartbeat_threshold,
+                    )
+
+                    # Create status record for tracking the lost worker
+                    status_record = StatusInfo(
+                        worker_id=worker.worker_id,
+                        game_server_instance_id=None,
+                        class_name="StatusEventProcessor",
+                        status_type=StatusType.LOST,
+                        as_of=current_time,
+                    )
+                    session.add(status_record)
+
+                    # Send worker lost notification
+                    self._send_worker_lost_notification(worker.worker_id)
+
+                session.commit()
+
+        except Exception as e:
+            logger.exception("Error checking worker heartbeats: %s", e)
+
+    def _send_worker_lost_notification(self, worker_id: int):
+        """Send a worker lost notification via RabbitMQ."""
+        try:
+            # Create a status message indicating the worker is lost
+            lost_status = StatusInfoBase(
+                class_name="StatusEventProcessor",
+                status_type=StatusType.LOST,
+                as_of=datetime.utcnow(),
+            )
+
+            # Publish the worker lost status message to the status exchange
+            # This will be picked up by any system monitoring worker status
+            self._status_publisher.publish(lost_status)
+
+            logger.info("Worker lost notification sent for worker %s", worker_id)
+
+        except Exception as e:
+            logger.exception(
+                "Error sending worker lost notification for worker %s: %s", worker_id, e
+            )
 
     def _shutdown(self):
         """Clean shutdown of the processor."""
