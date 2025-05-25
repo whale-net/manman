@@ -25,6 +25,11 @@ class StatusEventProcessor:
     This service subscribes to a generic status queue pattern and processes
     status updates from workers. Currently logs all received status information
     for debugging purposes.
+
+    TODO - this module is a bit strange in that we ferry internal statuses to extenral to be logged
+    whereas the true external statues are observed by the status processor and written before sendign to external queue
+    ideally this is improved, but for now it works
+    and external consumers should be able to subscribe to status.
     """
 
     def __init__(self, rabbitmq_connection: Connection):
@@ -39,7 +44,7 @@ class StatusEventProcessor:
             # TODO - reference worker class or something for this
             routing_key="status.worker-instance.*",
             # our queue name
-            queue_name="status-processor-queue",
+            queue_name="status-processor-internal-queue",
         )
 
         # Publisher for sending worker lost notifications
@@ -50,14 +55,14 @@ class StatusEventProcessor:
         self._external_status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange="external",
-            routing_key_base="status",
+            routing_key_base="external.status",
         )
 
         self._external_status_consumer = RabbitStatusSubscriber(
             connection=self._rabbitmq_connection,
             exchange="external",
-            routing_key="status.*.*",
-            queue_name="status-processor-queue-external",
+            routing_key="external.status.*.*",
+            queue_name="status-processor-external-queue",
         )
 
         logger.info("Status Event Processor initialized")
