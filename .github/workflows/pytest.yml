@@ -29,6 +29,9 @@ jobs:
       - name: Install the project
         run: uv sync
 
+      - name: Install the dev group for testing
+        run: uv sync --group dev
+
       - name: Run pytest
         run: uv run pytest --cov=manman --cov-branch --cov-report=xml -n 8
 
