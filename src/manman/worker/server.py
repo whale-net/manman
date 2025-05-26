@@ -13,10 +13,12 @@ from manman.models import (
     GameServerConfig,
     GameServerInstance,
     ServerType,
+    StatusInfo,
+    StatusType,
 )
 from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber
+from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
 from manman.worker.steamcmd import SteamCMD
@@ -55,6 +57,12 @@ class Server:
             queue_name=self.command_queue_name,
         )
 
+        self._status_publisher = RabbitStatusPublisher(
+            connection=rabbitmq_connection,
+            exchange=Server.RMQ_EXCHANGE,
+            routing_key_base=self.status_queue_name,
+        )
+
         self._root_install_directory = root_install_directory
         self._server_directory = os.path.join(
             self._root_install_directory,
@@ -70,6 +78,15 @@ class Server:
         for arg in self._config.args:
             pb.add_parameter(arg)
         self._proc = pb
+
+        # Publish CREATED status
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.CREATED,
+                game_server_instance_id=self._instance.game_server_instance_id,
+            ),
+        )
 
     @property
     def instance(self) -> GameServerInstance:
@@ -158,12 +175,27 @@ class Server:
             logger.info(
                 "shutting down instance %s", self._instance.game_server_instance_id
             )
+
+            # Capture instance ID before shutdown for status publishing
+            instance_id = self._instance.game_server_instance_id
+
             self._proc.stop()
             self._instance = self._wapi.game_server_instance_shutdown(self._instance)
             self._command_message_provider.shutdown()
+
+            # Publish COMPLETE status
+            self._status_publisher.publish(
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.COMPLETE,
+                    game_server_instance_id=instance_id,
+                ),
+            )
+            self._status_publisher.shutdown()
+
             logger.info(
                 "shutdown complete for instance %s",
-                self._instance.game_server_instance_id,
+                instance_id,
             )
 
     def execute_command(self, command: Command) -> None:
@@ -191,6 +223,15 @@ class Server:
         self.__is_started = True
         logger.info("instance %s starting", self._instance.game_server_instance_id)
 
+        # Publish INITIALIZING status
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.INITIALIZING,
+                game_server_instance_id=self._instance.game_server_instance_id,
+            ),
+        )
+
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
@@ -200,6 +241,15 @@ class Server:
             extra_env = env_list_to_dict(self._config.env_var)
             logger.info("extra_env=%s", extra_env)
             self._proc.run(extra_env=extra_env)
+
+            # Publish RUNNING status once process is started
+            self._status_publisher.publish(
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.RUNNING,
+                    game_server_instance_id=self._instance.game_server_instance_id,
+                ),
+            )
         except Exception as e:
             logger.exception(e)
             self._shutdown()
