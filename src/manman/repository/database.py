@@ -18,6 +18,7 @@ from manman.models import (
     GameServerConfig,
     GameServerInstance,
     StatusInfo,
+    StatusType,
     Worker,
 )
 
@@ -61,6 +62,25 @@ class DatabaseRepository:
 
         return get_sqlalchemy_session()
 
+    @staticmethod
+    def get_worker_current_status_subquery():
+        # Subquery to get the latest status for each worker
+        inner = select(StatusInfo).alias("si2")
+        last_status = (
+            select(StatusInfo).where(
+                not_(StatusInfo.worker_id.is_(None)),
+                not_(
+                    select(inner)
+                    .where(
+                        inner.c.worker_id == StatusInfo.worker_id,
+                        inner.c.as_of > StatusInfo.as_of,
+                    )
+                    .exists()
+                ),
+            )
+        ).subquery()
+        return last_status
+
     def get_stale_workers_with_status(
         self, heartbeat_threshold: datetime, heartbeat_max_lookback: datetime
     ) -> List[Tuple[Worker, str]]:
@@ -75,21 +95,7 @@ class DatabaseRepository:
             List of tuples containing (Worker, current_status_type)
         """
         with self._get_session_context() as session:
-            # Subquery to get the latest status for each worker
-            inner = select(StatusInfo).alias("i")
-            last_status = (
-                select(StatusInfo).where(
-                    not_(StatusInfo.worker_id.is_(None)),
-                    not_(
-                        select(inner)
-                        .where(
-                            inner.c.worker_id == StatusInfo.worker_id,
-                            inner.c.as_of > StatusInfo.as_of,
-                        )
-                        .exists()
-                    ),
-                )
-            ).subquery()
+            last_status = DatabaseRepository.get_worker_current_status_subquery()
 
             # Query for workers with stale heartbeats
             candidate_workers = (
@@ -304,7 +310,7 @@ class WorkerRepository(DatabaseRepository):
 
             return current_instance
 
-    def close_other_workers(self, worker_id: int) -> int:
+    def close_other_workers(self, worker_id: int) -> list[Worker]:
         """
         Close all other workers except the specified one.
 
@@ -312,25 +318,35 @@ class WorkerRepository(DatabaseRepository):
             worker_id: The ID of the worker to keep active
 
         Returns:
-            Number of workers that were closed
+            list of lost workers who are now terminated
         """
         from sqlmodel import and_, func, update
 
         with self._get_session_context() as session:
-            stmt = (
-                update(Worker)
-                .where(
-                    and_(
-                        Worker.worker_id != worker_id,
-                        Worker.end_date.is_(None),
-                    )
-                )
-                .values(end_date=func.now())
+            # hopefully this is all one transaction
+            # otherwise this doesn't work
+            open_worker_condition = and_(
+                Worker.worker_id != worker_id,
+                Worker.end_date.is_(None),
             )
-            result = session.exec(stmt)
-            affected_rows = result.rowcount
+
+            last_status = DatabaseRepository.get_worker_current_status_subquery()
+            lost_workers = session.exec(
+                select(Worker)
+                .join(last_status)
+                .where(
+                    open_worker_condition, last_status.c.status_type == StatusType.LOST
+                )
+            ).all()
+
+            update_stmt = (
+                update(Worker).where(open_worker_condition).values(end_date=func.now())
+            )
+            # result = session.exec(update_stmt)
+            # affected_rows = result.rowcount
+            session.exec(update_stmt)
             session.commit()
-            return affected_rows
+            return lost_workers
 
 
 class GameServerRepository(DatabaseRepository):

@@ -25,11 +25,12 @@ class MessagePublisher(abc.ABC):
     """
 
     @abc.abstractmethod
-    def publish(self, status: StatusInfo) -> None:
+    def publish(self, status: StatusInfo, **kwargs) -> None:
         """
         Publish a status message to the message provider.
 
         :param status: The status information to be published.
+        :param kwargs: Additional arguments specific to the implementation.
         """
         pass
 

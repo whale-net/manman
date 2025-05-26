@@ -93,7 +93,7 @@ class TestWorkerShutdownOther:
         """Test successful shutdown of other workers."""
         # Arrange
         worker_input = {"worker_id": 123}
-        mock_worker_repository.close_other_workers.return_value = None
+        mock_worker_repository.close_other_workers.return_value = []
 
         # Act
         response = client.put("/worker/shutdown/other", json=worker_input)
@@ -101,6 +101,8 @@ class TestWorkerShutdownOther:
         # Assert
         assert response.status_code == 200
         mock_worker_repository.close_other_workers.assert_called_once_with(123)
+
+    # TODO lost worker list test
 
 
 # TODO make work

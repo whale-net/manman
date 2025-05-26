@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from manman.models import Worker
 from manman.repository.database import WorkerRepository
+
+logger = logging.getLogger(__name__)
 
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the server api
@@ -34,7 +38,32 @@ async def worker_shutdown(instance: Worker) -> Worker:
 @router.put("/shutdown/other")
 async def worker_shutdown_other(instance: Worker):
     repository = WorkerRepository()
-    repository.close_other_workers(instance.worker_id)
+    lost_workers = repository.close_other_workers(instance.worker_id)
+    # terminate the lost workers
+    # TBD if this ist her ighte way tod oit
+    if len(lost_workers) > 0:
+        for worker in lost_workers:
+            logger.warning(f"Worker {worker.worker_id} has been lost")
+
+        # # not ideal to rbar this but whatever son that ist he topology I ahve
+        # for worker in lost_workers:
+        #     worker_publisher = RabbitStatusPublisher(
+        #         connection=get_rabbitmq_connection(),
+        #         exchanges_config={
+        #             # TODO - actually reference the worker service exchange and queue name
+        #             "worker": [
+        #                 f"status.worker.{worker.worker_id}"
+        #             ]
+        #         }
+        #     )
+        #     worker_publisher.publish(
+        #         StatusInfo.create(
+        #             # TODO: properly reference the worker service class name
+        #             class_name="Worker",
+        #             status_type=StatusType.CRASHED,
+        #             worker_id=worker.worker_id,
+        #         )
+        #     )
 
 
 # heartbeat
