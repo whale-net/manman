@@ -338,6 +338,8 @@ class WorkerRepository(DatabaseRepository):
                     open_worker_condition, last_status.c.status_type == StatusType.LOST
                 )
             ).all()
+            for worker in lost_workers:
+                session.expunge(worker)
 
             update_stmt = (
                 update(Worker).where(open_worker_condition).values(end_date=func.now())
