@@ -32,15 +32,6 @@ build-backend = "hatchling.build"
 host = "manman.host.main:app"
 worker = "manman.worker.main:app"
 
-[tool.ruff.lint]
-extend-select = ["I"]
-# pyflakes, pycodestyle, isort
-#select = ["F", "E", "W", "I001"]
-select = ["F", "W", "I001"]
-
-[tool.ruff]
-line-length = 88
-
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra -q --strict-markers"
