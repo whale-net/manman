@@ -7,6 +7,7 @@ from sqlmodel import not_, select
 
 from manman.models import (
     ACTIVE_STATUS_TYPES,
+    GameServerInstance,
     StatusInfo,
     StatusType,
     Worker,
@@ -40,8 +41,8 @@ class StatusEventProcessor:
         self._internal_status_subscriber = RabbitStatusSubscriber(
             connection=self._rabbitmq_connection,
             exchanges_config={
-                "worker": "status.worker-instance.*",  # Worker status messages
-                "server": "status.server-instance.*",  # Server status messages
+                "worker": "status.worker-instance.*",
+                "server": "status.game-server-instance.*",
             },
             queue_name="status-processor-internal-queue",
         )
@@ -147,6 +148,22 @@ class StatusEventProcessor:
                     # Send worker lost notification
                     self._send_worker_lost_notification(worker.worker_id)
 
+                    # Get all active game server instances for this worker
+                    active_instances = self._get_active_game_server_instances(
+                        worker.worker_id, session
+                    )
+
+                    # Send lost notifications for all active game server instances
+                    for instance in active_instances:
+                        logger.warning(
+                            "Marking game server instance %s as LOST due to worker %s being lost",
+                            instance.game_server_instance_id,
+                            worker.worker_id,
+                        )
+                        self._send_game_server_lost_notification(
+                            instance.game_server_instance_id
+                        )
+
         except Exception as e:
             logger.exception("Error checking worker heartbeats: %s", e)
 
@@ -169,6 +186,42 @@ class StatusEventProcessor:
             logger.exception(
                 "Error sending worker lost notification for worker %s: %s", worker_id, e
             )
+
+    def _send_game_server_lost_notification(self, game_server_instance_id: int):
+        """Send a game server lost notification to external queue"""
+        try:
+            # Create a status message indicating the game server instance is lost
+            lost_status = StatusInfo(
+                class_name="StatusEventProcessor",
+                status_type=StatusType.LOST,
+                as_of=datetime.now(timezone.utc),
+                game_server_instance_id=game_server_instance_id,
+            )
+
+            self._external_status_publisher.publish_external(lost_status)
+            self._write_status_to_database(lost_status)
+            logger.info(
+                "Game server lost notification sent for instance %s",
+                game_server_instance_id,
+            )
+
+        except Exception as e:
+            logger.exception(
+                "Error sending game server lost notification for instance %s: %s",
+                game_server_instance_id,
+                e,
+            )
+
+    def _get_active_game_server_instances(
+        self, worker_id: int, session
+    ) -> list[GameServerInstance]:
+        """Get all active game server instances for a given worker"""
+        stmt = (
+            select(GameServerInstance)
+            .where(GameServerInstance.worker_id == worker_id)
+            .where(GameServerInstance.end_date.is_(None))
+        )
+        return session.exec(stmt).all()
 
     def _process_internal_status_messages(self):
         """

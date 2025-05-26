@@ -46,7 +46,9 @@ class RabbitStatusPublisher(MessagePublisher):
             auto_delete=False,
         )
 
-        logger.info("Rabbit message publisher created %s", self._exchange)
+        logger.info(
+            "Rabbit message publisher created %s %s", self._exchange, self._routing_key
+        )
 
     def publish_external(self, status: StatusInfo) -> None:
         is_worker = status.worker_id is not None
@@ -58,6 +60,7 @@ class RabbitStatusPublisher(MessagePublisher):
         elif is_server:
             class_type = "game-server-instance"
             id = status.game_server_instance_id
+            logger.info("TEST IT WAS SERVER")
         else:
             raise ValueError("worker or server must be set")
 

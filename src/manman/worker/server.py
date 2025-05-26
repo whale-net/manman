@@ -54,13 +54,13 @@ class Server:
         self._command_message_provider = RabbitCommandSubscriber(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
-            queue_name=self.command_queue_name,
+            queue_name=self.command_routing_key,
         )
 
         self._status_publisher = RabbitStatusPublisher(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
-            routing_key_base=self.status_queue_name,
+            routing_key_base=self.status_routing_key,
         )
 
         self._root_install_directory = root_install_directory
@@ -110,11 +110,11 @@ class Server:
         )
 
     @property
-    def command_queue_name(self) -> str:
+    def command_routing_key(self) -> str:
         return self.generate_command_queue_name(self._instance.game_server_instance_id)
 
     @property
-    def status_queue_name(self) -> str:
+    def status_routing_key(self) -> str:
         return self.generate_status_queue_name(self._instance.game_server_instance_id)
 
     # def add_stdin(self, input: str):

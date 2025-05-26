@@ -69,12 +69,12 @@ class WorkerService:
         self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
-            routing_key_base=self.status_queue_name,
+            routing_key_base=self.status_routing_key,
         )
         self._command_provider = RabbitCommandSubscriber(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
-            queue_name=self.command_queue_name,
+            queue_name=self.command_routing_key,
         )
 
         # heartbeat
@@ -102,7 +102,7 @@ class WorkerService:
         )
 
     @property
-    def command_queue_name(self) -> str:
+    def command_routing_key(self) -> str:
         return self.generate_command_queue_name(self._worker_instance.worker_id)
 
     @staticmethod
@@ -112,7 +112,7 @@ class WorkerService:
         )
 
     @property
-    def status_queue_name(self) -> str:
+    def status_routing_key(self) -> str:
         return self.generate_status_queue_name(self._worker_instance.worker_id)
 
     def run(self):
