@@ -29,7 +29,7 @@ class TestDatabaseRepository:
         """Create a DatabaseRepository instance."""
         return DatabaseRepository()
 
-    @patch("manman.repository.database.get_sqlalchemy_session")
+    @patch("manman.util.get_sqlalchemy_session")
     def test_get_workers_with_stale_heartbeats_default_params(
         self, mock_get_session, repository, mock_session
     ):
@@ -44,7 +44,7 @@ class TestDatabaseRepository:
         mock_session.exec.assert_called_once()
         assert result == []
 
-    @patch("manman.repository.database.get_sqlalchemy_session")
+    @patch("manman.util.get_sqlalchemy_session")
     def test_get_workers_with_stale_heartbeats_custom_params(
         self, mock_get_session, repository, mock_session
     ):
@@ -61,7 +61,7 @@ class TestDatabaseRepository:
         mock_session.exec.assert_called_once()
         assert result == []
 
-    @patch("manman.repository.database.get_sqlalchemy_session")
+    @patch("manman.util.get_sqlalchemy_session")
     def test_get_active_game_server_instances(
         self, mock_get_session, repository, mock_session
     ):
@@ -77,7 +77,7 @@ class TestDatabaseRepository:
         mock_session.exec.assert_called_once()
         assert result == []
 
-    @patch("manman.repository.database.get_sqlalchemy_session")
+    @patch("manman.util.get_sqlalchemy_session")
     def test_write_status_to_database(self, mock_get_session, repository, mock_session):
         """Test writing status information to the database."""
         mock_get_session.return_value.__enter__.return_value = mock_session
@@ -98,7 +98,7 @@ class TestDatabaseRepository:
         mock_session.add.assert_called_once_with(status_info)
         mock_session.commit.assert_called_once()
 
-    @patch("manman.repository.database.get_sqlalchemy_session")
+    @patch("manman.util.get_sqlalchemy_session")
     def test_get_stale_workers_with_status(
         self, mock_get_session, repository, mock_session
     ):

@@ -159,9 +159,7 @@ class TestStatusProcessor:
                 "TestWorker", StatusType.COMPLETE, worker_id=999
             )
 
-            with patch(
-                "manman.repository.database.get_sqlalchemy_session"
-            ) as mock_session_ctx:
+            with patch("manman.util.get_sqlalchemy_session") as mock_session_ctx:
                 mock_session = Mock()
                 mock_session_ctx.return_value.__enter__.return_value = mock_session
 
