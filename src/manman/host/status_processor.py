@@ -3,17 +3,13 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from amqpstorm import Connection
-from sqlmodel import not_, select
 
 from manman.models import (
-    ACTIVE_STATUS_TYPES,
-    GameServerInstance,
     StatusInfo,
     StatusType,
-    Worker,
 )
+from manman.repository.database import DatabaseRepository
 from manman.repository.rabbitmq import RabbitStatusPublisher, RabbitStatusSubscriber
-from manman.util import get_sqlalchemy_session
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +31,9 @@ class StatusEventProcessor:
     def __init__(self, rabbitmq_connection: Connection):
         self._rabbitmq_connection = rabbitmq_connection
         self._is_running = False
+
+        # Initialize database repository
+        self._db_repository = DatabaseRepository()
 
         # Subscribe to status messages from both worker and server exchanges
         # Using the enhanced RabbitStatusSubscriber to consume from multiple exchanges
@@ -104,65 +103,35 @@ class StatusEventProcessor:
         This sends a notification to the external queue if a worker is marked as lost.
         """
         try:
-            current_time = datetime.now(timezone.utc)
-            heartbeat_threshold = current_time - timedelta(seconds=5)
-            heartbeat_max_lookback = current_time - timedelta(hours=1)
+            # Get workers with stale heartbeats using the database repository
+            stale_workers = self._db_repository.get_workers_with_stale_heartbeats()
 
-            with get_sqlalchemy_session() as session:
-                inner = select(StatusInfo).alias("i")
-                last_status = (
-                    select(StatusInfo).where(
-                        not_(StatusInfo.worker_id.is_(None)),
-                        not_(
-                            select(inner)
-                            .where(
-                                inner.c.worker_id == StatusInfo.worker_id,
-                                inner.c.as_of > StatusInfo.as_of,
-                            )
-                            .exists()
-                        ),
-                    )
-                ).subquery()
-
-                candidate_workers = (
-                    select(Worker, last_status.c.status_type)
-                    .join(last_status)
-                    .where(
-                        Worker.last_heartbeat > heartbeat_max_lookback,
-                        Worker.last_heartbeat < heartbeat_threshold,
-                        Worker.end_date.is_(None),
-                        last_status.c.status_type.in_(ACTIVE_STATUS_TYPES),
-                    )
+            for worker, current_status in stale_workers:
+                logger.warning(
+                    "Worker %s heartbeat is stale (last: %s), marking as LOST from %s",
+                    worker.worker_id,
+                    worker.last_heartbeat,
+                    current_status,
                 )
 
-                stale_workers = session.exec(candidate_workers).all()
-                for worker, current_status in stale_workers:
+                # Send worker lost notification
+                self._send_worker_lost_notification(worker.worker_id)
+
+                # Get all active game server instances for this worker
+                active_instances = self._db_repository.get_active_game_server_instances(
+                    worker.worker_id
+                )
+
+                # Send lost notifications for all active game server instances
+                for instance in active_instances:
                     logger.warning(
-                        "Worker %s heartbeat is stale (last: %s, threshold: %s), marking as LOST from %s",
+                        "Marking game server instance %s as LOST due to worker %s being lost",
+                        instance.game_server_instance_id,
                         worker.worker_id,
-                        worker.last_heartbeat,
-                        heartbeat_threshold,
-                        current_status,
                     )
-
-                    # Send worker lost notification
-                    self._send_worker_lost_notification(worker.worker_id)
-
-                    # Get all active game server instances for this worker
-                    active_instances = self._get_active_game_server_instances(
-                        worker.worker_id, session
+                    self._send_game_server_lost_notification(
+                        instance.game_server_instance_id
                     )
-
-                    # Send lost notifications for all active game server instances
-                    for instance in active_instances:
-                        logger.warning(
-                            "Marking game server instance %s as LOST due to worker %s being lost",
-                            instance.game_server_instance_id,
-                            worker.worker_id,
-                        )
-                        self._send_game_server_lost_notification(
-                            instance.game_server_instance_id
-                        )
 
         except Exception as e:
             logger.exception("Error checking worker heartbeats: %s", e)
@@ -179,7 +148,7 @@ class StatusEventProcessor:
             )
 
             self._external_status_publisher.publish_external(lost_status)
-            self._write_status_to_database(lost_status)
+            self._db_repository.write_status_to_database(lost_status)
             logger.info("Worker lost notification sent for worker %s", worker_id)
 
         except Exception as e:
@@ -199,7 +168,7 @@ class StatusEventProcessor:
             )
 
             self._external_status_publisher.publish_external(lost_status)
-            self._write_status_to_database(lost_status)
+            self._db_repository.write_status_to_database(lost_status)
             logger.info(
                 "Game server lost notification sent for instance %s",
                 game_server_instance_id,
@@ -211,17 +180,6 @@ class StatusEventProcessor:
                 game_server_instance_id,
                 e,
             )
-
-    def _get_active_game_server_instances(
-        self, worker_id: int, session
-    ) -> list[GameServerInstance]:
-        """Get all active game server instances for a given worker"""
-        stmt = (
-            select(GameServerInstance)
-            .where(GameServerInstance.worker_id == worker_id)
-            .where(GameServerInstance.end_date.is_(None))
-        )
-        return session.exec(stmt).all()
 
     def _process_internal_status_messages(self):
         """
@@ -241,7 +199,7 @@ class StatusEventProcessor:
                     status_info.as_of,
                 )
                 self._external_status_publisher.publish_external(status_info)
-                self._write_status_to_database(status_info)
+                self._db_repository.write_status_to_database(status_info)
         except Exception as e:
             logger.exception("Error processing status messages: %s", e)
 
@@ -262,23 +220,6 @@ class StatusEventProcessor:
                 logger.info("processing external status message %s", status_info)
         except Exception as e:
             logger.exception("Error processing external status messages: %s", e)
-
-    def _write_status_to_database(self, status_info: StatusInfo):
-        """Write status message to the database."""
-        try:
-            # Write to database
-            with get_sqlalchemy_session() as session:
-                session.add(status_info)
-                session.commit()
-                logger.debug(
-                    "Status written to database: %s, %s, %s",
-                    status_info.class_name,
-                    status_info.status_type.value,
-                    status_info.as_of,
-                )
-
-        except Exception as e:
-            logger.exception("Error writing status to database: %s", e)
 
     def _shutdown(self):
         """Clean shutdown of the processor."""

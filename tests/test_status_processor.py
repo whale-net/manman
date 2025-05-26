@@ -86,9 +86,11 @@ class TestStatusProcessor:
             "WorkerService", StatusType.RUNNING, worker_id=123
         )
 
-        # Mock the database write method to avoid actual database calls
-        with patch.object(processor, "_write_status_to_database") as mock_write:
-            processor._write_status_to_database(status_info)
+        # Mock the database repository write method to avoid actual database calls
+        with patch.object(
+            processor._db_repository, "write_status_to_database"
+        ) as mock_write:
+            processor._db_repository.write_status_to_database(status_info)
 
             # Verify the database write method was called with correct parameters
             mock_write.assert_called_once_with(status_info)
@@ -117,19 +119,32 @@ class TestStatusProcessor:
                 "WorkerService", StatusType.RUNNING, worker_id=123
             )
 
-            # Mock database session to raise an exception
-            with patch(
-                "manman.host.status_processor.get_sqlalchemy_session"
-            ) as mock_session_ctx:
-                mock_session = Mock()
-                mock_session_ctx.return_value.__enter__.return_value = mock_session
-                mock_session.add.side_effect = Exception("Database connection failed")
-
+            # Mock the entire write_status_to_database method to raise an exception
+            with patch.object(
+                processor._db_repository,
+                "write_status_to_database",
+                side_effect=Exception("Database connection failed"),
+            ) as mock_write:
                 # This should not raise an exception (should be logged instead)
-                processor._write_status_to_database(status_info)
+                # We need to call a method that uses write_status_to_database and handles exceptions
+                with patch.object(processor, "_external_status_publisher"):
+                    # Use the internal message processing which has exception handling
+                    with patch.object(
+                        processor._internal_status_subscriber, "get_status_messages"
+                    ) as mock_get_messages:
+                        from manman.repository.rabbitmq import StatusMessage
 
-                # Verify that the exception was caught and add was attempted
-                mock_session.add.assert_called_once()
+                        mock_get_messages.return_value = [
+                            StatusMessage(
+                                status_info=status_info, routing_key="test.routing.key"
+                            )
+                        ]
+
+                        # This should not raise an exception despite the database error
+                        processor._process_internal_status_messages()
+
+                # Verify that the database write method was called
+                mock_write.assert_called_once_with(status_info)
 
     def test_status_info_fields_mapping(self, mock_rabbitmq_connection):
         """Test that StatusInfo database record is created with correct field mapping."""
@@ -145,12 +160,12 @@ class TestStatusProcessor:
             )
 
             with patch(
-                "manman.host.status_processor.get_sqlalchemy_session"
+                "manman.repository.database.get_sqlalchemy_session"
             ) as mock_session_ctx:
                 mock_session = Mock()
                 mock_session_ctx.return_value.__enter__.return_value = mock_session
 
-                processor._write_status_to_database(status_info)
+                processor._db_repository.write_status_to_database(status_info)
 
                 # Get the StatusInfo object that was passed to session.add
                 mock_session.add.assert_called_once()
@@ -195,9 +210,12 @@ class TestStatusProcessor:
 
             mock_subscriber.get_status_messages.return_value = test_messages
 
-            with patch.object(
-                processor, "_external_status_publisher"
-            ) as mock_publisher:
+            with (
+                patch.object(processor, "_external_status_publisher") as mock_publisher,
+                patch.object(
+                    processor._db_repository, "write_status_to_database"
+                ) as mock_db_write,
+            ):
                 processor._process_internal_status_messages()
 
                 # Verify that each message was published externally
@@ -208,6 +226,11 @@ class TestStatusProcessor:
                 mock_publisher.publish_external.assert_any_call(
                     test_messages[1].status_info
                 )
+
+                # Verify that each message was written to the database
+                assert mock_db_write.call_count == 2
+                mock_db_write.assert_any_call(test_messages[0].status_info)
+                mock_db_write.assert_any_call(test_messages[1].status_info)
 
     def test_processor_shutdown(self, mock_rabbitmq_connection):
         """Test that the processor shuts down cleanly."""
