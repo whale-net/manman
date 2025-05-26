@@ -264,7 +264,7 @@ class WorkerAPIClient(APIClientBase):
         return GameServerInstance.model_validate_json(response.content)
 
     def server_heartbeat(self, instance: GameServerInstance) -> GameServerInstance:
-        response = self._session.get(
+        response = self._session.post(
             "/server/instance/heartbeat",
             data=instance.model_dump_json(),
         )
@@ -290,7 +290,7 @@ class WorkerAPIClient(APIClientBase):
         return Worker.model_validate_json(response.content)
 
     def worker_heartbeat(self, worker: Worker):
-        response = self._session.get(
+        response = self._session.post(
             "/worker/heartbeat",
             data=worker.model_dump_json(),
         )

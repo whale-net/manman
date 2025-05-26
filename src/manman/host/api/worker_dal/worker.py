@@ -38,7 +38,7 @@ async def worker_shutdown_other(instance: Worker):
 
 
 # heartbeat
-@router.get("/heartbeat")
+@router.post("/heartbeat")
 async def worker_heartbeat(instance: Worker):
     repository = WorkerRepository()
     try:

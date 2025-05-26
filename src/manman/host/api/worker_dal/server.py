@@ -37,7 +37,7 @@ async def server_instance(id: int) -> GameServerInstance:
     return instance
 
 
-@router.get("/instance/heartbeat/{id}")
+@router.post("/instance/heartbeat/{id}")
 async def server_instance_heartbeat(id: int) -> GameServerInstance:
     repository = GameServerInstanceRepository()
     instance = repository.update_instance_heartbeat(id)
