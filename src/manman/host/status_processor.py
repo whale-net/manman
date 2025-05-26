@@ -35,14 +35,14 @@ class StatusEventProcessor:
         self._rabbitmq_connection = rabbitmq_connection
         self._is_running = False
 
-        # Subscribe to status messages from the worker exchange
-        # Using a wildcard pattern to consume all worker status messages
+        # Subscribe to status messages from both worker and server exchanges
+        # Using the enhanced RabbitStatusSubscriber to consume from multiple exchanges
         self._internal_status_subscriber = RabbitStatusSubscriber(
             connection=self._rabbitmq_connection,
-            exchange="worker",  # Same exchange that workers publish to
-            # TODO - reference worker class or something for this
-            routing_key="status.worker-instance.*",
-            # our queue name
+            exchanges_config={
+                "worker": "status.worker-instance.*",  # Worker status messages
+                "server": "status.server-instance.*",  # Server status messages
+            },
             queue_name="status-processor-internal-queue",
         )
 

@@ -8,7 +8,7 @@ for receiving commands and status messages via RabbitMQ.
 import logging
 import queue
 import threading
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 from amqpstorm import Connection, Message
 
@@ -153,25 +153,37 @@ class RabbitStatusSubscriber:
     by the `get_status_messages` method.
 
     Supports both exact routing key matches and wildcard patterns when used with topic exchanges.
+    Can consume from multiple exchanges with different routing keys.
     """
 
     def __init__(
         self,
         connection: Connection,
-        exchange: str,
+        exchange: Optional[str] = None,
         routing_key: str = "",
         queue_name: Optional[str] = None,
+        exchanges_config: Optional[Dict[str, Union[str, List[str]]]] = None,
     ) -> None:
         """
         :param connection: An AMQPStorm connection to the RabbitMQ server.
-        :param exchange: Exchange to bind to
-        :param routing_key: Routing key pattern for message filtering (supports wildcards with topic exchanges)
+        :param exchange: Single exchange to bind to (legacy parameter, use exchanges_config for multiple)
+        :param routing_key: Single routing key pattern (legacy parameter, use exchanges_config for multiple)
         :param queue_name: Name of queue to bind to the exchange. If None, a random name will be generated.
+        :param exchanges_config: Dictionary mapping exchange names to routing key(s).
+                               Format: {"exchange1": "routing.key", "exchange2": ["key1", "key2"]}
+                               If provided, takes precedence over exchange/routing_key parameters.
         """
         self._queue_name = queue_name
-        self._exchange = exchange
-        self._routing_key = routing_key
         self._channel = connection.channel()
+
+        # Handle both old single exchange and new multiple exchanges configuration
+        if exchanges_config:
+            self._exchanges_config = exchanges_config
+        elif exchange:
+            # Legacy single exchange support
+            self._exchanges_config = {exchange: routing_key}
+        else:
+            raise ValueError("Either 'exchange' or 'exchanges_config' must be provided")
 
         # Declare queue
         result = self._channel.queue.declare(
@@ -185,20 +197,28 @@ class RabbitStatusSubscriber:
         self._queue_name = result["queue"]
         logger.info("Status queue declared %s", self._queue_name)
 
-        # Bind the queue to the exchange with routing key
-        self._channel.queue.bind(
-            exchange=self._exchange,
-            queue=self._queue_name,
-            routing_key=self._routing_key,
-        )
-        logger.info(
-            "Queue %s bound to exchange %s with routing key '%s'",
-            self._queue_name,
-            self._exchange,
-            self._routing_key,
-        )
+        # Bind the queue to all configured exchanges with their routing keys
+        for exchange_name, routing_keys in self._exchanges_config.items():
+            # Ensure routing_keys is always a list
+            if isinstance(routing_keys, str):
+                routing_keys = [routing_keys]
 
-        self._name = f"rmq-status-{self._exchange}-{self._queue_name}"
+            for routing_key in routing_keys:
+                self._channel.queue.bind(
+                    exchange=exchange_name,
+                    queue=self._queue_name,
+                    routing_key=routing_key,
+                )
+                logger.info(
+                    "Queue %s bound to exchange %s with routing key '%s'",
+                    self._queue_name,
+                    exchange_name,
+                    routing_key,
+                )
+
+        # Generate a descriptive name based on all exchanges
+        exchange_names = "-".join(self._exchanges_config.keys())
+        self._name = f"rmq-status-{exchange_names}-{self._queue_name}"
         self._status_queue = queue.Queue()
         self._consumer_tag = None
 
