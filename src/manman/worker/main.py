@@ -5,6 +5,7 @@ import amqpstorm
 import typer
 from typing_extensions import Annotated, Optional
 
+from manman.logging_config import setup_logging
 from manman.util import get_rabbitmq_connection, get_rabbitmq_ssl_options, init_rabbitmq
 from manman.worker.worker_service import WorkerService
 
@@ -53,6 +54,9 @@ def callback(
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
 ):
+    # Setup logging first
+    setup_logging(service_name="worker")
+
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
     # Initialize with AMQPStorm connection parameters
@@ -67,9 +71,6 @@ def callback(
         if enable_ssl
         else None,
     )
-
-    # init basic logging config
-    logging.basicConfig(level=logging.INFO)
 
 
 @app.command()

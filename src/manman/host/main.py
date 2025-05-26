@@ -2,6 +2,7 @@ import json
 import logging
 import logging.config
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,7 @@ from typing_extensions import Annotated
 import alembic
 import alembic.command
 import alembic.config
+from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
@@ -23,7 +25,6 @@ from manman.worker.server import Server
 from manman.worker.worker_service import WorkerService
 
 app = typer.Typer()
-# fileConfig("logging.ini", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
@@ -112,6 +113,9 @@ def start_experience_api(
     ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
+    # Setup logging first
+    setup_logging(service_name="experience-api")
+
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
         rabbitmq_port=rabbitmq_port,
@@ -138,7 +142,12 @@ def start_experience_api(
         _generate_openapi_spec(experience_app, "experience-api")
         return
 
-    uvicorn.run(experience_app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        experience_app,
+        host="0.0.0.0",
+        port=port,
+        log_config=get_uvicorn_log_config("experience-api"),
+    )
 
 
 @app.command()
@@ -164,6 +173,9 @@ def start_status_api(
     ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
+    # Setup logging first
+    setup_logging(service_name="status-api")
+
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
         rabbitmq_port=rabbitmq_port,
@@ -190,7 +202,12 @@ def start_status_api(
         _generate_openapi_spec(status_app, "status-api")
         return
 
-    uvicorn.run(status_app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        status_app,
+        host="0.0.0.0",
+        port=port,
+        log_config=get_uvicorn_log_config("status-api"),
+    )
 
 
 @app.command()
@@ -216,6 +233,9 @@ def start_worker_dal_api(
     ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
+    # Setup logging first
+    setup_logging(service_name="worker-dal-api")
+
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
         rabbitmq_port=rabbitmq_port,
@@ -247,7 +267,12 @@ def start_worker_dal_api(
         _generate_openapi_spec(worker_dal_app, "worker-dal-api")
         return
 
-    uvicorn.run(worker_dal_app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        worker_dal_app,
+        host="0.0.0.0",
+        port=port,
+        log_config=get_uvicorn_log_config("worker-dal-api"),
+    )
 
 
 @app.command()
@@ -266,6 +291,12 @@ def start_status_processor(
     ] = None,
 ):
     """Start the status event processor that handles status-related pub/sub messages."""
+
+    # Setup logging first - this is a standalone service (no uvicorn)
+    setup_logging(service_name="status-processor")
+
+    logger.info("Starting status event processor...")
+
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
         rabbitmq_port=rabbitmq_port,
@@ -276,31 +307,33 @@ def start_status_processor(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
     )
-    logger.info("Starting status event processor...")
 
-    # Start the status event processor (pub/sub only, no HTTP server)
-    # TODO - re-add health check API
-    # from fastapi import FastAPI  # Add FastAPI import
+    # Start the status event processor (pub/sub only, no HTTP server other than health check)
+    from fastapi import FastAPI  # Add FastAPI import
 
-    # from manman.host.api.shared import (
-    #     add_health_check,  # Ensure this import is present or add it
-    # )
+    from manman.host.api.shared import (
+        add_health_check,  # Ensure this import is present or add it
+    )
     from manman.host.status_processor import StatusEventProcessor
     from manman.util import get_rabbitmq_connection
 
     # Define and run health check API in a separate thread
-    # health_check_app = FastAPI(title="ManMan Status Processor Health Check")
-    # add_health_check(health_check_app)
+    health_check_app = FastAPI(title="ManMan Status Processor Health Check")
+    add_health_check(health_check_app)
 
-    # def run_health_check_server():
-    #     uvicorn.run(
-    #         health_check_app, host="0.0.0.0", port=8000,
-    #     )
+    def run_health_check_server():
+        # Use our uvicorn config for the health check server too
+        uvicorn.run(
+            health_check_app,
+            host="0.0.0.0",
+            port=8000,
+            # NOTE: this sets the name of the service in the logs
+            log_config=get_uvicorn_log_config("status-processor"),
+        )
 
-    # health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
-    # health_check_thread.start()
+    health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
+    health_check_thread.start()
 
-    # for some reason these logs aren't being emit
     logger.info("Health check API for status processor started on port 8000")
 
     processor = StatusEventProcessor(get_rabbitmq_connection())
@@ -334,6 +367,8 @@ def run_downgrade(target: str):
 def callback(
     db_connection_string: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_URL")],
 ):
+    # Setup basic logging as early as possible for CLI operations
+    setup_logging()
     init_sql_alchemy_engine(db_connection_string)
 
 
