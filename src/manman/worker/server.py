@@ -16,11 +16,11 @@ from manman.models import (
     StatusInfo,
     StatusType,
 )
-from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
+from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
 
 logger = logging.getLogger(__name__)

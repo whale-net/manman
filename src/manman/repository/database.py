@@ -20,7 +20,6 @@ from manman.models import (
     StatusInfo,
     Worker,
 )
-from manman.util import get_sqlalchemy_session
 
 
 class DatabaseRepository:
@@ -35,6 +34,33 @@ class DatabaseRepository:
         """
         self._session = session
 
+    def _get_session(self) -> Session:
+        """Get a database session. If none provided, create a new one."""
+        if self._session is not None:
+            return self._session
+
+        # Import here to avoid circular import
+        from manman.util import get_sqlalchemy_session
+
+        return get_sqlalchemy_session()
+
+    def _get_session_context(self):
+        """Get a session context manager."""
+        if self._session is not None:
+            # If we have a persistent session, create a context manager that yields it
+            from contextlib import contextmanager
+
+            @contextmanager
+            def session_context():
+                yield self._session
+
+            return session_context()
+
+        # Import here to avoid circular import
+        from manman.util import get_sqlalchemy_session
+
+        return get_sqlalchemy_session()
+
     def get_stale_workers_with_status(
         self, heartbeat_threshold: datetime, heartbeat_max_lookback: datetime
     ) -> List[Tuple[Worker, str]]:
@@ -48,7 +74,7 @@ class DatabaseRepository:
         Returns:
             List of tuples containing (Worker, current_status_type)
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             # Subquery to get the latest status for each worker
             inner = select(StatusInfo).alias("i")
             last_status = (
@@ -91,7 +117,7 @@ class DatabaseRepository:
         Returns:
             List of active GameServerInstance objects
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = (
                 select(GameServerInstance)
                 .where(GameServerInstance.worker_id == worker_id)
@@ -106,7 +132,7 @@ class DatabaseRepository:
         Args:
             status_info: The StatusInfo object to write to the database
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             session.add(status_info)
             session.commit()
 
@@ -138,17 +164,8 @@ class DatabaseRepository:
         )
 
 
-class StatusRepository:
+class StatusRepository(DatabaseRepository):
     """Repository class for status-related database operations."""
-
-    def __init__(self, session: Optional[Session] = None):
-        """
-        Initialize the repository with an optional session.
-
-        Args:
-            session: Optional SQLAlchemy session. If not provided, a new session will be created for each operation.
-        """
-        self._session = session
 
     def get_latest_worker_status(self, worker_id: int) -> Optional[StatusInfo]:
         """
@@ -160,7 +177,7 @@ class StatusRepository:
         Returns:
             The latest StatusInfo for the worker, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = (
                 select(StatusInfo)
                 .where(StatusInfo.worker_id == worker_id)
@@ -181,7 +198,7 @@ class StatusRepository:
         Returns:
             The latest StatusInfo for the instance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = (
                 select(StatusInfo)
                 .where(StatusInfo.game_server_instance_id == game_server_instance_id)
@@ -191,17 +208,8 @@ class StatusRepository:
             return session.exec(stmt).first()
 
 
-class WorkerRepository:
+class WorkerRepository(DatabaseRepository):
     """Repository class for worker-related database operations."""
-
-    def __init__(self, session: Optional[Session] = None):
-        """
-        Initialize the repository with an optional session.
-
-        Args:
-            session: Optional SQLAlchemy session. If not provided, a new session will be created for each operation.
-        """
-        self._session = session
 
     def create_worker(self) -> Worker:
         """
@@ -210,7 +218,7 @@ class WorkerRepository:
         Returns:
             The created Worker instance
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             worker = Worker()
             session.add(worker)
             session.flush()
@@ -228,7 +236,7 @@ class WorkerRepository:
         Returns:
             The Worker instance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = select(Worker).where(Worker.worker_id == worker_id)
             return session.exec(stmt).first()
 
@@ -245,7 +253,7 @@ class WorkerRepository:
         Raises:
             Exception: If the worker is already shut down
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = select(Worker).where(Worker.worker_id == worker_id)
             current_instance = session.exec(stmt).first()
 
@@ -277,7 +285,7 @@ class WorkerRepository:
         Raises:
             Exception: If the worker is not found or already shut down
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = select(Worker).where(Worker.worker_id == worker_id)
             current_instance = session.exec(stmt).first()
 
@@ -308,7 +316,7 @@ class WorkerRepository:
         """
         from sqlmodel import and_, func, update
 
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = (
                 update(Worker)
                 .where(
@@ -325,17 +333,8 @@ class WorkerRepository:
             return affected_rows
 
 
-class GameServerRepository:
+class GameServerRepository(DatabaseRepository):
     """Repository class for game server-related database operations."""
-
-    def __init__(self, session: Optional[Session] = None):
-        """
-        Initialize the repository with an optional session.
-
-        Args:
-            session: Optional SQLAlchemy session. If not provided, a new session will be created for each operation.
-        """
-        self._session = session
 
     def get_game_server_by_id(self, server_id: int) -> Optional[GameServer]:
         """
@@ -347,7 +346,7 @@ class GameServerRepository:
         Returns:
             The GameServer instance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             server = session.get(GameServer, server_id)
             if server:
                 session.expunge(server)
@@ -365,24 +364,15 @@ class GameServerRepository:
         Returns:
             The GameServerConfig instance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             config = session.get(GameServerConfig, config_id)
             if config:
                 session.expunge(config)
             return config
 
 
-class GameServerInstanceRepository:
+class GameServerInstanceRepository(DatabaseRepository):
     """Repository class for game server instance-related database operations."""
-
-    def __init__(self, session: Optional[Session] = None):
-        """
-        Initialize the repository with an optional session.
-
-        Args:
-            session: Optional SQLAlchemy session. If not provided, a new session will be created for each operation.
-        """
-        self._session = session
 
     def create_instance(
         self, game_server_config_id: int, worker_id: int
@@ -397,7 +387,7 @@ class GameServerInstanceRepository:
         Returns:
             The created GameServerInstance
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             server = GameServerInstance(
                 game_server_config_id=game_server_config_id, worker_id=worker_id
             )
@@ -417,7 +407,7 @@ class GameServerInstanceRepository:
         Returns:
             The GameServerInstance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             instance = session.get(GameServerInstance, instance_id)
             if instance:
                 session.expunge(instance)
@@ -436,7 +426,7 @@ class GameServerInstanceRepository:
         Raises:
             Exception: If the instance is already shut down
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             stmt = select(GameServerInstance).where(
                 GameServerInstance.game_server_instance_id == instance_id
             )
@@ -469,7 +459,7 @@ class GameServerInstanceRepository:
         Returns:
             The updated GameServerInstance, or None if not found
         """
-        with get_sqlalchemy_session(self._session) as session:
+        with self._get_session_context() as session:
             instance = session.get(GameServerInstance, instance_id)
             if instance is None:
                 return None
