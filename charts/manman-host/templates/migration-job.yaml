@@ -31,9 +31,6 @@ spec:
       annotations:
         # Prevent ArgoCD from managing this pod directly
         "argocd.argoproj.io/compare-options": IgnoreExtraneous
-      labels:
-        app: manman-migrations
-        component: migration
     spec:
       restartPolicy: Never
       containers:
