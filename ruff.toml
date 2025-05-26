@@ -1,0 +1,11 @@
+# Ruff configuration file
+# This mirrors the linting options defined in pyproject.toml
+# for use with precommit and other tools that prefer standalone config files
+
+line-length = 88
+
+[lint]
+extend-select = ["I"]
+# pyflakes, pycodestyle, isort
+#select = ["F", "E", "W", "I001"]
+select = ["F", "W", "I001"]

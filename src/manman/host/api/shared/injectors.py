@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
 
-from manman.api_client import AccessToken
+from manman.repository.api_client import AccessToken
 from manman.util import get_auth_api_client, get_rabbitmq_connection
 
 

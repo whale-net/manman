@@ -27,11 +27,11 @@ spec:
           image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
           resources:
             requests:
-              cpu: 100m
+              cpu: 50m
               memory: 128Mi
             limits:
               cpu: 100m
-              memory: 128Mi
+              memory: 256Mi
           ports:
             - containerPort: {{ .Values.apis.status.port }}
               name: http
@@ -48,6 +48,12 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          readinessProbe: # Add readinessProbe
+            httpGet:
+              path: /status/health # Health check path
+              port: {{ .Values.apis.status.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
           # TODO - improve how secrets are sourced in this template
           env:
             - name: MANMAN_POSTGRES_URL

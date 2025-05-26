@@ -1,7 +1,7 @@
-from manman.models import Base, GameServerConfig, GameServerInstance, Worker
+from manman.models import GameServerConfig, GameServerInstance, ManManBase, Worker
 
 
-class StdinCommandRequest(Base):
+class StdinCommandRequest(ManManBase):
     """
     Request to send to the worker to start a game server instance.
     """
@@ -9,7 +9,7 @@ class StdinCommandRequest(Base):
     commands: list[str]
 
 
-class CurrentInstanceResponse(Base):
+class CurrentInstanceResponse(ManManBase):
     """
     Response to the worker to start a game server instance.
     """

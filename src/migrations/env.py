@@ -5,7 +5,7 @@ from alembic import context
 
 # import SQLmodel from models because it's modified
 # from sqlmodel import SQLModel
-from manman.models import Base  # SQLModel
+from manman.models import ManManBase  # SQLModel
 from manman.util import get_sqlalchemy_engine, init_sql_alchemy_engine
 
 # this is the Alembic Config object, which provides
@@ -21,7 +21,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata
+target_metadata = ManManBase.metadata
 # target_metadata = SQLModel.metadata
 
 # other values from the config, defined by the needs of env.py,

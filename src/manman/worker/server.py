@@ -4,8 +4,6 @@ from typing import Self
 
 from amqpstorm import Connection
 
-from manman.api_client import WorkerAPIClient
-
 # import sqlalchemy
 # from sqlalchemy.orm import Session
 # from pydantic import BaseModel
@@ -15,10 +13,14 @@ from manman.models import (
     GameServerConfig,
     GameServerInstance,
     ServerType,
+    StatusInfo,
+    StatusType,
 )
-from manman.processbuilder import ProcessBuilder, ProcessBuilderStatus
-from manman.repository.rabbit import RabbitMessageProvider
+from manman.repository.api_client import WorkerAPIClient
+from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
+from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
 
 logger = logging.getLogger(__name__)
@@ -49,10 +51,16 @@ class Server:
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
 
-        self._message_provider = RabbitMessageProvider(
+        self._command_message_provider = RabbitCommandSubscriber(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
-            queue_name=self.rmq_queue_name,
+            queue_name=self.command_routing_key,
+        )
+
+        self._status_publisher = RabbitStatusPublisher(
+            connection=rabbitmq_connection,
+            exchange=Server.RMQ_EXCHANGE,
+            routing_key_base=self.status_routing_key,
         )
 
         self._root_install_directory = root_install_directory
@@ -71,17 +79,43 @@ class Server:
             pb.add_parameter(arg)
         self._proc = pb
 
+        # Publish CREATED status
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.CREATED,
+                game_server_instance_id=self._instance.game_server_instance_id,
+            ),
+        )
+
     @property
     def instance(self) -> GameServerInstance:
         return self._instance
 
-    @property
-    def rmq_queue_name(self) -> str:
-        return self.generate_rmq_queue_name(self._instance.game_server_instance_id)
+    @staticmethod
+    def _generate_common_queue_prefix(game_server_instance_id: int) -> str:
+        return f"game-server-instance.{game_server_instance_id}"
 
     @staticmethod
-    def generate_rmq_queue_name(game_server_instance_id: int):
-        return f"game-server-instance.{game_server_instance_id}"
+    def generate_command_queue_name(game_server_instance_id: int):
+        return add_routing_key_prefix(
+            Server._generate_common_queue_prefix(game_server_instance_id),
+            "cmd",
+        )
+
+    @staticmethod
+    def generate_status_queue_name(game_server_instance_id: int):
+        return add_routing_key_prefix(
+            Server._generate_common_queue_prefix(game_server_instance_id), "status"
+        )
+
+    @property
+    def command_routing_key(self) -> str:
+        return self.generate_command_queue_name(self._instance.game_server_instance_id)
+
+    @property
+    def status_routing_key(self) -> str:
+        return self.generate_status_queue_name(self._instance.game_server_instance_id)
 
     # def add_stdin(self, input: str):
     #     # TODO check if pb is running
@@ -141,12 +175,27 @@ class Server:
             logger.info(
                 "shutting down instance %s", self._instance.game_server_instance_id
             )
+
+            # Capture instance ID before shutdown for status publishing
+            instance_id = self._instance.game_server_instance_id
+
             self._proc.stop()
             self._instance = self._wapi.game_server_instance_shutdown(self._instance)
-            self._message_provider.shutdown()
+            self._command_message_provider.shutdown()
+
+            # Publish COMPLETE status
+            self._status_publisher.publish(
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.COMPLETE,
+                    game_server_instance_id=instance_id,
+                ),
+            )
+            self._status_publisher.shutdown()
+
             logger.info(
                 "shutdown complete for instance %s",
-                self._instance.game_server_instance_id,
+                instance_id,
             )
 
     def execute_command(self, command: Command) -> None:
@@ -174,6 +223,15 @@ class Server:
         self.__is_started = True
         logger.info("instance %s starting", self._instance.game_server_instance_id)
 
+        # Publish INITIALIZING status
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.INITIALIZING,
+                game_server_instance_id=self._instance.game_server_instance_id,
+            ),
+        )
+
         if should_update:
             steam = SteamCMD(self._server_directory)
             steam.install(app_id=self._game_server.app_id)
@@ -183,6 +241,15 @@ class Server:
             extra_env = env_list_to_dict(self._config.env_var)
             logger.info("extra_env=%s", extra_env)
             self._proc.run(extra_env=extra_env)
+
+            # Publish RUNNING status once process is started
+            self._status_publisher.publish(
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.RUNNING,
+                    game_server_instance_id=self._instance.game_server_instance_id,
+                ),
+            )
         except Exception as e:
             logger.exception(e)
             self._shutdown()
@@ -192,7 +259,7 @@ class Server:
         while status != ProcessBuilderStatus.STOPPED and not self.__is_stopped:
             # TODO - make this available through property or something
             self._proc.read_output()
-            commands = self._message_provider.get_commands()
+            commands = self._command_message_provider.get_commands()
             if len(commands) > 0:
                 logger.info("commands received: %s", commands)
                 for command in commands:

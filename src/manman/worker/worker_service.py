@@ -6,10 +6,18 @@ from threading import Lock
 from amqpstorm import Connection
 from requests import ConnectionError
 
+from manman.models import (
+    Command,
+    CommandType,
+    GameServerConfig,
+    StatusInfo,
+    StatusType,
+)
+
 # from sqlalchemy.orm import Session
-from manman.api_client import WorkerAPIClient
-from manman.models import Command, CommandType, GameServerConfig
-from manman.repository.rabbit import RabbitMessageProvider
+from manman.repository.api_client import WorkerAPIClient
+from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
 
@@ -58,32 +66,78 @@ class WorkerService:
         self._wapi.close_other_workers(self._worker_instance)
 
         self._rabbitmq_connection = rabbitmq_connection
-        self._message_provider = RabbitMessageProvider(
+        self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
-            queue_name=self.rmq_queue_name,
+            routing_key_base=self.status_routing_key,
         )
+        self._command_provider = RabbitCommandSubscriber(
+            connection=self._rabbitmq_connection,
+            exchange=WorkerService.RMQ_EXCHANGE,
+            queue_name=self.command_routing_key,
+        )
+
+        # heartbeat
+        self._wapi.worker_heartbeat(self._worker_instance)
 
         self._futures = []
 
-    @property
-    def rmq_queue_name(self) -> str:
-        return self.generate_rmq_queue_name(self._worker_instance.worker_id)
+        # TODO - https://github.com/whale-net/manman/issues/44
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.CREATED,
+                worker_id=self._worker_instance.worker_id,
+            ),
+        )
 
     @staticmethod
-    def generate_rmq_queue_name(worker_id: int) -> str:
-        return f"worker.{worker_id}"
+    def _generate_common_queue_name(worker_id: int) -> str:
+        return f"worker-instance.{worker_id}"
+
+    @staticmethod
+    def generate_command_queue_name(worker_id: int) -> str:
+        return add_routing_key_prefix(
+            WorkerService._generate_common_queue_name(worker_id), "cmd"
+        )
+
+    @property
+    def command_routing_key(self) -> str:
+        return self.generate_command_queue_name(self._worker_instance.worker_id)
+
+    @staticmethod
+    def generate_status_queue_name(worker_id: int) -> str:
+        return add_routing_key_prefix(
+            WorkerService._generate_common_queue_name(worker_id), "status"
+        )
+
+    @property
+    def status_routing_key(self) -> str:
+        return self.generate_status_queue_name(self._worker_instance.worker_id)
 
     def run(self):
         loop_log_time = datetime.now()
+        loop_heartbeat_time = datetime.now()
         try:
             logger.info("worker service starting")
+            # TODO - https://github.com/whale-net/manman/issues/44
+            self._status_publisher.publish(
+                status=StatusInfo.create(
+                    self.__class__.__name__,
+                    StatusType.RUNNING,
+                    worker_id=self._worker_instance.worker_id,
+                ),
+            )
             while True:
                 # TODO - periodically check if the worker instance is tracked as alive. exit if not
                 #  doing single worker architecture for now, so not needed
-                if datetime.now() - loop_log_time > timedelta(seconds=30):
+                now = datetime.now()
+                if now - loop_log_time > timedelta(seconds=30):
                     logger.info("still running - server_count=%s", len(self._servers))
-                    loop_log_time = datetime.now()
+                    loop_log_time = now
+                if now - loop_heartbeat_time > timedelta(seconds=2):
+                    self._wapi.worker_heartbeat(self._worker_instance)
+                    loop_heartbeat_time = now
 
                 # prune servers
                 self._servers_lock.acquire()
@@ -108,6 +162,16 @@ class WorkerService:
         if self.__is_stopped:
             return
         self._wapi.worker_shutdown(self._worker_instance)
+        # TODO - https://github.com/whale-net/manman/issues/44
+        self._status_publisher.publish(
+            status=StatusInfo.create(
+                self.__class__.__name__,
+                StatusType.COMPLETE,
+                worker_id=self._worker_instance.worker_id,
+            ),
+        )
+        self._command_provider.shutdown()
+        self._status_publisher.shutdown()
         self.__is_stopped = True
 
     def _create_server(self, game_server_config_id: int):
@@ -151,7 +215,7 @@ class WorkerService:
         self._servers_lock.release()
 
     def _process_commands(self):
-        commands = self._message_provider.get_commands()
+        commands = self._command_provider.get_commands()
         if commands is not None:
             for command in commands:
                 logger.info("received command %s", command)

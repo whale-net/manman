@@ -22,13 +22,22 @@ apis:
     port: 8000
     command: "start-worker-dal-api"
 
-  # Status API
+  # Status API (read-only HTTP endpoints)
   status:
     enabled: true
     name: manman-status
     replicas: 1
     port: 8000
     command: "start-status-api"
+
+# Configuration for background processors (pub/sub services)
+processors:
+  # Status Event Processor (handles status-related messages)
+  status:
+    enabled: true
+    name: manman-status-processor
+    replicas: 1
+    command: "start-status-processor"
 
 # Ingress configuration (primarily for development)
 ingress:
@@ -39,6 +48,7 @@ ingress:
   name: ""
 
   # Custom host (defaults to localhost for development if empty)
+  # Note: When TLS is enabled, hosts are specified in tls.configs
   host: "localhost"
 
   # Ingress class name (e.g., nginx, traefik)
@@ -50,23 +60,20 @@ ingress:
     # nginx.ingress.kubernetes.io/use-regex: "true"
     # cert-manager.io/cluster-issuer: letsencrypt-prod
 
-  # Override auto-generated rules with explicit configuration
-  # If empty, rules are auto-generated based on enabled APIs
-  # Auto-generated rules will create:
-  #   - /experience -> experience API service
-  #   - /workerdal -> worker DAL API service
-  rules: []
-    # Example explicit rules:
-    # - host: localhost
-    #   paths:
-    #     - path: /experience
-    #       pathType: Prefix
-    #       serviceName: manman-experience-dev-service
-    #       servicePort: 8000
-    #     - path: /workerdal
-    #       pathType: Prefix
-    #       serviceName: manman-worker-dal-dev-service
-    #       servicePort: 8000
+  # TLS configuration
+  tls:
+    # Enable/disable TLS
+    enabled: false
+    # TLS configurations (if empty and TLS is enabled, uses default config)
+    configs: []
+      # Example TLS configs:
+      # - secretName: manman-tls-dev
+      #   hosts:
+      #     - localhost
+      #     - dev.example.com
+      # - secretName: manman-tls-prod
+      #   hosts:
+      #     - api.example.com
 
 # Migration configuration
 migrations:

@@ -1,29 +1,29 @@
-{{- if .Values.apis.experience.enabled }}
+{{- if .Values.processors.status.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.apis.experience.name }}-{{ .Values.env.app_env }}
+  name: {{ .Values.processors.status.name }}-{{ .Values.env.app_env }}
   namespace: {{ .Values.namespace }}
   labels:
-    app: {{ .Values.apis.experience.name }}-{{ .Values.env.app_env }}
-    component: experience-api
+    app: {{ .Values.processors.status.name }}-{{ .Values.env.app_env }}
+    component: status-processor
   annotations:
     # Ensure this deploys after migrations complete
     "argocd.argoproj.io/sync-wave": "0"
 spec:
-  replicas: {{ .Values.apis.experience.replicas }}
+  replicas: {{ .Values.processors.status.replicas }}
   selector:
     matchLabels:
-      app: {{ .Values.apis.experience.name }}-{{ .Values.env.app_env }}
+      app: {{ .Values.processors.status.name }}-{{ .Values.env.app_env }}
   template:
     metadata:
       namespace: {{ .Values.namespace }}
       labels:
-        app: {{ .Values.apis.experience.name }}-{{ .Values.env.app_env }}
-        component: experience-api
+        app: {{ .Values.processors.status.name }}-{{ .Values.env.app_env }}
+        component: status-processor
     spec:
       containers:
-        - name: manman-experience-api
+        - name: manman-status-processor
           image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
           resources:
             requests:
@@ -32,29 +32,25 @@ spec:
             limits:
               cpu: 100m
               memory: 256Mi
-          ports:
-            - containerPort: {{ .Values.apis.experience.port }}
-              name: http
           args:
             - host
-            - {{ .Values.apis.experience.command }}
+            - {{ .Values.processors.status.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
-          livenessProbe:
-            httpGet:
-              path: /experience/health
-              port: {{ .Values.apis.experience.port }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe: # Add readinessProbe
-            httpGet:
-              path: /experience/health # Health check path
-              port: {{ .Values.apis.experience.port }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          # TODO - improve how secrets are sourced in this template
+          ports:
+            - containerPort: 8000
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8000
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 20
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8000
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 10
           env:
             - name: MANMAN_POSTGRES_URL
               value: {{ .Values.env.db.url }}

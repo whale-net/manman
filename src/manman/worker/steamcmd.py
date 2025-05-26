@@ -1,7 +1,7 @@
 import logging
 import os
 
-from manman.processbuilder import ProcessBuilder
+from manman.worker.processbuilder import ProcessBuilder
 
 logger = logging.getLogger(__name__)
 

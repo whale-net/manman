@@ -17,6 +17,13 @@ dependencies = [
     "uvicorn>=0.34.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.25.0",  # For testing FastAPI endpoints
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -25,11 +32,25 @@ build-backend = "hatchling.build"
 host = "manman.host.main:app"
 worker = "manman.worker.main:app"
 
-[tool.ruff.lint]
-extend-select = ["I"]
-# pyflakes, pycodestyle, isort
-#select = ["F", "E", "W", "I001"]
-select = ["F", "W", "I001"]
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = [
+    "tests",
+]
+pythonpath = [
+    "src",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
 
-[tool.ruff]
-line-length = 88
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "pytest-xdist>=3.6.1",
+]

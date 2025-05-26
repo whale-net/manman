@@ -7,9 +7,15 @@ load('ext://dotenv', 'dotenv')
 # load env vars from .env
 dotenv()
 
-build_env = os.getenv('MANMAN_BUILD_ENV', 'default')
-print("Build environment:", build_env)
+# build_env = os.getenv('MANMAN_BUILD_ENV', 'default') # Old general build env
+# print("Build environment:", build_env) # Old print
 app_env = os.getenv('APP_ENV', 'dev')
+
+# New specific build environment variables
+build_postgres_env = os.getenv('MANMAN_BUILD_POSTGRES_ENV', 'default')
+build_rabbitmq_env = os.getenv('MANMAN_BUILD_RABBITMQ_ENV', 'default')
+print("Postgres Build Environment:", build_postgres_env)
+print("RabbitMQ Build Environment:", build_rabbitmq_env)
 
 
 # load the dev-util helm chart museum
@@ -51,25 +57,44 @@ docker_build(
     build_args={"COMPILE_CORES": "2"},
     ignore=['.git', 'data', 'dist', '.venv', 'manman.log', 'manman.warnings.log', 'build', 'bin']
 )
-db_url = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
-if build_env == 'custom':
-    db_url = os.getenv('MANMAN_POSTGRES_URL') or db_url
+db_url_default = 'postgresql+psycopg2://postgres:password@postgres-dev.manman-dev.svc.cluster.local:5432/manman'
+db_url = db_url_default
+if build_postgres_env == 'custom': # Updated condition
+    db_url = os.getenv('MANMAN_POSTGRES_URL') or db_url_default
 
 # Control which APIs to deploy in dev (can be overridden with env vars)
 enable_experience_api = os.getenv('MANMAN_ENABLE_EXPERIENCE_API', 'true').lower() == 'true'
 enable_worker_dal_api = os.getenv('MANMAN_ENABLE_WORKER_DAL_API', 'true').lower() == 'true'
 enable_status_api = os.getenv('MANMAN_ENABLE_STATUS_API', 'true').lower() == 'true'
 
+# RabbitMQ connection parameters
+rabbitmq_host_default = 'rabbitmq-dev.manman-dev.svc.cluster.local'
+rabbitmq_port_default = '5672'
+rabbitmq_user_default = 'rabbit'
+rabbitmq_password_default = 'password'
+
+# Initialize with defaults
+rabbitmq_host = rabbitmq_host_default
+rabbitmq_port = rabbitmq_port_default
+rabbitmq_user = rabbitmq_user_default
+rabbitmq_password = rabbitmq_password_default
+
+if build_rabbitmq_env == 'custom': # Updated condition
+    rabbitmq_host = os.getenv('MANMAN_RABBITMQ_HOST') or rabbitmq_host_default
+    rabbitmq_port = os.getenv('MANMAN_RABBITMQ_PORT') or rabbitmq_port_default
+    rabbitmq_user = os.getenv('MANMAN_RABBITMQ_USER') or rabbitmq_user_default
+    rabbitmq_password = os.getenv('MANMAN_RABBITMQ_PASSWORD') or rabbitmq_password_default
+# Removed the 'else' block that explicitly set defaults, as they are now initialized before the if block.
+
 # Build the helm set arguments
 helm_set_args = [
     'image.name=manman',
     'image.tag=dev',
     'env.db.url={}'.format(db_url),
-    'env.rabbitmq.host=rabbitmq-dev.manman-dev.svc.cluster.local',
-    # needed to be string? wtf
-    'env.rabbitmq.port=5672',
-    'env.rabbitmq.user=rabbit',
-    'env.rabbitmq.password=password',
+    'env.rabbitmq.host={}'.format(rabbitmq_host),
+    'env.rabbitmq.port={}'.format(rabbitmq_port),
+    'env.rabbitmq.user={}'.format(rabbitmq_user),
+    'env.rabbitmq.password={}'.format(rabbitmq_password),
     #'env.rabbitmq.enable_ssl=true',
     'namespace={}'.format(namespace),
     # for local dev, require manual migration and protect against bad models being used
