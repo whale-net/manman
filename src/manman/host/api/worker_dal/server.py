@@ -1,11 +1,10 @@
-import datetime
+from fastapi import APIRouter, HTTPException
 
-import sqlalchemy
-from fastapi import APIRouter
-
-# from sqlalchemy.sql.functions import current_timestamp
 from manman.models import GameServer, GameServerConfig, GameServerInstance
-from manman.util import get_sqlalchemy_session
+from manman.repository.database import (
+    GameServerInstanceRepository,
+    GameServerRepository,
+)
 
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the worker api
@@ -16,75 +15,50 @@ router = APIRouter(
 
 @router.post("/instance/create")
 async def server_instance_create(body: GameServerInstance) -> GameServerInstance:
-    with get_sqlalchemy_session() as sess:
-        # TODO validate gaem_server_config_id exists
-        server = GameServerInstance(
-            game_server_config_id=body.game_server_config_id, worker_id=body.worker_id
-        )
-        sess.add(server)
-        sess.flush()
-        sess.expunge(server)
-        sess.commit()
-
-    return server
+    repository = GameServerInstanceRepository()
+    return repository.create_instance(body.game_server_config_id, body.worker_id)
 
 
 @router.put("/instance/shutdown")
 async def server_instance_shutdown(instance: GameServerInstance) -> GameServerInstance:
-    with get_sqlalchemy_session() as sess:
-        # TODO - move check that it's not already dead to trigger
-        # DB is right place to do that, but doing this so I can learn
-        stmt = sqlalchemy.select(GameServerInstance).where(
-            GameServerInstance.game_server_instance_id
-            == instance.game_server_instance_id
-        )
-        current_instance = sess.scalar(stmt)
-        if current_instance is None:
-            raise Exception("instance is None")
-        if current_instance.end_date is not None:
-            raise Exception("instance already closed on server")
-
-        current_instance.end_date = datetime.datetime.now(datetime.timezone.utc)
-        sess.add(current_instance)
-        sess.flush()
-        sess.refresh(current_instance)
-        sess.expunge(current_instance)
-        sess.commit()
-
-    return current_instance
+    repository = GameServerInstanceRepository()
+    result = repository.shutdown_instance(instance.game_server_instance_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return result
 
 
 @router.get("/instance/{id}")
 async def server_instance(id: int) -> GameServerInstance:
-    with get_sqlalchemy_session() as sess:
-        instance = sess.get_one(GameServerInstance, id)
-        sess.expunge(instance)
+    repository = GameServerInstanceRepository()
+    instance = repository.get_instance_by_id(id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Instance not found")
     return instance
 
 
 @router.get("/instance/heartbeat/{id}")
 async def server_instance_heartbeat(id: int) -> GameServerInstance:
-    with get_sqlalchemy_session() as sess:
-        instance = sess.get_one(GameServerInstance, id)
-        instance.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-        sess.add(instance)
-        sess.flush()
-        sess.expunge(instance)
-        sess.commit()
+    repository = GameServerInstanceRepository()
+    instance = repository.update_instance_heartbeat(id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Instance not found")
     return instance
 
 
 @router.get("/config/{id}")
 async def server_config(id: int) -> GameServerConfig:
-    with get_sqlalchemy_session() as sess:
-        config = sess.get_one(GameServerConfig, id)
-        sess.expunge(config)
+    repository = GameServerRepository()
+    config = repository.get_game_server_config_by_id(id)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Config not found")
     return config
 
 
 @router.get("/{id}")
 async def server(id: int) -> GameServer:
-    with get_sqlalchemy_session() as sess:
-        config = sess.get_one(GameServer, id)
-        sess.expunge(config)
-    return config
+    repository = GameServerRepository()
+    server = repository.get_game_server_by_id(id)
+    if server is None:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return server

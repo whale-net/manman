@@ -1,11 +1,9 @@
 # The status API - read-only queries for status information
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import desc
-from sqlmodel import select
 
 from manman.models import StatusInfo
-from manman.util import get_sqlalchemy_session
+from manman.repository.database import StatusRepository
 
 router = APIRouter(prefix="/status")
 
@@ -17,16 +15,11 @@ router = APIRouter(prefix="/status")
 async def get_worker_status(
     worker_id: int,
 ) -> StatusInfo:
-    with get_sqlalchemy_session() as sess:
-        instances = sess.exec(
-            select(StatusInfo)
-            .where(StatusInfo.worker_id == worker_id)
-            .order_by(desc(StatusInfo.as_of))
-            .limit(1)
-        ).first()
-        if not instances:
-            raise HTTPException(status_code=404, detail="Worker not found")
-        return instances
+    repository = StatusRepository()
+    status = repository.get_latest_worker_status(worker_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return status
 
 
 # status for a single game server instance
@@ -36,13 +29,8 @@ async def get_worker_status(
 async def get_game_server_instance(
     game_server_instance_id: int,
 ) -> StatusInfo:
-    with get_sqlalchemy_session() as sess:
-        instance = sess.exec(
-            select(StatusInfo)
-            .where(StatusInfo.game_server_instance_id == game_server_instance_id)
-            .order_by(desc(StatusInfo.as_of))
-            .limit(1)
-        ).first()
-        if instance is None:
-            raise HTTPException(status_code=404, detail="Instance not found")
-        return instance
+    repository = StatusRepository()
+    status = repository.get_latest_instance_status(game_server_instance_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return status

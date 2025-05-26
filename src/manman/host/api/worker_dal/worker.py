@@ -1,10 +1,7 @@
-import sqlalchemy
-from fastapi import APIRouter
-from sqlalchemy.sql.functions import current_timestamp
+from fastapi import APIRouter, HTTPException
 
 from manman.models import Worker
-from manman.repository.workerdal import close_other_workers
-from manman.util import get_sqlalchemy_session
+from manman.repository.database import WorkerRepository
 
 # TODO - add authcz
 # TODO - this should have a better prefix taht is different from the server api
@@ -21,61 +18,31 @@ router = APIRouter(
 
 @router.post("/create")
 async def worker_create() -> Worker:
-    with get_sqlalchemy_session() as sess:
-        worker = Worker()
-        sess.add(worker)
-        sess.flush()
-        sess.expunge(worker)
-        sess.commit()
-
-    return worker
+    repository = WorkerRepository()
+    return repository.create_worker()
 
 
 @router.put("/shutdown")
 async def worker_shutdown(instance: Worker) -> Worker:
-    with get_sqlalchemy_session() as sess:
-        # TODO - move check that it's not already dead to trigger
-        # DB is right place to do that, but doing this so I can learn
-        stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)
-        current_instance = sess.scalar(stmt)
-        if current_instance is None:
-            raise Exception("instance is None")
-        if current_instance.end_date is not None:
-            raise Exception("instance already closed on server")
-
-        current_instance.end_date = current_timestamp()
-        sess.add(current_instance)
-        sess.flush()
-        sess.refresh(current_instance)
-        sess.expunge(current_instance)
-        sess.commit()
-
-    # print(current_instance.end_date)
-    return current_instance
+    repository = WorkerRepository()
+    result = repository.shutdown_worker(instance.worker_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return result
 
 
 @router.put("/shutdown/other")
 async def worker_shutdown_other(instance: Worker):
-    # TODO - make this work 3/16 7 pm
-    close_other_workers(instance.worker_id)
+    repository = WorkerRepository()
+    repository.close_other_workers(instance.worker_id)
 
 
 # heartbeat
 @router.get("/heartbeat")
 async def worker_heartbeat(instance: Worker):
-    with get_sqlalchemy_session() as sess:
-        stmt = sqlalchemy.select(Worker).where(Worker.worker_id == instance.worker_id)
-        current_instance = sess.scalar(stmt)
-        if current_instance is None:
-            raise Exception("instance is None")
-        if current_instance.end_date is not None:
-            raise Exception("instance already closed on server")
-
-        current_instance.last_heartbeat = current_timestamp()
-        sess.add(current_instance)
-        sess.flush()
-        sess.refresh(current_instance)
-        sess.expunge(current_instance)
-        sess.commit()
-
-    return current_instance
+    repository = WorkerRepository()
+    try:
+        result = repository.update_worker_heartbeat(instance.worker_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
