@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from manman.exceptions import WorkerAlreadyClosedException
 from manman.models import Worker
 from manman.repository.database import WorkerRepository
 
@@ -29,10 +30,16 @@ async def worker_create() -> Worker:
 @router.put("/shutdown")
 async def worker_shutdown(instance: Worker) -> Worker:
     repository = WorkerRepository()
-    result = repository.shutdown_worker(instance.worker_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    return result
+    try:
+        result = repository.shutdown_worker(instance.worker_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        return result
+    except WorkerAlreadyClosedException as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Worker {e.worker_id} was already closed on {e.end_date.isoformat()}. Shutdown rejected.",
+        )
 
 
 @router.put("/shutdown/other")
@@ -74,4 +81,12 @@ async def worker_heartbeat(instance: Worker):
         result = repository.update_worker_heartbeat(instance.worker_id)
         return result
     except Exception as e:
+        # Handle specific case where worker is already closed
+        if isinstance(e, WorkerAlreadyClosedException):
+            raise HTTPException(
+                status_code=410,
+                detail=f"Worker {e.worker_id} was already closed on {e.end_date.isoformat()}. Heartbeat rejected.",
+            )
+
+        # Handle all other exceptions with generic 400
         raise HTTPException(status_code=400, detail=str(e))
