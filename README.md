@@ -22,32 +22,63 @@ config:
   theme: redux
 ---
 graph TD
-    worker-svc["worker service"]
-    servers["server"]@{ shape: procs}
-    server-subproc["steamcmd & ./gameserver"]@{ shape: subproc}
+    subgraph "Service Layer"
+        worker-svc["worker service"]
+        servers["server"]@{ shape: procs}
+        server-subproc["steamcmd & ./gameserver"]@{ shape: subproc }
+    end
 
+    subgraph "API Layer"
+        http-ingress[/"http-ingress"\]
+        experience-api["experience-api"]
+        worker-dal-api["worker-dal-api"]
+        status-api["status-api"]
+        status-processor["status-processor"]@{ shape: proc }
+    end
+
+    subgraph "Data Layer"
+        database["manman"]@{ shape: db}
+    end
+
+    subgraph "Messaging Layer"
+        rmq{{"rabbitmq"}}
+    end
+
+    subgraph "External Integrations"
+        slack-bot["slack-bot (fcm)"]
+    end
+
+    %% Core Worker Flow
     worker-svc --> servers --> server-subproc
 
-    http-ingress[/"http-ingress"\]
-    experience-api["experience-api"]
-    worker-dal-api["worker-dal-api"]
-    status-api["status-api"]
-    %% is proc the right shape?
-    status-processor["status-processor"]@{ shape: proc }
+    %% HTTP Ingress and API interactions
+    http-ingress --> experience-api
+    http-ingress --> status-api
+    http-ingress --> worker-dal-api
 
-    worker-svc & servers --> http-ingress --> worker-dal-api
-    http-ingress -- exposed for now --> experience-api & status-api
+    %% Service to Ingress Communication
+    worker-svc --> http-ingress
+    servers --> http-ingress
 
-    database["manman"]@{ shape: db}
-    experience-api & worker-dal-api & status-processor & status-api --> database
+    %% API to Database Communication
+    experience-api --> database
+    worker-dal-api --> database
+    status-processor --> database
+    status-api --> database
 
-    rmq{{"rabbitmq"}}
-    rmq <--> worker-svc & servers & experience-api & status-processor
+    %% RabbitMQ Interactions
+    rmq <--> worker-svc
+    rmq <--> servers
+    rmq <--> experience-api
+    rmq <--> status-processor
 
+    %% Slack Bot Interactions
+    slack-bot --> experience-api
+    slack-bot --> status-api
 
-    slack-bot["slack-bot (fcm)"]
-    slack-bot --> experience-api & status-api
-
+    %% Comment
+    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the worker-dal-api<br>via the http-ingress"]@{ shape: comment }
+    http-ingress-comment -.- http-ingress
 ```
 
 ### features
