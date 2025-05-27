@@ -53,37 +53,27 @@ graph TD
 
     %% HTTP Ingress and API interactions
     external-http-ingress --> experience-api
-
     external-http-ingress -- exposed for now --> status-api
-
     external-http-ingress -- exposed for now --> worker-dal-api
 
     %% Service to Ingress Communication
     worker-svc --> external-http-ingress
-
     servers --> external-http-ingress
 
     %% API to Database Communication
     experience-api --> database
-
     worker-dal-api --> database
-
     status-processor --> database
-
     status-api --> database
 
     %% RabbitMQ Interactions
     rmq <--> worker-svc
-
     rmq <--> servers
-
     rmq <-- experience-api
-
     rmq <--> status-processor
 
     %% Slack Bot Interactions
     slack-bot --> experience-api
-
     slack-bot --> status-api
 
     %% Comment
