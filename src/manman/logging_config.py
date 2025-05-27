@@ -149,7 +149,7 @@ def _setup_otel_logging(
         resource=Resource.create(
             {
                 "service.name": service_name or "manman",
-                "service.instance.id": platform.node(),
+                "service.instance.id": os.uname().nodename,
             }
         ),
     )
