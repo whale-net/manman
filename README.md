@@ -43,7 +43,7 @@ graph TD
     http-ingress-comment -.- http-ingress
 
     database["manman"]@{ shape: db}
-    host-api & host-dal-api --> database
+    experience-api & worker-dal-api & status-processor & status-api --> database
 
     rmq{{"rabbitmq"}}
     rmq <--> worker-svc & servers & experience-api & status-processor
