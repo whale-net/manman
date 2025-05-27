@@ -10,12 +10,14 @@ on:
     branches:
       - 'main'
 
+
 jobs:
   generate-openapi:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for release attachment
       actions: write   # Required for artifact upload
+      issues: write    # Required for PR comments
 
     steps:
       - name: Checkout repository
