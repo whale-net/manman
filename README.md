@@ -29,7 +29,7 @@ graph TD
     end
 
     subgraph "API Layer"
-        external-http-ingress[/"external-http-ingress"\]
+        http-ingress[/"http-ingress"\]
         experience-api["experience-api"]
         worker-dal-api["worker-dal-api"]
         status-api["status-api"]
@@ -52,13 +52,13 @@ graph TD
     worker-svc --> servers --> server-subproc
 
     %% HTTP Ingress and API interactions
-    external-http-ingress --> experience-api
-    external-http-ingress -- exposed for now --> status-api
-    external-http-ingress -- exposed for now --> worker-dal-api
+    http-ingress --> experience-api
+    http-ingress -- exposed for now --> status-api
+    http-ingress -- exposed for now --> worker-dal-api
 
     %% Service to Ingress Communication
-    worker-svc --> external-http-ingress
-    servers --> external-http-ingress
+    worker-svc --> http-ingress
+    servers --> http-ingress
 
     %% API to Database Communication
     experience-api --> database
@@ -69,7 +69,7 @@ graph TD
     %% RabbitMQ Interactions
     rmq <--> worker-svc
     rmq <--> servers
-    rmq <-- experience-api
+    rmq <--> experience-api
     rmq <--> status-processor
 
     %% Slack Bot Interactions
