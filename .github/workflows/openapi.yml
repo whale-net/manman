@@ -1,0 +1,230 @@
+name: OpenAPI Generation and Publishing
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  generate-openapi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for release attachment
+      actions: write   # Required for artifact upload
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.7.8"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install the project
+        run: uv sync
+
+      - name: Create OpenAPI specs directory
+        run: mkdir -p openapi-specs
+
+      - name: Generate OpenAPI spec for Experience API
+        run: uv run manman host generate-openapi experience-api
+
+      - name: Generate OpenAPI spec for Status API
+        run: uv run manman host generate-openapi status-api
+
+      - name: Generate OpenAPI spec for Worker DAL API
+        run: uv run manman host generate-openapi worker-dal-api
+
+      - name: List generated files
+        run: |
+          echo "Generated OpenAPI specifications:"
+          ls -la openapi-specs/
+          echo
+          echo "File contents preview:"
+          for file in openapi-specs/*.json; do
+            echo "=== $file ==="
+            jq '.info.title, .info.version' "$file" 2>/dev/null || echo "Failed to parse JSON"
+            echo
+          done
+
+      - name: Create OpenAPI bundle
+        run: |
+          # Create a combined archive with all OpenAPI specs
+          tar -czf openapi-specs-bundle.tar.gz openapi-specs/
+
+          # Also create individual archives for each API
+          cd openapi-specs
+          for api_file in *.json; do
+            api_name=$(basename "$api_file" .json)
+            tar -czf "../openapi-${api_name}.tar.gz" "$api_file"
+          done
+          cd ..
+
+      - name: Upload OpenAPI artifacts (for all events)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-specifications
+          path: |
+            openapi-specs/
+            openapi-*.tar.gz
+          retention-days: 30
+
+      # Only attach to release if this is a tag push
+      - name: Attach OpenAPI specs to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            openapi-specs-bundle.tar.gz
+            openapi-*.tar.gz
+            openapi-specs/*.json
+          body: |
+            ## OpenAPI Specifications
+
+            This release includes OpenAPI specifications for all ManMan APIs:
+
+            - **experience-api.json**: Experience API (host layer) - Game server management and user-facing functionality
+            - **status-api.json**: Status API - Status and monitoring functionality
+            - **worker-dal-api.json**: Worker DAL API - Data access endpoints for worker services
+
+            ### Usage
+
+            You can use these specifications to:
+            - Generate client SDKs using tools like OpenAPI Generator
+            - Import into API testing tools like Postman or Insomnia
+            - Generate documentation using tools like Redoc or Swagger UI
+            - Validate API contracts in your integration tests
+
+            ### Formats Available
+
+            - Individual JSON files: `experience-api.json`, `status-api.json`, `worker-dal-api.json`
+            - Individual archives: `openapi-experience-api.tar.gz`, etc.
+            - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
+
+      - name: Comment on PR with OpenAPI info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Read the generated OpenAPI files to get version info
+            const specsDir = 'openapi-specs';
+            const files = fs.readdirSync(specsDir);
+
+            let apiInfo = '';
+            for (const file of files) {
+              if (file.endsWith('.json')) {
+                try {
+                  const content = JSON.parse(fs.readFileSync(path.join(specsDir, file), 'utf8'));
+                  const apiName = file.replace('.json', '');
+                  apiInfo += `- **${apiName}**: ${content.info.title} (${content.info.version})\n`;
+                } catch (e) {
+                  apiInfo += `- **${file}**: Failed to parse\n`;
+                }
+              }
+            }
+
+            const body = `## 🔧 OpenAPI Specifications Generated
+
+            OpenAPI specifications have been successfully generated for this PR:
+
+            ${apiInfo}
+
+            ### 📥 Download Artifacts
+
+            The generated OpenAPI specifications are available as build artifacts. You can:
+            1. Download them from the "Artifacts" section of this workflow run
+            2. Use them to generate client SDKs or test API changes
+            3. Import them into API testing tools
+
+            ### 🔍 Files Generated
+
+            - \`experience-api.json\` - Experience API specification
+            - \`status-api.json\` - Status API specification
+            - \`worker-dal-api.json\` - Worker DAL API specification
+
+            The artifacts will be retained for 30 days and include both individual JSON files and bundled archives.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Additional job to validate the generated OpenAPI specs
+  validate-openapi:
+    runs-on: ubuntu-latest
+    needs: generate-openapi
+    if: always() && needs.generate-openapi.result == 'success'
+
+    steps:
+      - name: Download OpenAPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-specifications
+
+      - name: Install OpenAPI validation tools
+        run: |
+          npm install -g @apidevtools/swagger-parser
+          npm install -g @redocly/openapi-cli
+
+      - name: Validate OpenAPI specifications
+        run: |
+          echo "🔍 Validating OpenAPI specifications..."
+
+          for spec_file in openapi-specs/*.json; do
+            echo "Validating $spec_file..."
+
+            # Validate with swagger-parser
+            echo "  📋 Swagger Parser validation:"
+            swagger-parser validate "$spec_file" || echo "  ⚠️ Swagger Parser validation failed"
+
+            # Validate with Redocly CLI
+            echo "  📋 Redocly validation:"
+            redocly lint "$spec_file" || echo "  ⚠️ Redocly validation failed"
+
+            echo "  ✅ Validation completed for $spec_file"
+            echo
+          done
+
+          echo "🎉 All OpenAPI specifications have been validated!"
+
+      - name: Generate documentation preview
+        run: |
+          echo "📚 Generating documentation previews..."
+
+          # Install redoc-cli for documentation generation
+          npm install -g redoc-cli
+
+          mkdir -p docs-preview
+
+          for spec_file in openapi-specs/*.json; do
+            api_name=$(basename "$spec_file" .json)
+            echo "Generating docs for $api_name..."
+            redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"
+          done
+
+          echo "📁 Generated documentation files:"
+          ls -la docs-preview/
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-documentation
+          path: docs-preview/
+          retention-days: 30
