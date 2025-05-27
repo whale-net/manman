@@ -49,7 +49,7 @@ graph TD
     rmq <--> worker-svc & servers & experience-api & status-processor
 
 
-    slack-bot["slack-bot"]
+    slack-bot["slack-bot (fcm)"]
     slack-bot --> experience-api & status-api
 
 ```
