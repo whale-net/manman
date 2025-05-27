@@ -48,6 +48,12 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /workerdal/health
+              port: {{ .Values.apis.workerDal.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
           # TODO - improve how secrets are sourced in this template
           env:
             - name: MANMAN_POSTGRES_URL
