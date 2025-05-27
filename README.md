@@ -29,7 +29,7 @@ graph TD
     end
 
     subgraph "API Layer"
-        http-ingress[/"http-ingress"\]
+        http-ingress[/"external-ingress"\]
         experience-api["experience-api"]
         worker-dal-api["worker-dal-api"]
         status-api["status-api"]
