@@ -9,10 +9,6 @@ on:
   pull_request:
     branches:
       - 'main'
-  # Use pull_request_target to enable write permissions for comment step
-  pull_request_target:
-    branches:
-      - 'main'
 
 jobs:
   generate-openapi:
@@ -118,9 +114,10 @@ jobs:
             - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
 
       - name: Comment on PR with OpenAPI info
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}  # explicitly pass the token
           script: |
             const fs = require('fs');
             const path = require('path');
