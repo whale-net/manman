@@ -9,6 +9,10 @@ on:
   pull_request:
     branches:
       - 'main'
+  # Use pull_request_target to enable write permissions for comment step
+  pull_request_target:
+    branches:
+      - 'main'
 
 jobs:
   generate-openapi:
@@ -16,7 +20,6 @@ jobs:
     permissions:
       contents: write  # Required for release attachment
       actions: write   # Required for artifact upload
-      issues: write    # Allow commenting on PRs
 
     steps:
       - name: Checkout repository
@@ -115,7 +118,7 @@ jobs:
             - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
 
       - name: Comment on PR with OpenAPI info
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         uses: actions/github-script@v7
         with:
           script: |
