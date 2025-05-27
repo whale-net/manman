@@ -119,15 +119,41 @@ These can be exported using the following command:
 export $(cat .env | xargs)
 ```
 
-Host can be started with Tilt
+Host can be started with Tilt.
+Service updates can be paused in tilt if you aren't modifying them.
+This will reduce the number of restarts and speed up development.
 ```bash
 tilt up
 ```
 
 or done manually.
-The manual approach is handy for creating and running migrations
+I do not recommend starting outside of tilt, although it can be done.
+If you do start outside tilt, make sure all env vars are set to tilt services.
+The manual approach is handy for creating and running migrations.
+
+service commands:
 ```bash
-uv run host start
+uv run host start-experience-api
+```
+```bash
+uv run host start-worker-dal-api
+```
+```bash
+uv run host start-status-api
+```
+```bash
+uv run host start-status-processor
+```
+
+migration commands:
+```bash
+uv run host run-migration
+```
+```bash
+uv run host create-migration
+```
+```bash
+uv run host run-downgrade <hash>
 ```
 
 start the worker
