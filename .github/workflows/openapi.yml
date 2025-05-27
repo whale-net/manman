@@ -90,7 +90,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           commit: ${{ github.event.pull_request.head.sha }}
-          artifacts: openapi-specifications
+          artifacts: openapi-specs/**
 
       # Only attach to release if this is a tag push
       - name: Attach OpenAPI specs to release
