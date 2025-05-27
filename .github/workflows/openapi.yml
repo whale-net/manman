@@ -83,6 +83,15 @@ jobs:
             openapi-*.tar.gz
           retention-days: 30
 
+      # Publish and update a single PR comment with artifact links using gavv/pull-request-artifacts
+      - name: Publish artifacts to PR
+        if: github.event_name == 'pull_request'
+        uses: gavv/pull-request-artifacts@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          commit: ${{ github.event.pull_request.head.sha }}
+          artifacts: openapi-specifications
+
       # Only attach to release if this is a tag push
       - name: Attach OpenAPI specs to release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -114,60 +123,6 @@ jobs:
             - Individual JSON files: `experience-api.json`, `status-api.json`, `worker-dal-api.json`
             - Individual archives: `openapi-experience-api.tar.gz`, etc.
             - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
-
-      - name: Comment on PR with OpenAPI info
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}  # explicitly pass the token
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            // Read the generated OpenAPI files to get version info
-            const specsDir = 'openapi-specs';
-            const files = fs.readdirSync(specsDir);
-
-            let apiInfo = '';
-            for (const file of files) {
-              if (file.endsWith('.json')) {
-                try {
-                  const content = JSON.parse(fs.readFileSync(path.join(specsDir, file), 'utf8'));
-                  const apiName = file.replace('.json', '');
-                  apiInfo += `- **${apiName}**: ${content.info.title} (${content.info.version})\n`;
-                } catch (e) {
-                  apiInfo += `- **${file}**: Failed to parse\n`;
-                }
-              }
-            }
-
-            const body = `## 🔧 OpenAPI Specifications Generated
-
-            OpenAPI specifications have been successfully generated for this PR:
-
-            ${apiInfo}
-
-            ### 📥 Download Artifacts
-
-            The generated OpenAPI specifications are available as build artifacts. You can:
-            1. Download them from the "Artifacts" section of this workflow run
-            2. Use them to generate client SDKs or test API changes
-            3. Import them into API testing tools
-
-            ### 🔍 Files Generated
-
-            - \`experience-api.json\` - Experience API specification
-            - \`status-api.json\` - Status API specification
-            - \`worker-dal-api.json\` - Worker DAL API specification
-
-            The artifacts will be retained for 30 days and include both individual JSON files and bundled archives.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
 
   # Additional job to validate the generated OpenAPI specs
   validate-openapi:
