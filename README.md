@@ -22,7 +22,7 @@ config:
   theme: redux
 ---
 graph TD
-    subgraph "Service Layer"
+    subgraph "Worker Service Layer"
         worker-svc["worker service"]
         servers["server"]@{ shape: procs}
         server-subproc["steamcmd & ./gameserver"]@{ shape: subproc }
@@ -53,8 +53,8 @@ graph TD
 
     %% HTTP Ingress and API interactions
     http-ingress --> experience-api
-    http-ingress --> status-api
-    http-ingress --> worker-dal-api
+    http-ingress -- exposed for now --> status-api
+    http-ingress -- exposed for now --> worker-dal-api
 
     %% Service to Ingress Communication
     worker-svc --> http-ingress
