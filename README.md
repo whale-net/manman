@@ -29,12 +29,16 @@ graph TD
     worker-svc --> servers --> server-subproc
 
     http-ingress[/"http-ingress"\]
-    host-api["host-api"]
-    host-dal-api["host-dal-api"]
-    worker-svc & servers --> http-ingress --> host-dal-api
-    http-ingress --> host-api
+    experience-api["experience-api"]
+    worker-dal-api["worker-dal-api"]
+    status-api["status-api"]
+    %% is proc the right shape?
+    status-processor["status-processor"]@{ shape: proc }
 
-    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the dal-api<br>via the http-ingress"]@{ shape: comment }
+    worker-svc & servers --> http-ingress --> worker-dal-api
+    http-ingress -- for now --> experience-api & status-api
+
+    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the worker-dal-api<br>via the http-ingress"]@{ shape: comment }
 
     http-ingress-comment -.- http-ingress
 
@@ -42,11 +46,11 @@ graph TD
     host-api & host-dal-api --> database
 
     rmq{{"rabbitmq"}}
-    rmq <--> worker-svc & servers & host-api
+    rmq <--> worker-svc & servers & experience-api & status-processor
 
 
     slack-bot["slack-bot"]
-    slack-bot --> host-api
+    slack-bot --> experience-api & status-api
 
 ```
 
