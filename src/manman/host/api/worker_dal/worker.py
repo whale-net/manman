@@ -3,8 +3,10 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from manman.exceptions import WorkerAlreadyClosedException
-from manman.models import Worker
+from manman.models import StatusInfo, StatusType, Worker
 from manman.repository.database import WorkerRepository
+from manman.repository.rabbitmq import RabbitStatusPublisher
+from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
 
@@ -52,25 +54,22 @@ async def worker_shutdown_other(instance: Worker):
         for worker in lost_workers:
             logger.warning(f"Worker {worker.worker_id} has been lost")
 
-        # # not ideal to rbar this but whatever son that ist he topology I ahve
-        # for worker in lost_workers:
-        #     worker_publisher = RabbitStatusPublisher(
-        #         connection=get_rabbitmq_connection(),
-        #         exchanges_config={
-        #             # TODO - actually reference the worker service exchange and queue name
-        #             "worker": [
-        #                 f"status.worker.{worker.worker_id}"
-        #             ]
-        #         }
-        #     )
-        #     worker_publisher.publish(
-        #         StatusInfo.create(
-        #             # TODO: properly reference the worker service class name
-        #             class_name="Worker",
-        #             status_type=StatusType.CRASHED,
-        #             worker_id=worker.worker_id,
-        #         )
-        #     )
+        # Send COMPLETE status to worker status queue for each shutdown worker
+        for worker in lost_workers:
+            worker_publisher = RabbitStatusPublisher(
+                connection=get_rabbitmq_connection(),
+                exchanges_config={
+                    "worker": [f"status.worker-instance.{worker.worker_id}"]
+                },
+            )
+            worker_publisher.publish(
+                StatusInfo.create(
+                    class_name="WorkerDal",
+                    status_type=StatusType.COMPLETE,
+                    worker_id=worker.worker_id,
+                )
+            )
+            worker_publisher.shutdown()
 
 
 # heartbeat
