@@ -22,32 +22,63 @@ config:
   theme: redux
 ---
 graph TD
-    worker-svc["worker service"]
-    servers["server"]@{ shape: procs}
-    server-subproc["steamcmd & ./gameserver"]@{ shape: subproc}
+    subgraph "Worker Service Layer"
+        worker-svc["worker service"]
+        servers["server"]@{ shape: procs}
+        server-subproc["steamcmd & ./gameserver"]@{ shape: subproc }
+    end
 
+    subgraph "API Layer"
+        http-ingress[/"external-ingress"\]
+        experience-api["experience-api"]
+        worker-dal-api["worker-dal-api"]
+        status-api["status-api"]
+        status-processor["status-processor"]@{ shape: proc }
+    end
+
+    subgraph "Data Layer"
+        database["manman"]@{ shape: db}
+    end
+
+    subgraph "Messaging Layer"
+        rmq{{"rabbitmq"}}
+    end
+
+    subgraph "External Integrations"
+        slack-bot["slack-bot (fcm)"]
+    end
+
+    %% Core Worker Flow
     worker-svc --> servers --> server-subproc
 
-    http-ingress[/"http-ingress"\]
-    host-api["host-api"]
-    host-dal-api["host-dal-api"]
-    worker-svc & servers --> http-ingress --> host-dal-api
-    http-ingress --> host-api
+    %% HTTP Ingress and API interactions
+    http-ingress --> experience-api
+    http-ingress -- exposed for now --> status-api
+    http-ingress -- exposed for now --> worker-dal-api
 
-    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the dal-api<br>via the http-ingress"]@{ shape: comment }
+    %% Service to Ingress Communication
+    worker-svc --> http-ingress
+    servers --> http-ingress
 
+    %% API to Database Communication
+    experience-api --> database
+    worker-dal-api --> database
+    status-processor --> database
+    status-api --> database
+
+    %% RabbitMQ Interactions
+    rmq <--> worker-svc
+    rmq <--> servers
+    rmq <--> experience-api
+    rmq <--> status-processor
+
+    %% Slack Bot Interactions
+    slack-bot --> experience-api
+    slack-bot --> status-api
+
+    %% Comment
+    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the worker-dal-api<br>via the http-ingress"]@{ shape: comment }
     http-ingress-comment -.- http-ingress
-
-    database["manman"]@{ shape: db}
-    host-api & host-dal-api --> database
-
-    rmq{{"rabbitmq"}}
-    rmq <--> worker-svc & servers & host-api
-
-
-    slack-bot["slack-bot"]
-    slack-bot --> host-api
-
 ```
 
 ### features
@@ -88,15 +119,41 @@ These can be exported using the following command:
 export $(cat .env | xargs)
 ```
 
-Host can be started with Tilt
+Host can be started with Tilt.
+Service updates can be paused in tilt if you aren't modifying them.
+This will reduce the number of restarts and speed up development.
 ```bash
 tilt up
 ```
 
 or done manually.
-The manual approach is handy for creating and running migrations
+I do not recommend starting outside of tilt, although it can be done.
+If you do start outside tilt, make sure all env vars are set to tilt services.
+The manual approach is handy for creating and running migrations.
+
+service commands:
 ```bash
-uv run host start
+uv run host start-experience-api
+```
+```bash
+uv run host start-worker-dal-api
+```
+```bash
+uv run host start-status-api
+```
+```bash
+uv run host start-status-processor
+```
+
+migration commands:
+```bash
+uv run host run-migration
+```
+```bash
+uv run host create-migration
+```
+```bash
+uv run host run-downgrade <hash>
 ```
 
 start the worker
