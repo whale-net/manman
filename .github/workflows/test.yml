@@ -1,0 +1,114 @@
+name: Test CI
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.7.8"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install the project
+        run: uv sync
+
+      - name: Install the dev group for testing
+        run: uv sync --group dev
+
+      - name: Run pytest
+        run: uv run pytest --cov=manman --cov-branch --cov-report=xml -n 8
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # TODO - eventually enable this job
+  # helm-chart-tests:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+
+  #     - name: Set up Helm
+  #       uses: azure/setup-helm@v4
+  #       with:
+  #         version: '3.14.0'
+
+  #     - name: Set up kubectl
+  #       uses: azure/setup-kubectl@v4
+
+  #     - name: Lint Helm chart
+  #       run: |
+  #         cd charts/manman-host
+  #         helm lint .
+
+  #     - name: Run Helm chart template tests
+  #       run: |
+  #         cd charts/manman-host
+  #         ./test-chart.sh
+
+  #     - name: Run Pod Disruption Budget tests
+  #       run: |
+  #         cd charts/manman-host
+  #         ./test-pdb.sh
+
+  #     - name: Run template unit tests
+  #       run: |
+  #         cd charts/manman-host
+  #         ./test-templates.sh
+
+  #     - name: Run integration tests
+  #       run: |
+  #         cd charts/manman-host
+  #         ./test-integration.sh
+
+  #     - name: Validate chart with different configurations
+  #       run: |
+  #         cd charts/manman-host
+  #         echo "Testing production configuration..."
+  #         helm template manman-prod . -f test-values/production.yaml --validate
+
+  #         echo "Testing minimal configuration..."
+  #         helm template manman-min . -f test-values/minimal.yaml --validate
+
+  #         echo "Testing development with ingress..."
+  #         helm template manman-dev . -f test-values/dev-ingress.yaml --validate
+
+  #     - name: Check for security issues with kubesec
+  #       run: |
+  #         cd charts/manman-host
+  #         # Install kubesec
+  #         curl -sSL https://github.com/controlplaneio/kubesec/releases/latest/download/kubesec_linux_amd64.tar.gz | tar xz
+  #         chmod +x kubesec
+
+  #         # Generate manifests and scan for security issues
+  #         helm template manman-security . -f test-values/production.yaml > manifests.yaml
+  #         ./kubesec scan manifests.yaml
+
+  #     - name: Upload test artifacts
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: helm-test-results
+  #         path: |
+  #           charts/manman-host/test-output/
+  #           charts/manman-host/manifests.yaml
+  #         retention-days: 30
