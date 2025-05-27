@@ -6,14 +6,14 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.config import ManManConfig
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
@@ -106,18 +106,11 @@ def start_experience_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
-    ] = False,
-    log_otlp: Annotated[
-        bool, 
-        typer.Option(
-            envvar="MANMAN_LOG_OTLP",
-            help="Enable OpenTelemetry OTLP logging"
-        )
     ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
@@ -145,11 +138,6 @@ def start_experience_api(
     experience_app.include_router(experience_router)
     add_health_check(experience_app)
 
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(experience_app, ManManConfig.EXPERIENCE_API)
-        return
-
     uvicorn.run(
         experience_app,
         host="0.0.0.0",
@@ -173,18 +161,11 @@ def start_status_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
-    ] = False,
-    log_otlp: Annotated[
-        bool, 
-        typer.Option(
-            envvar="MANMAN_LOG_OTLP",
-            help="Enable OpenTelemetry OTLP logging"
-        )
     ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
@@ -212,11 +193,6 @@ def start_status_api(
     status_app.include_router(status_router)
     add_health_check(status_app)
 
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(status_app, ManManConfig.STATUS_API)
-        return
-
     uvicorn.run(
         status_app,
         host="0.0.0.0",
@@ -240,18 +216,11 @@ def start_worker_dal_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
-    ] = False,
-    log_otlp: Annotated[
-        bool, 
-        typer.Option(
-            envvar="MANMAN_LOG_OTLP",
-            help="Enable OpenTelemetry OTLP logging"
-        )
     ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
@@ -284,11 +253,6 @@ def start_worker_dal_api(
     # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
     add_health_check(worker_dal_app)
 
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(worker_dal_app, ManManConfig.WORKER_DAL_API)
-        return
-
     uvicorn.run(
         worker_dal_app,
         host="0.0.0.0",
@@ -312,11 +276,10 @@ def start_status_processor(
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
     log_otlp: Annotated[
-        bool, 
+        bool,
         typer.Option(
-            envvar="MANMAN_LOG_OTLP",
-            help="Enable OpenTelemetry OTLP logging"
-        )
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
+        ),
     ] = False,
 ):
     """Start the status event processor that handles status-related pub/sub messages."""
@@ -376,7 +339,7 @@ def generate_openapi(
         typer.Argument(
             help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
         ),
-    ]
+    ],
 ):
     """Generate OpenAPI specification for a specific API without requiring environment setup."""
 
