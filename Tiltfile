@@ -50,6 +50,13 @@ k8s_resource(workload='rabbitmq-dev', port_forwards='5672:5672')
 k8s_resource(workload='rabbitmq-dev', port_forwards='15672:15672')
 
 
+# setup otel collector
+helm_resource('otelcollector-dev', 'dev-util/otelcollector-dev', resource_deps=['dev-util'],
+    flags=['--set=namespace={}'.format(namespace)]
+)
+# no need to publicly expose otel collector
+#k8s_resource(workload='otelcollector-dev', port_forwards='4317:4317')
+
 # create manman app
 docker_build(
     'manman',
@@ -96,6 +103,8 @@ helm_set_args = [
     'env.rabbitmq.user={}'.format(rabbitmq_user),
     'env.rabbitmq.password={}'.format(rabbitmq_password),
     #'env.rabbitmq.enable_ssl=true',
+    'env.otelCollector.logs.endpoint=http://otel-collector.{}.svc.cluster.local:4317'.format(namespace),
+    'env.otelCollector.traces.endpoint=http://otel-collector.{}.svc.cluster.local:4317'.format(namespace),
     'namespace={}'.format(namespace),
     # for local dev, require manual migration and protect against bad models being used
     'migrations.skip_migration=true',

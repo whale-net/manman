@@ -107,10 +107,10 @@ env:
 
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>
-#  otelCollector:
-#    logs:
-#      endpoint: <logs_endpoint>
-#    traces:
-#      endpoint: <traces_endpoint>
-#    metrics:
-#      endpoint: <metrics_endpoint>
+  otelCollector:
+    logs:
+      endpoint: <logs_endpoint>
+    traces:
+      endpoint: <traces_endpoint>
+    metrics:
+      endpoint: <metrics_endpoint>
