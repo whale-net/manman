@@ -35,6 +35,7 @@ build-backend = "hatchling.build"
 [project.scripts]
 host = "manman.host.main:app"
 worker = "manman.worker.main:app"
+openapi = "manman.host.openapi:app"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -1,9 +1,7 @@
-import json
 import logging
 import logging.config
 import os
 import threading
-from pathlib import Path
 from typing import Optional
 
 import sqlalchemy
@@ -14,7 +12,6 @@ from typing_extensions import Annotated
 import alembic
 import alembic.command
 import alembic.config
-from manman.config import ManManConfig
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
     get_rabbitmq_ssl_options,
@@ -72,23 +69,6 @@ def _init_common_services(
             durable=True,
         )
         logger.info("Exchange declared %s", exchange)
-
-
-def _generate_openapi_spec(app, service_name: str):
-    """Generate and save OpenAPI specification for a FastAPI app."""
-    output_path = Path("./openapi-specs")
-    output_path.mkdir(exist_ok=True)
-
-    # Generate OpenAPI spec
-    openapi_spec = app.openapi()
-
-    # Save to file with service name
-    spec_file = output_path / f"{service_name}.json"
-    with open(spec_file, "w") as f:
-        json.dump(openapi_spec, f, indent=2)
-
-    logger.info(f"OpenAPI spec saved to: {spec_file}")
-    print(f"OpenAPI spec saved to: {spec_file}")
 
 
 @app.command()
@@ -332,73 +312,6 @@ def start_status_processor(
     processor.run()
 
 
-@app.command()
-def generate_openapi(
-    api_name: Annotated[
-        str,
-        typer.Argument(
-            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
-        ),
-    ],
-):
-    """Generate OpenAPI specification for a specific API without requiring environment setup."""
-
-    # Setup minimal logging for the generation process
-    setup_logging(service_name="openapi-generator")
-
-    # Validate API name
-    try:
-        validated_api_name = ManManConfig.validate_api_name(api_name)
-        api_config = ManManConfig.get_api_config(validated_api_name)
-    except ValueError as e:
-        raise typer.BadParameter(str(e))
-
-    logger.info(f"Generating OpenAPI spec for {api_name}...")
-
-    # Create FastAPI apps with minimal dependencies (no database, no RabbitMQ)
-    from fastapi import FastAPI
-
-    if api_name == ManManConfig.EXPERIENCE_API:
-        from manman.host.api.experience import router as experience_router
-        from manman.host.api.shared import add_health_check
-
-        app = FastAPI(title=api_config.title, root_path=api_config.root_path)
-        app.include_router(experience_router)
-        add_health_check(app)
-
-    elif api_name == ManManConfig.STATUS_API:
-        from manman.host.api.shared import add_health_check
-        from manman.host.api.status import router as status_router
-
-        app = FastAPI(title=api_config.title, root_path=api_config.root_path)
-        app.include_router(status_router)
-        add_health_check(app)
-
-    elif api_name == ManManConfig.WORKER_DAL_API:
-        from manman.host.api.shared import add_health_check
-        from manman.host.api.worker_dal import server_router, worker_router
-
-        app = FastAPI(
-            title=api_config.title,
-            root_path=api_config.root_path,
-        )
-        app.include_router(server_router)
-        app.include_router(worker_router)
-        add_health_check(app)
-
-    else:
-        # This should never happen due to validation above, but kept for safety
-        raise typer.BadParameter(
-            f"Unknown API name: {api_name}. "
-            f"Valid options are: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
-        )
-
-    # Generate and save the OpenAPI spec
-    _generate_openapi_spec(app, api_name)
-    logger.info(f"OpenAPI spec generation completed for {api_name}")
-
-
-# TODO - should these not be ran by host?
 @app.command()
 def run_migration():
     _run_migration(get_sqlalchemy_engine())
