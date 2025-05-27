@@ -36,11 +36,7 @@ graph TD
     status-processor["status-processor"]@{ shape: proc }
 
     worker-svc & servers --> http-ingress --> worker-dal-api
-    http-ingress -- for now --> experience-api & status-api
-
-    http-ingress-comment["NOTE: worker-svc/servers<br>will only use the worker-dal-api<br>via the http-ingress"]@{ shape: comment }
-
-    http-ingress-comment -.- http-ingress
+    http-ingress -- exposed for now --> experience-api & status-api
 
     database["manman"]@{ shape: db}
     experience-api & worker-dal-api & status-processor & status-api --> database
