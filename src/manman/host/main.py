@@ -14,6 +14,7 @@ import typer
 import uvicorn
 from typing_extensions import Annotated
 
+from manman.config import ManManConfig
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
     get_rabbitmq_ssl_options,
@@ -111,10 +112,17 @@ def start_experience_api(
             help="Generate OpenAPI spec and exit instead of running the server"
         ),
     ] = False,
+    log_otlp: Annotated[
+        bool, 
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP",
+            help="Enable OpenTelemetry OTLP logging"
+        )
+    ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
-    setup_logging(service_name="experience-api")
+    setup_logging(service_name="experience-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -139,7 +147,7 @@ def start_experience_api(
 
     # If OpenAPI generation is requested, generate spec and exit
     if generate_openapi:
-        _generate_openapi_spec(experience_app, "experience-api")
+        _generate_openapi_spec(experience_app, ManManConfig.EXPERIENCE_API)
         return
 
     uvicorn.run(
@@ -171,10 +179,17 @@ def start_status_api(
             help="Generate OpenAPI spec and exit instead of running the server"
         ),
     ] = False,
+    log_otlp: Annotated[
+        bool, 
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP",
+            help="Enable OpenTelemetry OTLP logging"
+        )
+    ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
     # Setup logging first
-    setup_logging(service_name="status-api")
+    setup_logging(service_name="status-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -199,7 +214,7 @@ def start_status_api(
 
     # If OpenAPI generation is requested, generate spec and exit
     if generate_openapi:
-        _generate_openapi_spec(status_app, "status-api")
+        _generate_openapi_spec(status_app, ManManConfig.STATUS_API)
         return
 
     uvicorn.run(
@@ -231,10 +246,17 @@ def start_worker_dal_api(
             help="Generate OpenAPI spec and exit instead of running the server"
         ),
     ] = False,
+    log_otlp: Annotated[
+        bool, 
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP",
+            help="Enable OpenTelemetry OTLP logging"
+        )
+    ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     # Setup logging first
-    setup_logging(service_name="worker-dal-api")
+    setup_logging(service_name="worker-dal-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -264,7 +286,7 @@ def start_worker_dal_api(
 
     # If OpenAPI generation is requested, generate spec and exit
     if generate_openapi:
-        _generate_openapi_spec(worker_dal_app, "worker-dal-api")
+        _generate_openapi_spec(worker_dal_app, ManManConfig.WORKER_DAL_API)
         return
 
     uvicorn.run(
@@ -289,11 +311,18 @@ def start_status_processor(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
+    log_otlp: Annotated[
+        bool, 
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP",
+            help="Enable OpenTelemetry OTLP logging"
+        )
+    ] = False,
 ):
     """Start the status event processor that handles status-related pub/sub messages."""
 
     # Setup logging first - this is a standalone service (no uvicorn)
-    setup_logging(service_name="status-processor")
+    setup_logging(service_name="status-processor", enable_otel=log_otlp)
 
     logger.info("Starting status event processor...")
 
@@ -338,6 +367,72 @@ def start_status_processor(
 
     processor = StatusEventProcessor(get_rabbitmq_connection())
     processor.run()
+
+
+@app.command()
+def generate_openapi(
+    api_name: Annotated[
+        str,
+        typer.Argument(
+            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
+        ),
+    ]
+):
+    """Generate OpenAPI specification for a specific API without requiring environment setup."""
+
+    # Setup minimal logging for the generation process
+    setup_logging(service_name="openapi-generator")
+
+    # Validate API name
+    try:
+        validated_api_name = ManManConfig.validate_api_name(api_name)
+        api_config = ManManConfig.get_api_config(validated_api_name)
+    except ValueError as e:
+        raise typer.BadParameter(str(e))
+
+    logger.info(f"Generating OpenAPI spec for {api_name}...")
+
+    # Create FastAPI apps with minimal dependencies (no database, no RabbitMQ)
+    from fastapi import FastAPI
+
+    if api_name == ManManConfig.EXPERIENCE_API:
+        from manman.host.api.experience import router as experience_router
+        from manman.host.api.shared import add_health_check
+
+        app = FastAPI(title=api_config.title, root_path=api_config.root_path)
+        app.include_router(experience_router)
+        add_health_check(app)
+
+    elif api_name == ManManConfig.STATUS_API:
+        from manman.host.api.shared import add_health_check
+        from manman.host.api.status import router as status_router
+
+        app = FastAPI(title=api_config.title, root_path=api_config.root_path)
+        app.include_router(status_router)
+        add_health_check(app)
+
+    elif api_name == ManManConfig.WORKER_DAL_API:
+        from manman.host.api.shared import add_health_check
+        from manman.host.api.worker_dal import server_router, worker_router
+
+        app = FastAPI(
+            title=api_config.title,
+            root_path=api_config.root_path,
+        )
+        app.include_router(server_router)
+        app.include_router(worker_router)
+        add_health_check(app)
+
+    else:
+        # This should never happen due to validation above, but kept for safety
+        raise typer.BadParameter(
+            f"Unknown API name: {api_name}. "
+            f"Valid options are: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
+        )
+
+    # Generate and save the OpenAPI spec
+    _generate_openapi_spec(app, api_name)
+    logger.info(f"OpenAPI spec generation completed for {api_name}")
 
 
 # TODO - should these not be ran by host?

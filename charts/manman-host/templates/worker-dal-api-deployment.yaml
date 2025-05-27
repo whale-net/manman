@@ -72,6 +72,9 @@ spec:
               value: {{ .Values.env.rabbitmq.ssl_hostname | quote }}
             - name: APP_ENV
               value: {{ .Values.env.app_env }}
+{{- if .Values.env.otel.logging_enabled }}
+            - name: MANMAN_LOG_OTLP
+              value: "true"
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.apis.workerDal.name }}-{{ .Values.env.app_env }}
             - name: OTEL_RESOURCE_ATTRIBUTES
@@ -80,4 +83,5 @@ spec:
               value: {{ .Values.env.otelCollector.logs.endpoint }}
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: {{ .Values.env.otelCollector.traces.endpoint }}
+{{- end }}
 {{- end }}

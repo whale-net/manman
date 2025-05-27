@@ -29,7 +29,7 @@ def setup_logging(
     level: int = logging.INFO,
     service_name: Optional[str] = None,
     force_setup: bool = False,
-    enable_otel: bool = True,
+    enable_otel: bool = False,
     enable_console: bool = True,
     otel_endpoint: Optional[str] = None,
 ) -> None:
@@ -40,7 +40,7 @@ def setup_logging(
         level: Logging level (default: INFO)
         service_name: Name of the service for log identification
         force_setup: Whether to force reconfiguration even if already setup
-        enable_otel: Whether to enable OTEL logging (default: True)
+        enable_otel: Whether to enable OTEL logging (default: False)
         enable_console: Whether to enable console logging (default: True)
         otel_endpoint: OTEL collector endpoint (defaults to env var or localhost)
     """

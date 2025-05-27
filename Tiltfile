@@ -74,6 +74,9 @@ enable_experience_api = os.getenv('MANMAN_ENABLE_EXPERIENCE_API', 'true').lower(
 enable_worker_dal_api = os.getenv('MANMAN_ENABLE_WORKER_DAL_API', 'true').lower() == 'true'
 enable_status_api = os.getenv('MANMAN_ENABLE_STATUS_API', 'true').lower() == 'true'
 
+# Control OTEL logging (disabled by default for development)
+enable_otel_logging = os.getenv('MANMAN_ENABLE_OTEL_LOGGING', 'false').lower() == 'true'
+
 # RabbitMQ connection parameters
 rabbitmq_host_default = 'rabbitmq-dev.manman-dev.svc.cluster.local'
 rabbitmq_port_default = '5672'
@@ -105,6 +108,7 @@ helm_set_args = [
     #'env.rabbitmq.enable_ssl=true',
     'env.otelCollector.logs.endpoint=http://otel-collector.{}.svc.cluster.local:4317'.format(namespace),
     'env.otelCollector.traces.endpoint=http://otel-collector.{}.svc.cluster.local:4317'.format(namespace),
+    'env.otel.logging_enabled={}'.format(str(enable_otel_logging).lower()),
     'namespace={}'.format(namespace),
     # for local dev, require manual migration and protect against bad models being used
     'migrations.skip_migration=true',
