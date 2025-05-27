@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: write  # Required for release attachment
       actions: write   # Required for artifact upload
+      issues: write    # Allow commenting on PRs
 
     steps:
       - name: Checkout repository
