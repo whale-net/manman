@@ -26,6 +26,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
+# Install OpenTelemetry auto instrumentation packages
+RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
+
 # Second phase: compile deps
 RUN python -m compileall -f -j "$COMPILE_CORES" -o2 /app/.venv
 
@@ -45,4 +48,16 @@ ENV UV_COMPILE_BYTECODE=0
 # Place executables in the environment
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["uv", "run"]
+# OpenTelemetry configuration
+# Service name will be overridden by the helm chart, but set a reasonable default
+ENV OTEL_SERVICE_NAME='manman'
+# Auto logging is not desired, we handle logging manually
+ENV OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=false
+# Export traces to OTLP
+ENV OTEL_TRACES_EXPORTER=otlp
+# No metrics for now
+ENV OTEL_METRICS_EXPORTER=none
+# Traffic is intended for within-pod communication
+ENV OTEL_EXPORTER_OTLP_INSECURE=true
+
+ENTRYPOINT ["uv", "run", "opentelemetry-instrument"]

@@ -66,4 +66,12 @@ spec:
               value: {{ .Values.env.rabbitmq.ssl_hostname | quote }}
             - name: APP_ENV
               value: {{ .Values.env.app_env }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.apis.workerDal.name }}-{{ .Values.env.app_env }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment-name={{ .Values.apis.workerDal.name }}-{{ .Values.env.app_env }}"
+            - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+              value: {{ .Values.env.otelCollector.logs.endpoint }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ .Values.env.otelCollector.traces.endpoint }}
 {{- end }}
