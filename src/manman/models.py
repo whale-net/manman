@@ -272,6 +272,8 @@ class StatusInfo(ManManBase, table=True):
                 f"Invalid status type: {status_type}. Must be an instance of StatusType."
             )
         return cls(
+            # -1 is placeholder
+            status_info_id=-1,
             class_name=class_name,
             status_type=status_type,
             as_of=as_of,

@@ -109,7 +109,7 @@ def start_experience_api(
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
-    setup_logging(service_name="experience-api")
+    setup_logging(service_name="experience-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -168,7 +168,7 @@ def start_status_api(
 ):
     """Start the status API that provides status and monitoring functionality."""
     # Setup logging first
-    setup_logging(service_name="status-api")
+    setup_logging(service_name="status-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -227,7 +227,7 @@ def start_worker_dal_api(
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     # Setup logging first
-    setup_logging(service_name="worker-dal-api")
+    setup_logging(service_name="worker-dal-api", enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -291,7 +291,7 @@ def start_status_processor(
     """Start the status event processor that handles status-related pub/sub messages."""
 
     # Setup logging first - this is a standalone service (no uvicorn)
-    setup_logging(service_name="status-processor")
+    setup_logging(service_name="status-processor", enable_otel=log_otlp)
 
     logger.info("Starting status event processor...")
 
@@ -339,7 +339,6 @@ def start_status_processor(
     processor.run()
 
 
-# TODO - should these not be ran by host?
 @app.command()
 def run_migration():
     _run_migration(get_sqlalchemy_engine())

@@ -1,0 +1,940 @@
+name: OpenAPI
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - 'main'
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+  issues: write
+  pull-requests: write
+
+
+jobs:
+  generate-openapi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for release attachment
+      actions: write   # Required for artifact upload
+      issues: write    # Required for PR comments
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.7.8"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install the project
+        run: uv sync
+
+      - name: Create OpenAPI specs directory
+        run: mkdir -p openapi-specs
+
+      - name: Generate OpenAPI spec for Experience API
+        run: uv run openapi experience-api
+
+      - name: Generate OpenAPI spec for Status API
+        run: uv run openapi status-api
+
+      - name: Generate OpenAPI spec for Worker DAL API
+        run: uv run openapi worker-dal-api
+
+      - name: List generated files
+        run: |
+          echo "Generated OpenAPI specifications:"
+          ls -la openapi-specs/
+          echo
+          echo "File contents preview:"
+          for file in openapi-specs/*.json; do
+            echo "=== $file ==="
+            jq '.info.title, .info.version' "$file" 2>/dev/null || echo "Failed to parse JSON"
+            echo
+          done
+
+      - name: Create OpenAPI bundle
+        run: |
+          # Create a combined archive with all OpenAPI specs
+          tar -czf openapi-specs-bundle.tar.gz openapi-specs/
+
+          # Also create individual archives for each API
+          cd openapi-specs
+          for api_file in *.json; do
+            api_name=$(basename "$api_file" .json)
+            tar -czf "../openapi-${api_name}.tar.gz" "$api_file"
+          done
+          cd ..
+
+      - name: Upload OpenAPI artifacts (for all events)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-specifications
+          path: |
+            openapi-specs/
+            openapi-*.tar.gz
+          retention-days: 30
+
+      # Only attach to release if this is a tag push
+      - name: Attach OpenAPI specs to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            openapi-specs-bundle.tar.gz
+            openapi-*.tar.gz
+            openapi-specs/*.json
+          body: |
+            ## OpenAPI Specifications
+
+            This release includes OpenAPI specifications for all ManMan APIs:
+
+            - **experience-api.json**: Experience API (host layer) - Game server management and user-facing functionality
+            - **status-api.json**: Status API - Status and monitoring functionality
+            - **worker-dal-api.json**: Worker DAL API - Data access endpoints for worker services
+
+            ### Usage
+
+            You can use these specifications to:
+            - Generate client SDKs using tools like OpenAPI Generator
+            - Import into API testing tools like Postman or Insomnia
+            - Generate documentation using tools like Redoc or Swagger UI
+            - Validate API contracts in your integration tests
+
+            ### Formats Available
+
+            - Individual JSON files: `experience-api.json`, `status-api.json`, `worker-dal-api.json`
+            - Individual archives: `openapi-experience-api.tar.gz`, etc.
+            - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
+
+  # Additional job to validate the generated OpenAPI specs
+  validate-openapi:
+    runs-on: ubuntu-latest
+    needs: generate-openapi
+    if: always() && needs.generate-openapi.result == 'success'
+
+    steps:
+      - name: Download OpenAPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-specifications
+
+      - name: Install OpenAPI validation tools
+        run: |
+          npm install -g @apidevtools/swagger-parser
+          npm install -g @redocly/openapi-cli
+
+      - name: Validate OpenAPI specifications
+        run: |
+          echo "🔍 Validating OpenAPI specifications..."
+
+          for spec_file in openapi-specs/*.json; do
+            echo "Validating $spec_file..."
+
+            # Validate with swagger-parser
+            echo "  📋 Swagger Parser validation:"
+            swagger-parser validate "$spec_file" || echo "  ⚠️ Swagger Parser validation failed"
+
+            # Validate with Redocly CLI
+            echo "  📋 Redocly validation:"
+            redocly lint "$spec_file" || echo "  ⚠️ Redocly validation failed"
+
+            echo "  ✅ Validation completed for $spec_file"
+            echo
+          done
+
+          echo "🎉 All OpenAPI specifications have been validated!"
+
+      - name: Generate documentation preview
+        run: |
+          echo "📚 Generating documentation previews..."
+
+          # Install redoc-cli for documentation generation
+          npm install -g redoc-cli
+
+          mkdir -p docs-preview
+
+          for spec_file in openapi-specs/*.json; do
+            api_name=$(basename "$spec_file" .json)
+            echo "Generating docs for $api_name..."
+            redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"
+          done
+
+          echo "📁 Generated documentation files:"
+          ls -la docs-preview/
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-documentation
+          path: docs-preview/
+          retention-days: 30
+
+  # Deploy PR documentation preview (using GitHub Pages preview environments)
+  deploy-pr-preview:
+    runs-on: ubuntu-latest
+    needs: validate-openapi
+    if: github.event_name == 'pull_request' && needs.validate-openapi.result == 'success'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: write
+      deployments: write
+
+    # Use PR-specific concurrency group
+    concurrency:
+      group: "pr-preview-${{ github.event.pull_request.number }}"
+      cancel-in-progress: true
+
+    environment:
+      name: pr-preview-${{ github.event.pull_request.number }}
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download OpenAPI documentation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-documentation
+          path: docs-preview
+
+      - name: Create PR preview directory structure
+        run: |
+          # Create directory for this PR preview
+          mkdir -p site/pr-${{ github.event.pull_request.number }}
+
+          # Copy documentation to PR-specific directory
+          cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
+
+      - name: Download existing site (if exists)
+        continue-on-error: true
+        run: |
+          # Try to download the current pages site to preserve other PR previews
+          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
+          if [ -f existing-site.tar.gz ]; then
+            tar -xzf existing-site.tar.gz --exclude="pr-${{ github.event.pull_request.number }}/*" || true
+          fi
+
+      - name: Create PR-specific index page
+        run: |
+          cat > site/pr-${{ github.event.pull_request.number }}/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>ManMan API Documentation - PR #${{ github.event.pull_request.number }}</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 800px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: #f8fafc;
+                  }
+                  .header {
+                      text-align: center;
+                      margin-bottom: 3rem;
+                      padding-bottom: 2rem;
+                      border-bottom: 2px solid #e2e8f0;
+                  }
+                  .pr-banner {
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      padding: 1rem;
+                      border-radius: 8px;
+                      margin-bottom: 2rem;
+                      text-align: center;
+                  }
+                  .api-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                      gap: 2rem;
+                      margin-top: 2rem;
+                  }
+                  .api-card {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 2rem;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                      border: 1px solid #e2e8f0;
+                      transition: transform 0.2s, box-shadow 0.2s;
+                  }
+                  .api-card:hover {
+                      transform: translateY(-2px);
+                      box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+                  }
+                  .api-title {
+                      font-size: 1.5rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .api-description {
+                      color: #64748b;
+                      margin-bottom: 1.5rem;
+                      line-height: 1.6;
+                  }
+                  .api-link {
+                      display: inline-block;
+                      background: #3b82f6;
+                      color: white;
+                      padding: 0.75rem 1.5rem;
+                      border-radius: 8px;
+                      text-decoration: none;
+                      font-weight: 500;
+                      transition: background 0.2s;
+                  }
+                  .api-link:hover {
+                      background: #2563eb;
+                  }
+                  .build-info {
+                      background: #f1f5f9;
+                      border-radius: 8px;
+                      padding: 1rem;
+                      margin-top: 2rem;
+                      font-size: 0.875rem;
+                      color: #475569;
+                  }
+                  .back-link {
+                      display: inline-block;
+                      margin-bottom: 1rem;
+                      color: #6b7280;
+                      text-decoration: none;
+                  }
+                  .back-link:hover {
+                      color: #374151;
+                  }
+              </style>
+          </head>
+          <body>
+              <a href="../" class="back-link">← Back to Main Documentation</a>
+
+              <div class="pr-banner">
+                  <h2>🔍 Pull Request Preview</h2>
+                  <p>This is a preview of the API documentation for PR #${{ github.event.pull_request.number }}</p>
+                  <p><strong>${{ github.event.pull_request.title }}</strong></p>
+              </div>
+
+              <div class="header">
+                  <h1>ManMan API Documentation</h1>
+                  <p>Interactive API documentation for all ManMan services</p>
+              </div>
+
+              <div class="api-grid">
+                  <div class="api-card">
+                      <h2 class="api-title">Experience API</h2>
+                      <p class="api-description">Game server management and user-facing functionality. This is the primary API for hosting game servers and managing user experiences.</p>
+                      <a href="experience-api.html" class="api-link">View Documentation</a>
+                  </div>
+
+                  <div class="api-card">
+                      <h2 class="api-title">Status API</h2>
+                      <p class="api-description">Status and monitoring functionality. Provides health checks, metrics, and monitoring endpoints for all ManMan services.</p>
+                      <a href="status-api.html" class="api-link">View Documentation</a>
+                  </div>
+
+                  <div class="api-card">
+                      <h2 class="api-title">Worker DAL API</h2>
+                      <p class="api-description">Data access endpoints for worker services. Internal API used by worker processes for database operations.</p>
+                      <a href="worker-dal-api.html" class="api-link">View Documentation</a>
+                  </div>
+              </div>
+
+              <div class="build-info">
+                  <strong>PR Information:</strong><br>
+                  PR: <code>#${{ github.event.pull_request.number }}</code><br>
+                  Title: <code>${{ github.event.pull_request.title }}</code><br>
+                  Branch: <code>${{ github.head_ref }}</code><br>
+                  Commit: <code>${{ github.sha }}</code><br>
+                  Generated at: <code>$(date -u)</code>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Create main index with PR links
+        run: |
+          # Create a master index that lists all available previews
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>ManMan API Documentation Hub</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 900px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: #f8fafc;
+                  }
+                  .header {
+                      text-align: center;
+                      margin-bottom: 3rem;
+                      padding-bottom: 2rem;
+                      border-bottom: 2px solid #e2e8f0;
+                  }
+                  .preview-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                      gap: 2rem;
+                      margin-top: 2rem;
+                  }
+                  .preview-card {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 2rem;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                      border: 1px solid #e2e8f0;
+                  }
+                  .main-docs {
+                      border-left: 4px solid #10b981;
+                  }
+                  .pr-preview {
+                      border-left: 4px solid #f59e0b;
+                  }
+                  .preview-title {
+                      font-size: 1.25rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .preview-link {
+                      display: inline-block;
+                      background: #3b82f6;
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 6px;
+                      text-decoration: none;
+                      font-weight: 500;
+                      margin-top: 1rem;
+                  }
+                  .main-docs .preview-link {
+                      background: #10b981;
+                  }
+                  .pr-preview .preview-link {
+                      background: #f59e0b;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>ManMan API Documentation Hub</h1>
+                  <p>Access the latest API documentation and PR previews</p>
+              </div>
+
+              <div class="preview-grid">
+                  <div class="preview-card main-docs">
+                      <h2 class="preview-title">🚀 Latest Release Documentation</h2>
+                      <p>Official API documentation from the latest release</p>
+                      <a href="/main/" class="preview-link">View Main Documentation</a>
+                  </div>
+
+                  <div class="preview-card pr-preview">
+                      <h2 class="preview-title">🔍 PR #${{ github.event.pull_request.number }} Preview</h2>
+                      <p><strong>${{ github.event.pull_request.title }}</strong></p>
+                      <p>Preview of API changes in this pull request</p>
+                      <a href="/pr-${{ github.event.pull_request.number }}/" class="preview-link">View PR Preview</a>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Create site archive for future downloads
+        run: |
+          cd site
+          tar -czf ../site.tar.gz .
+          cd ..
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Comment on PR with preview link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            const deploymentUrl = '${{ steps.deployment.outputs.page_url }}';
+            const previewUrl = `${deploymentUrl}pr-${pull_number}/`;
+
+            const body = `## 📚 API Documentation Preview
+
+            The OpenAPI documentation preview has been deployed for this PR.
+
+            **🔍 PR Preview:** [${previewUrl}](${previewUrl})
+
+            ### Available APIs in this preview:
+            - [Experience API](${previewUrl}experience-api.html) - Game server management
+            - [Status API](${previewUrl}status-api.html) - Monitoring and health checks
+            - [Worker DAL API](${previewUrl}worker-dal-api.html) - Data access layer
+
+            **📖 Main Documentation Hub:** [${deploymentUrl}](${deploymentUrl})
+
+            *This preview is automatically updated with each commit to this PR and will be cleaned up when the PR is closed.*`;
+
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pull_number,
+            });
+
+            const existingComment = comments.data.find(comment =>
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body.includes('📚 API Documentation Preview')
+            );
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body,
+              });
+            }
+
+  # Deploy main documentation (only for main branch pushes and releases)
+  deploy-main-docs:
+    runs-on: ubuntu-latest
+    needs: validate-openapi
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.validate-openapi.result == 'success'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: "main-docs-deploy"
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download OpenAPI documentation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-documentation
+          path: docs-preview
+
+      - name: Setup site structure
+        run: |
+          mkdir -p site/main
+
+          # Copy current documentation to main directory
+          cp -r docs-preview/* site/main/
+
+          # If this is a tag, also create a versioned copy
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            mkdir -p "site/versions/$VERSION"
+            cp -r docs-preview/* "site/versions/$VERSION/"
+          fi
+
+      - name: Download existing site structure (preserve PR previews)
+        continue-on-error: true
+        run: |
+          # Download existing site to preserve PR previews and old versions
+          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
+          if [ -f existing-site.tar.gz ]; then
+            # Extract existing site but don't overwrite main documentation
+            tar -xzf existing-site.tar.gz --exclude="main/*" || true
+          fi
+
+      - name: Create main documentation index
+        run: |
+          cat > site/main/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>ManMan API Documentation</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 800px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: #f8fafc;
+                  }
+                  .header {
+                      text-align: center;
+                      margin-bottom: 3rem;
+                      padding-bottom: 2rem;
+                      border-bottom: 2px solid #e2e8f0;
+                  }
+                  .version-banner {
+                      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                      color: white;
+                      padding: 1rem;
+                      border-radius: 8px;
+                      margin-bottom: 2rem;
+                      text-align: center;
+                  }
+                  .api-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                      gap: 2rem;
+                      margin-top: 2rem;
+                  }
+                  .api-card {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 2rem;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                      border: 1px solid #e2e8f0;
+                      transition: transform 0.2s, box-shadow 0.2s;
+                  }
+                  .api-card:hover {
+                      transform: translateY(-2px);
+                      box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+                  }
+                  .api-title {
+                      font-size: 1.5rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .api-description {
+                      color: #64748b;
+                      margin-bottom: 1.5rem;
+                      line-height: 1.6;
+                  }
+                  .api-link {
+                      display: inline-block;
+                      background: #3b82f6;
+                      color: white;
+                      padding: 0.75rem 1.5rem;
+                      border-radius: 8px;
+                      text-decoration: none;
+                      font-weight: 500;
+                      transition: background 0.2s;
+                  }
+                  .api-link:hover {
+                      background: #2563eb;
+                  }
+                  .build-info {
+                      background: #f1f5f9;
+                      border-radius: 8px;
+                      padding: 1rem;
+                      margin-top: 2rem;
+                      font-size: 0.875rem;
+                      color: #475569;
+                  }
+                  .back-link {
+                      display: inline-block;
+                      margin-bottom: 1rem;
+                      color: #6b7280;
+                      text-decoration: none;
+                  }
+                  .back-link:hover {
+                      color: #374151;
+                  }
+              </style>
+          </head>
+          <body>
+              <a href="../" class="back-link">← Back to Documentation Hub</a>
+
+              <div class="version-banner">
+                  <h2>🚀 Official Documentation</h2>
+                  <p>Latest stable API documentation</p>
+                  ${{ startsWith(github.ref, 'refs/tags/v') && format('<p><strong>Version: {0}</strong></p>', github.ref_name) || '' }}
+              </div>
+
+              <div class="header">
+                  <h1>ManMan API Documentation</h1>
+                  <p>Interactive API documentation for all ManMan services</p>
+              </div>
+
+              <div class="api-grid">
+                  <div class="api-card">
+                      <h2 class="api-title">Experience API</h2>
+                      <p class="api-description">Game server management and user-facing functionality. This is the primary API for hosting game servers and managing user experiences.</p>
+                      <a href="experience-api.html" class="api-link">View Documentation</a>
+                  </div>
+
+                  <div class="api-card">
+                      <h2 class="api-title">Status API</h2>
+                      <p class="api-description">Status and monitoring functionality. Provides health checks, metrics, and monitoring endpoints for all ManMan services.</p>
+                      <a href="status-api.html" class="api-link">View Documentation</a>
+                  </div>
+
+                  <div class="api-card">
+                      <h2 class="api-title">Worker DAL API</h2>
+                      <p class="api-description">Data access endpoints for worker services. Internal API used by worker processes for database operations.</p>
+                      <a href="worker-dal-api.html" class="api-link">View Documentation</a>
+                  </div>
+              </div>
+
+              <div class="build-info">
+                  <strong>Build Information:</strong><br>
+                  Generated from commit: <code>${{ github.sha }}</code><br>
+                  ${{ startsWith(github.ref, 'refs/tags/v') && format('Version: <code>{0}</code><br>', github.ref_name) || format('Branch: <code>{0}</code><br>', github.ref_name) }}
+                  Event: <code>${{ github.event_name }}</code><br>
+                  Generated at: <code>$(date -u)</code>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Create comprehensive hub index
+        run: |
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>ManMan API Documentation Hub</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 1000px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: #f8fafc;
+                  }
+                  .header {
+                      text-align: center;
+                      margin-bottom: 3rem;
+                      padding-bottom: 2rem;
+                      border-bottom: 2px solid #e2e8f0;
+                  }
+                  .section {
+                      margin-bottom: 3rem;
+                  }
+                  .section-title {
+                      font-size: 1.5rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .card-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                      gap: 1.5rem;
+                  }
+                  .card {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 2rem;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                      border: 1px solid #e2e8f0;
+                  }
+                  .main-docs {
+                      border-left: 4px solid #10b981;
+                  }
+                  .pr-preview {
+                      border-left: 4px solid #f59e0b;
+                  }
+                  .version-docs {
+                      border-left: 4px solid #6366f1;
+                  }
+                  .card-title {
+                      font-size: 1.25rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .card-description {
+                      color: #64748b;
+                      margin-bottom: 1.5rem;
+                      line-height: 1.6;
+                  }
+                  .card-link {
+                      display: inline-block;
+                      background: #3b82f6;
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 6px;
+                      text-decoration: none;
+                      font-weight: 500;
+                  }
+                  .main-docs .card-link {
+                      background: #10b981;
+                  }
+                  .pr-preview .card-link {
+                      background: #f59e0b;
+                  }
+                  .version-docs .card-link {
+                      background: #6366f1;
+                  }
+                  .info-section {
+                      background: #f8fafc;
+                      border-radius: 8px;
+                      padding: 1.5rem;
+                      margin-top: 2rem;
+                      border: 1px solid #e2e8f0;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>ManMan API Documentation Hub</h1>
+                  <p>Access API documentation for all versions and PR previews</p>
+              </div>
+
+              <div class="section">
+                  <h2 class="section-title">🚀 Current Documentation</h2>
+                  <div class="card-grid">
+                      <div class="card main-docs">
+                          <h3 class="card-title">Latest Release Documentation</h3>
+                          <p class="card-description">Official API documentation from the latest stable release</p>
+                          <a href="main/" class="card-link">View Documentation</a>
+                      </div>
+                  </div>
+              </div>
+
+              <div class="section">
+                  <h2 class="section-title">🔍 PR Previews</h2>
+                  <div class="card-grid" id="pr-previews">
+                      <div class="card">
+                          <p class="card-description">PR previews will appear here when pull requests are opened</p>
+                      </div>
+                  </div>
+              </div>
+
+              <div class="section">
+                  <h2 class="section-title">📚 Version History</h2>
+                  <div class="card-grid" id="version-history">
+                      <div class="card">
+                          <p class="card-description">Historical versions will appear here as releases are published</p>
+                      </div>
+                  </div>
+              </div>
+
+              <div class="info-section">
+                  <h3>About This Documentation</h3>
+                  <p>This hub provides access to ManMan API documentation across different versions and development stages:</p>
+                  <ul>
+                      <li><strong>Latest Release:</strong> Stable documentation from the main branch</li>
+                      <li><strong>PR Previews:</strong> Live previews of API changes in active pull requests</li>
+                      <li><strong>Version History:</strong> Documentation for all released versions</li>
+                  </ul>
+                  <p><strong>Last updated:</strong> <code>$(date -u)</code></p>
+              </div>
+
+              <script>
+                  // This would be enhanced with actual PR and version discovery
+                  // For now, it's a static template that will be enhanced by the workflow
+              </script>
+          </body>
+          </html>
+          EOF
+
+      - name: Create site archive
+        run: |
+          cd site
+          tar -czf ../site.tar.gz .
+          cd ..
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Cleanup PR previews when PR is closed
+  cleanup-pr-preview:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download current site
+        continue-on-error: true
+        run: |
+          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
+          if [ -f existing-site.tar.gz ]; then
+            tar -xzf existing-site.tar.gz || true
+          fi
+
+      - name: Remove PR preview directory
+        run: |
+          if [ -d "site" ]; then
+            rm -rf "site/pr-${{ github.event.pull_request.number }}" || true
+
+            # Recreate site archive
+            cd site
+            tar -czf ../site.tar.gz .
+            cd ..
+          else
+            mkdir -p site
+            echo "No existing site found"
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload cleaned site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy cleaned site
+        uses: actions/deploy-pages@v4

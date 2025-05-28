@@ -108,6 +108,9 @@ env:
   # change this to the environment you are deploying to
   app_env: dev
 
+  # OpenTelemetry configuration
+  otel:
+    logging_enabled: true
 
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>

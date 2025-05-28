@@ -160,3 +160,10 @@ start the worker
 ```bash
 uv run worker start
 ```
+
+## Generate OpenAPI specifications
+With the new standalone CLI, you can generate OpenAPI specs without environment dependencies:
+```bash
+uv run openapi <api-name>
+```
+Replace `<api-name>` with one of: `experience-api`, `status-api`, or `worker-dal-api`.
