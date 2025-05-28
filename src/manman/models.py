@@ -304,6 +304,8 @@ class CustomCommand(CustomCommandBase, table=True):
 
     __tablename__ = "custom_commands"
 
+    custom_command_id: int = Field(primary_key=True)
+
     def __init__(self, **data):
         super().__init__(**data)
         # Here you could add any additional initialization logic if needed
