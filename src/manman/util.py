@@ -159,3 +159,26 @@ def env_list_to_dict(env_list: list[str]) -> dict[str, str]:
         key, value = env.split("=", 1)
         env_dict[key] = value
     return env_dict
+
+
+def create_rabbitmq_vhost(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    vhost: str,
+):
+    """Create a RabbitMQ virtual host using the management HTTP API via AMQPStorm."""
+    try:
+        from amqpstorm.management import ManagementApi
+    except ImportError:
+        raise RuntimeError("amqpstorm.management is required for vhost creation")
+    logger.info("ignoring port %s using default 15672", port)
+    mgmt = ManagementApi(
+        # hardcoding port, whatever
+        api_url=f"http://{host}:15672",
+        username=username,
+        password=password,
+    )
+    mgmt.virtual_host.create(vhost)
+    logger.info("RabbitMQ vhost created: %s", vhost)

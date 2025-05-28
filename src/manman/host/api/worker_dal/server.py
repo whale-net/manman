@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from manman.exceptions import GameServerInstanceAlreadyClosedException
 from manman.models import GameServer, GameServerConfig, GameServerInstance
 from manman.repository.database import (
     GameServerInstanceRepository,
@@ -22,10 +23,16 @@ async def server_instance_create(body: GameServerInstance) -> GameServerInstance
 @router.put("/instance/shutdown")
 async def server_instance_shutdown(instance: GameServerInstance) -> GameServerInstance:
     repository = GameServerInstanceRepository()
-    result = repository.shutdown_instance(instance.game_server_instance_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Instance not found")
-    return result
+    try:
+        result = repository.shutdown_instance(instance.game_server_instance_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Instance not found")
+        return result
+    except GameServerInstanceAlreadyClosedException as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Game server instance {e.instance_id} was already closed on {e.end_date.isoformat()}. Shutdown rejected.",
+        )
 
 
 @router.get("/instance/{id}")

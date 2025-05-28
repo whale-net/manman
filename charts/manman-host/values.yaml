@@ -102,6 +102,9 @@ env:
     password: <rabbitmq_password>
     enable_ssl: false
     ssl_hostname: <rabbitmq_ssl_hostname>
+    # whether to instruct the app to create the RabbitMQ vhost via management API
+    createVhost: false
+
   # change this to the environment you are deploying to
   app_env: dev
 

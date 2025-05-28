@@ -4,16 +4,17 @@ import os
 import threading
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
+    create_rabbitmq_vhost,
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
     init_rabbitmq,
@@ -35,11 +36,21 @@ def _init_common_services(
     enable_ssl: bool,
     rabbitmq_ssl_hostname: Optional[str],
     should_run_migration_check: bool,
+    create_vhost: bool = False,
 ):
     """Initialize common services required by both APIs."""
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
     virtual_host = f"manman-{app_env}" if app_env else "/"
+    # Optionally create vhost via management API
+    if create_vhost and app_env == "dev":
+        create_rabbitmq_vhost(
+            host=rabbitmq_host,
+            port=rabbitmq_port,
+            username=rabbitmq_username,
+            password=rabbitmq_password,
+            vhost=virtual_host,
+        )
 
     # Initialize with AMQPStorm connection parameters
     init_rabbitmq(
@@ -92,6 +103,9 @@ def start_experience_api(
             envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
     ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
@@ -106,6 +120,7 @@ def start_experience_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with only host/experience routes
@@ -147,6 +162,9 @@ def start_status_api(
             envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
     ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
     # Setup logging first
@@ -161,6 +179,7 @@ def start_status_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with status routes
@@ -202,6 +221,9 @@ def start_worker_dal_api(
             envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
     ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     # Setup logging first
@@ -216,6 +238,7 @@ def start_worker_dal_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with only worker DAL routes
@@ -261,6 +284,9 @@ def start_status_processor(
             envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
     ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
 ):
     """Start the status event processor that handles status-related pub/sub messages."""
 
@@ -278,6 +304,7 @@ def start_status_processor(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Start the status event processor (pub/sub only, no HTTP server other than health check)
