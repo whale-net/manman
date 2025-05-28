@@ -40,6 +40,9 @@ spec:
             - {{ .Values.apis.status.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
+            {{ if and .Values.env.rabbitmq.createVhost (eq .Values.env.app_env "dev") }}
+            - --create-vhost
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /status/health
