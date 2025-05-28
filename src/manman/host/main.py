@@ -1,21 +1,20 @@
-import json
 import logging
 import logging.config
 import os
 import threading
-from pathlib import Path
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.util import (
+    create_rabbitmq_vhost,
     get_rabbitmq_ssl_options,
     get_sqlalchemy_engine,
     init_rabbitmq,
@@ -37,11 +36,21 @@ def _init_common_services(
     enable_ssl: bool,
     rabbitmq_ssl_hostname: Optional[str],
     should_run_migration_check: bool,
+    create_vhost: bool = False,
 ):
     """Initialize common services required by both APIs."""
     if should_run_migration_check and _need_migration():
         raise RuntimeError("migration needs to be ran before starting")
     virtual_host = f"manman-{app_env}" if app_env else "/"
+    # Optionally create vhost via management API
+    if create_vhost and app_env == "dev":
+        create_rabbitmq_vhost(
+            host=rabbitmq_host,
+            port=rabbitmq_port,
+            username=rabbitmq_username,
+            password=rabbitmq_password,
+            vhost=virtual_host,
+        )
 
     # Initialize with AMQPStorm connection parameters
     init_rabbitmq(
@@ -73,23 +82,6 @@ def _init_common_services(
         logger.info("Exchange declared %s", exchange)
 
 
-def _generate_openapi_spec(app, service_name: str):
-    """Generate and save OpenAPI specification for a FastAPI app."""
-    output_path = Path("./openapi-specs")
-    output_path.mkdir(exist_ok=True)
-
-    # Generate OpenAPI spec
-    openapi_spec = app.openapi()
-
-    # Save to file with service name
-    spec_file = output_path / f"{service_name}.json"
-    with open(spec_file, "w") as f:
-        json.dump(openapi_spec, f, indent=2)
-
-    logger.info(f"OpenAPI spec saved to: {spec_file}")
-    print(f"OpenAPI spec saved to: {spec_file}")
-
-
 @app.command()
 def start_experience_api(
     rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
@@ -105,11 +97,14 @@ def start_experience_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
+    ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
@@ -125,6 +120,7 @@ def start_experience_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with only host/experience routes
@@ -136,11 +132,6 @@ def start_experience_api(
     experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
     experience_app.include_router(experience_router)
     add_health_check(experience_app)
-
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(experience_app, "experience-api")
-        return
 
     uvicorn.run(
         experience_app,
@@ -165,11 +156,14 @@ def start_status_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
+    ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
     """Start the status API that provides status and monitoring functionality."""
@@ -185,6 +179,7 @@ def start_status_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with status routes
@@ -196,11 +191,6 @@ def start_status_api(
     status_app = FastAPI(title="ManMan Status API", root_path="/status")
     status_app.include_router(status_router)
     add_health_check(status_app)
-
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(status_app, "status-api")
-        return
 
     uvicorn.run(
         status_app,
@@ -225,11 +215,14 @@ def start_worker_dal_api(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
-    generate_openapi: Annotated[
+    log_otlp: Annotated[
         bool,
         typer.Option(
-            help="Generate OpenAPI spec and exit instead of running the server"
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
         ),
+    ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
@@ -245,6 +238,7 @@ def start_worker_dal_api(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Create FastAPI app with only worker DAL routes
@@ -261,11 +255,6 @@ def start_worker_dal_api(
     worker_dal_app.include_router(worker_router)
     # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
     add_health_check(worker_dal_app)
-
-    # If OpenAPI generation is requested, generate spec and exit
-    if generate_openapi:
-        _generate_openapi_spec(worker_dal_app, "worker-dal-api")
-        return
 
     uvicorn.run(
         worker_dal_app,
@@ -289,6 +278,15 @@ def start_status_processor(
     rabbitmq_ssl_hostname: Annotated[
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
+    log_otlp: Annotated[
+        bool,
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
+        ),
+    ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
 ):
     """Start the status event processor that handles status-related pub/sub messages."""
 
@@ -306,6 +304,7 @@ def start_status_processor(
         enable_ssl=enable_ssl,
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
+        create_vhost=create_vhost,
     )
 
     # Start the status event processor (pub/sub only, no HTTP server other than health check)

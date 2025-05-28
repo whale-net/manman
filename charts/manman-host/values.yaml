@@ -13,6 +13,7 @@ apis:
     replicas: 1
     port: 8000
     command: "start-experience-api"
+    command_args: {}
 
   # Worker DAL API
   workerDal:
@@ -21,6 +22,7 @@ apis:
     replicas: 1
     port: 8000
     command: "start-worker-dal-api"
+    command_args: {}
 
   # Status API (read-only HTTP endpoints)
   status:
@@ -29,6 +31,7 @@ apis:
     replicas: 1
     port: 8000
     command: "start-status-api"
+    command_args: {}
 
 # Configuration for background processors (pub/sub services)
 processors:
@@ -38,6 +41,7 @@ processors:
     name: manman-status-processor
     replicas: 1
     command: "start-status-processor"
+    command_args: {}
 
 # Ingress configuration (primarily for development)
 ingress:
@@ -104,6 +108,8 @@ env:
     ssl_hostname: <rabbitmq_ssl_hostname>
   # change this to the environment you are deploying to
   app_env: dev
+  # whether to instruct the app to create the RabbitMQ vhost via management API
+  createVhost: true
 
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>

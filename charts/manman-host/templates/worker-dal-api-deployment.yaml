@@ -40,6 +40,9 @@ spec:
             - {{ .Values.apis.workerDal.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
+            {{ if .Values.api.workerDal.command_args }}
+            - {{ .Values.api.workerDal.command_args }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /workerdal/health

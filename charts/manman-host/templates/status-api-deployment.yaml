@@ -40,6 +40,9 @@ spec:
             - {{ .Values.apis.status.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
+            {{ if .Values.api.status.command_args }}
+            - {{ .Values.api.status.command_args }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /status/health

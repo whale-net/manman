@@ -40,6 +40,9 @@ spec:
             - {{ .Values.apis.experience.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
+            {{ if .Values.api.experience.command_args }}
+            - {{ .Values.api.experience.command_args }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /experience/health

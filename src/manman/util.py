@@ -159,3 +159,22 @@ def env_list_to_dict(env_list: list[str]) -> dict[str, str]:
         key, value = env.split("=", 1)
         env_dict[key] = value
     return env_dict
+
+
+def create_rabbitmq_vhost(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    vhost: str,
+):
+    """Create a RabbitMQ virtual host using the management HTTP API via AMQPStorm."""
+    try:
+        from amqpstorm.management import Client as ManagementClient
+    except ImportError:
+        raise RuntimeError("amqpstorm.management is required for vhost creation")
+    mgmt = ManagementClient(
+        hostname=host, username=username, password=password, port=port
+    )
+    mgmt.vhost.create(vhost)
+    logger.info("RabbitMQ vhost created: %s", vhost)
