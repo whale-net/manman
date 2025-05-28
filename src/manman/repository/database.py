@@ -12,6 +12,10 @@ from sqlalchemy import desc
 from sqlalchemy.sql.functions import current_timestamp
 from sqlmodel import Session, not_, select
 
+from manman.exceptions import (
+    GameServerInstanceAlreadyClosedException,
+    WorkerAlreadyClosedException,
+)
 from manman.models import (
     ACTIVE_STATUS_TYPES,
     GameServer,
@@ -257,7 +261,7 @@ class WorkerRepository(DatabaseRepository):
             The updated Worker instance, or None if not found
 
         Raises:
-            Exception: If the worker is already shut down
+            WorkerAlreadyClosedException: If the worker is already shut down
         """
         with self._get_session_context() as session:
             stmt = select(Worker).where(Worker.worker_id == worker_id)
@@ -267,7 +271,9 @@ class WorkerRepository(DatabaseRepository):
                 return None
 
             if current_instance.end_date is not None:
-                raise Exception("Worker already closed on server")
+                raise WorkerAlreadyClosedException(
+                    worker_id=worker_id, end_date=current_instance.end_date
+                )
 
             current_instance.end_date = current_timestamp()
             session.add(current_instance)
@@ -289,8 +295,10 @@ class WorkerRepository(DatabaseRepository):
             The updated Worker instance, or None if not found
 
         Raises:
-            Exception: If the worker is not found or already shut down
+            Exception: If the worker is not found
+            WorkerAlreadyClosedException: If the worker is already shut down
         """
+
         with self._get_session_context() as session:
             stmt = select(Worker).where(Worker.worker_id == worker_id)
             current_instance = session.exec(stmt).first()
@@ -299,7 +307,9 @@ class WorkerRepository(DatabaseRepository):
                 raise Exception("Worker not found")
 
             if current_instance.end_date is not None:
-                raise Exception("Worker already closed on server")
+                raise WorkerAlreadyClosedException(
+                    worker_id=worker_id, end_date=current_instance.end_date
+                )
 
             current_instance.last_heartbeat = current_timestamp()
             session.add(current_instance)
@@ -442,7 +452,7 @@ class GameServerInstanceRepository(DatabaseRepository):
             The updated GameServerInstance, or None if not found
 
         Raises:
-            Exception: If the instance is already shut down
+            GameServerInstanceAlreadyClosedException: If the instance is already shut down
         """
         with self._get_session_context() as session:
             stmt = select(GameServerInstance).where(
@@ -454,7 +464,9 @@ class GameServerInstanceRepository(DatabaseRepository):
                 return None
 
             if current_instance.end_date is not None:
-                raise Exception("Instance already closed on server")
+                raise GameServerInstanceAlreadyClosedException(
+                    instance_id=instance_id, end_date=current_instance.end_date
+                )
 
             current_instance.end_date = datetime.now(timezone.utc)
             session.add(current_instance)
