@@ -37,8 +37,8 @@ spec:
             - {{ .Values.processors.status.command }}
             # Migrations run as pre-install hook, so skip the migration check
             - --no-should-run-migration-check
-            {{ if .Values.processors.status.command_args }}
-            - {{ .Values.processors.status.command_args }}
+            {{ if and .Values.env.rabbitmq.createVhost (eq .Values.env.app_env "dev") }}
+            - --create-vhost
             {{- end }}
           ports:
             - containerPort: 8000

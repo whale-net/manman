@@ -170,11 +170,15 @@ def create_rabbitmq_vhost(
 ):
     """Create a RabbitMQ virtual host using the management HTTP API via AMQPStorm."""
     try:
-        from amqpstorm.management import Client as ManagementClient
+        from amqpstorm.management import ManagementApi
     except ImportError:
         raise RuntimeError("amqpstorm.management is required for vhost creation")
-    mgmt = ManagementClient(
-        hostname=host, username=username, password=password, port=port
+    logger.info("ignoring port %s using default 15672", port)
+    mgmt = ManagementApi(
+        # hardcoding port, whatever
+        api_url=f"http://{host}:15672",
+        username=username,
+        password=password,
     )
-    mgmt.vhost.create(vhost)
+    mgmt.virtual_host.create(vhost)
     logger.info("RabbitMQ vhost created: %s", vhost)

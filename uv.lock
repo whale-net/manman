@@ -32,6 +32,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/3d/b4f2f0d62ca6879c0af0e40d9f7da87ab3cbd75fc8b3aac2149b404b41ee/AMQPStorm-2.11.0-py2.py3-none-any.whl", hash = "sha256:587444472138821f7f74bf17586edd1e526f496ea6f274da7f96b6de5c60c42b", size = 107433, upload-time = "2025-04-09T09:31:05.308Z" },
 ]
 
+[package.optional-dependencies]
+management = [
+    { name = "requests" },
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -416,7 +421,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "amqpstorm" },
+    { name = "amqpstorm", extra = ["management"] },
     { name = "fastapi" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-distro" },
@@ -440,6 +445,7 @@ test = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "amqpstorm", extra = ["management"] },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -449,7 +455,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14.1" },
-    { name = "amqpstorm", specifier = ">=2.11.0" },
+    { name = "amqpstorm", extras = ["management"], specifier = ">=2.11.0" },
     { name = "fastapi", specifier = ">=0.115.8" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.25.0" },
     { name = "opentelemetry-api", specifier = ">=1.29.0" },
@@ -470,6 +476,7 @@ provides-extras = ["test"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "amqpstorm", extras = ["management"], specifier = ">=2.11.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-cov", specifier = ">=6.1.1" },
