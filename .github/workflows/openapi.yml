@@ -166,15 +166,15 @@ jobs:
         run: |
           echo "📚 Generating documentation previews..."
 
-          # Install redoc-cli for documentation generation
-          npm install -g redoc-cli
+          # Install the new Redocly CLI (redoc-cli is deprecated)
+          npm install -g @redocly/cli
 
           mkdir -p docs-preview
 
           for spec_file in openapi-specs/*.json; do
             api_name=$(basename "$spec_file" .json)
             echo "Generating docs for $api_name..."
-            redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"
+            npx @redocly/cli build-docs "$spec_file" --output "docs-preview/${api_name}.html"
           done
 
           echo "📁 Generated documentation files:"
