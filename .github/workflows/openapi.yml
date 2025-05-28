@@ -181,7 +181,7 @@ jobs:
   # Build and upload GitHub Pages artifact
   build-pages-artifact:
     name: Build Pages artifact
-    needs: generate-openapi
+    needs: [generate-openapi, validate-openapi]
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'pull_request' ||
@@ -190,40 +190,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download OpenAPI artifacts
+      - name: Download documentation artifacts
         uses: actions/download-artifact@v4
         with:
-          name: openapi-specifications
+          name: openapi-documentation
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
-      - name: Install redoc-cli
-        run: npm install -g redoc-cli
-
-      - name: Generate HTML docs with Redoc
+      - name: Prepare GitHub Pages content
         run: |
           mkdir -p docs
-          for spec in openapi-specs/*.json; do
-            name=$(basename "$spec" . json)
-            redoc-cli build "$spec" -o docs/${name}.html
-          done
-          # Create index page linking to each API
-          cat << 'EOF' > docs/index.html
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"><title>ManMan API Docs</title></head>
-          <body>
-          <h1>ManMan API Documentation</h1>
-          <ul>
-          EOF
-          for spec in openapi-specs/*.json; do
-            name=$(basename "$spec" . json)
-            echo "  <li><a href=\"${name}.html\">${name}</a></li>" >> docs/index.html
-          done
-          echo "</ul></body></html>" >> docs/index.html
+          cp -r docs-preview/. docs/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v1
