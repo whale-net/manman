@@ -51,13 +51,22 @@ jobs:
         run: mkdir -p openapi-specs
 
       - name: Generate OpenAPI spec for Experience API
-        run: uv run openapi experience-api
+        run: |
+          echo "🔄 Generating Experience API specification..."
+          uv run openapi experience-api
+          echo "✅ Experience API specification generated"
 
       - name: Generate OpenAPI spec for Status API
-        run: uv run openapi status-api
+        run: |
+          echo "🔄 Generating Status API specification..."
+          uv run openapi status-api
+          echo "✅ Status API specification generated"
 
       - name: Generate OpenAPI spec for Worker DAL API
-        run: uv run openapi worker-dal-api
+        run: |
+          echo "🔄 Generating Worker DAL API specification..."
+          uv run openapi worker-dal-api
+          echo "✅ Worker DAL API specification generated"
 
       - name: List generated files
         run: |
@@ -102,6 +111,8 @@ jobs:
             openapi-specs-bundle.tar.gz
             openapi-*.tar.gz
             openapi-specs/*.json
+          tag_name: ${{ github.ref_name }}
+          append_body: true
           body: |
             ## OpenAPI Specifications
 
@@ -149,13 +160,27 @@ jobs:
           for spec_file in openapi-specs/*.json; do
             echo "Validating $spec_file..."
 
+            # Basic JSON validation
+            if ! jq empty "$spec_file" 2>/dev/null; then
+              echo "❌ Invalid JSON format in $spec_file"
+              exit 1
+            fi
+
             # Validate with swagger-parser
             echo "  📋 Swagger Parser validation:"
-            swagger-parser validate "$spec_file" || echo "  ⚠️ Swagger Parser validation failed"
+            if swagger-parser validate "$spec_file"; then
+              echo "  ✅ Swagger Parser validation passed"
+            else
+              echo "  ⚠️ Swagger Parser validation failed for $spec_file"
+            fi
 
             # Validate with Redocly CLI
             echo "  📋 Redocly validation:"
-            redocly lint "$spec_file" || echo "  ⚠️ Redocly validation failed"
+            if redocly lint "$spec_file"; then
+              echo "  ✅ Redocly validation passed"
+            else
+              echo "  ⚠️ Redocly validation failed for $spec_file"
+            fi
 
             echo "  ✅ Validation completed for $spec_file"
             echo
@@ -174,8 +199,14 @@ jobs:
 
           for spec_file in openapi-specs/*.json; do
             api_name=$(basename "$spec_file" .json)
-            echo "Generating docs for $api_name..."
-            redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"
+            echo "🔄 Generating docs for $api_name..."
+            
+            if redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"; then
+              echo "✅ Documentation generated for $api_name"
+            else
+              echo "❌ Failed to generate documentation for $api_name"
+              exit 1
+            fi
           done
 
           echo "📁 Generated documentation files:"
@@ -200,9 +231,9 @@ jobs:
       pull-requests: write
       deployments: write
 
-    # Use PR-specific concurrency group
+    # Use PR-specific concurrency group with better isolation
     concurrency:
-      group: "pr-preview-${{ github.event.pull_request.number }}"
+      group: "openapi-pr-preview-${{ github.event.pull_request.number }}"
       cancel-in-progress: true
 
     environment:
@@ -228,15 +259,6 @@ jobs:
 
           # Copy documentation to PR-specific directory
           cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
-
-      - name: Download existing site (if exists)
-        continue-on-error: true
-        run: |
-          # Try to download the current pages site to preserve other PR previews
-          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
-          if [ -f existing-site.tar.gz ]; then
-            tar -xzf existing-site.tar.gz --exclude="pr-${{ github.event.pull_request.number }}/*" || true
-          fi
 
       - name: Create PR-specific index page
         run: |
@@ -467,7 +489,7 @@ jobs:
           </html>
           EOF
 
-      - name: Create site archive for future downloads
+      - name: Create site archive for deployment
         run: |
           cd site
           tar -czf ../site.tar.gz .
@@ -550,11 +572,11 @@ jobs:
       id-token: write
 
     concurrency:
-      group: "main-docs-deploy"
+      group: "openapi-main-docs-deploy"
       cancel-in-progress: false
 
     environment:
-      name: github-pages
+      name: openapi-production
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
@@ -581,16 +603,6 @@ jobs:
             VERSION="${{ github.ref_name }}"
             mkdir -p "site/versions/$VERSION"
             cp -r docs-preview/* "site/versions/$VERSION/"
-          fi
-
-      - name: Download existing site structure (preserve PR previews)
-        continue-on-error: true
-        run: |
-          # Download existing site to preserve PR previews and old versions
-          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
-          if [ -f existing-site.tar.gz ]; then
-            # Extract existing site but don't overwrite main documentation
-            tar -xzf existing-site.tar.gz --exclude="main/*" || true
           fi
 
       - name: Create main documentation index
@@ -901,34 +913,42 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      deployments: write
+
+    concurrency:
+      group: "openapi-cleanup-pr-${{ github.event.pull_request.number }}"
+      cancel-in-progress: false
+
+    environment:
+      name: cleanup-preview
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download current site
-        continue-on-error: true
+      - name: Create minimal site without this PR
         run: |
-          curl -L -o existing-site.tar.gz "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/site.tar.gz" || true
-          if [ -f existing-site.tar.gz ]; then
-            tar -xzf existing-site.tar.gz || true
-          fi
+          mkdir -p site
+          
+          # Create a simple cleanup notice
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>ManMan API Documentation</title>
+              <meta http-equiv="refresh" content="0;url=/main/">
+          </head>
+          <body>
+              <p>Redirecting to main documentation...</p>
+              <a href="/main/">Click here if not redirected</a>
+          </body>
+          </html>
+          EOF
 
-      - name: Remove PR preview directory
-        run: |
-          if [ -d "site" ]; then
-            rm -rf "site/pr-${{ github.event.pull_request.number }}" || true
+          echo "PR preview cleanup completed for PR #${{ github.event.pull_request.number }}"
 
-            # Recreate site archive
-            cd site
-            tar -czf ../site.tar.gz .
-            cd ..
-          else
-            mkdir -p site
-            echo "No existing site found"
-          fi
-
-      - name: Setup Pages
+      - name: Setup Pages for cleanup
         uses: actions/configure-pages@v4
 
       - name: Upload cleaned site
@@ -937,4 +957,5 @@ jobs:
           path: site
 
       - name: Deploy cleaned site
+        id: deployment
         uses: actions/deploy-pages@v4
