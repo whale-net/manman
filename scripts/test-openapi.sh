@@ -16,7 +16,11 @@ for api in "${apis[@]}"; do
     echo "🔄 Testing $api..."
     
     # Generate the spec
-    openapi "$api"
+    if command -v uv >/dev/null 2>&1; then
+        uv run openapi "$api"
+    else
+        openapi "$api"
+    fi
     
     # Check that the file was created
     spec_file="openapi-specs/${api}.json"

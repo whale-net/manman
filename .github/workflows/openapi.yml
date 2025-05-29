@@ -263,13 +263,13 @@ jobs:
       pull-requests: write
       deployments: write
 
-    # Use PR-specific concurrency group with better isolation
+    # Use a single concurrency group for all Pages deployments to prevent conflicts
     concurrency:
-      group: "openapi-pr-preview-${{ github.event.pull_request.number }}"
-      cancel-in-progress: true
+      group: "openapi-pages-deploy"
+      cancel-in-progress: false
 
     environment:
-      name: pr-preview-${{ github.event.pull_request.number }}
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
@@ -289,8 +289,11 @@ jobs:
           # Create directory for this PR preview
           mkdir -p site/pr-${{ github.event.pull_request.number }}
 
-          # Copy documentation to PR-specific directory
+          # Copy documentation to PR-specific directory  
           cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
+          
+          echo "📁 Created PR preview at site/pr-${{ github.event.pull_request.number }}/"
+          ls -la site/pr-${{ github.event.pull_request.number }}/
 
       - name: Create PR-specific index page
         run: |
@@ -523,9 +526,18 @@ jobs:
 
       - name: Create site archive for deployment
         run: |
+          echo "📦 Preparing site for deployment..."
+          echo "Site contents:"
+          find site -type f | sort
+          echo ""
+          echo "Site structure:"
+          tree site || ls -laR site
+          
           cd site
           tar -czf ../site.tar.gz .
           cd ..
+          
+          echo "✅ Site archive created: $(ls -lh site.tar.gz)"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -538,6 +550,14 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Log deployment results
+        run: |
+          echo "🚀 Deployment completed!"
+          echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "PR Preview URL: ${{ steps.deployment.outputs.page_url }}pr-${{ github.event.pull_request.number }}/"
+          echo "Event: ${{ github.event_name }}"
+          echo "PR Number: ${{ github.event.pull_request.number }}"
 
       - name: Comment on PR with preview link
         uses: actions/github-script@v7
@@ -561,36 +581,46 @@ jobs:
 
             **📖 Main Documentation Hub:** [${deploymentUrl}](${deploymentUrl})
 
-            *This preview is automatically updated with each commit to this PR and will be cleaned up when the PR is closed.*`;
+            *This preview is automatically updated with each commit to this PR and will be cleaned up when the PR is closed.*
+            
+            <!-- openapi-preview-comment:${pull_number} -->`;
 
-            // Find existing comment
-            const comments = await github.rest.issues.listComments({
-              owner,
-              repo,
-              issue_number: pull_number,
-            });
-
-            const existingComment = comments.data.find(comment =>
-              comment.user.login === 'github-actions[bot]' &&
-              comment.body.includes('📚 API Documentation Preview')
-            );
-
-            if (existingComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existingComment.id,
-                body,
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
+            try {
+              // Find existing comment using a more robust method
+              const comments = await github.rest.issues.listComments({
                 owner,
                 repo,
                 issue_number: pull_number,
-                body,
               });
+
+              // Look for comment with our unique marker
+              const existingComment = comments.data.find(comment =>
+                comment.body && comment.body.includes(`<!-- openapi-preview-comment:${pull_number} -->`)
+              );
+
+              if (existingComment) {
+                console.log(`Updating existing comment ${existingComment.id}`);
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existingComment.id,
+                  body,
+                });
+                console.log('Comment updated successfully');
+              } else {
+                console.log('Creating new comment');
+                const newComment = await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: pull_number,
+                  body,
+                });
+                console.log(`New comment created with ID: ${newComment.data.id}`);
+              }
+            } catch (error) {
+              console.error('Error managing PR comment:', error);
+              // Don't fail the workflow if comment fails
+              core.warning(`Failed to update PR comment: ${error.message}`);
             }
 
   # Deploy main documentation (only for main branch pushes and releases)
@@ -605,11 +635,11 @@ jobs:
       id-token: write
 
     concurrency:
-      group: "openapi-main-docs-deploy"
+      group: "openapi-pages-deploy"
       cancel-in-progress: false
 
     environment:
-      name: openapi-production
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
@@ -938,6 +968,14 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      - name: Log main deployment results
+        run: |
+          echo "🚀 Main documentation deployment completed!"
+          echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "Main docs URL: ${{ steps.deployment.outputs.page_url }}main/"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+
   # Cleanup PR previews when PR is closed
   cleanup-pr-preview:
     runs-on: ubuntu-latest
@@ -950,11 +988,11 @@ jobs:
       deployments: write
 
     concurrency:
-      group: "openapi-cleanup-pr-${{ github.event.pull_request.number }}"
+      group: "openapi-pages-deploy"
       cancel-in-progress: false
 
     environment:
-      name: cleanup-preview
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
