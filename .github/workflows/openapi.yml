@@ -240,7 +240,7 @@ jobs:
           path: docs-preview/
           retention-days: 30
 
-  # Deploy PR documentation preview (using GitHub Pages preview environments)
+  # Deploy PR documentation preview (using per-PR environments)
   deploy-pr-preview:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -253,13 +253,13 @@ jobs:
       pull-requests: write
       deployments: write
 
-    # Use a single concurrency group for all Pages deployments to prevent conflicts
+    # Use PR-specific concurrency group to allow parallel deployments
     concurrency:
-      group: "openapi-pages-deploy"
-      cancel-in-progress: false
+      group: "openapi-pr-preview-${{ github.event.pull_request.number }}"
+      cancel-in-progress: true
 
     environment:
-      name: github-pages
+      name: pr-preview-${{ github.event.pull_request.number }}
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
@@ -529,15 +529,15 @@ jobs:
           
           echo "✅ Site archive created: $(ls -lh site.tar.gz)"
 
-      - name: Setup Pages
+      - name: Setup Pages for PR preview
         uses: actions/configure-pages@v4
 
-      - name: Upload to GitHub Pages
+      - name: Upload PR preview to Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy PR preview
         id: deployment
         uses: actions/deploy-pages@v4
 
@@ -545,7 +545,6 @@ jobs:
         run: |
           echo "🚀 Deployment completed!"
           echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"
-          echo "PR Preview URL: ${{ steps.deployment.outputs.page_url }}pr-${{ github.event.pull_request.number }}/"
           echo "Event: ${{ github.event_name }}"
           echo "PR Number: ${{ github.event.pull_request.number }}"
 
@@ -556,20 +555,19 @@ jobs:
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
             const deploymentUrl = '${{ steps.deployment.outputs.page_url }}';
-            const previewUrl = `${deploymentUrl}pr-${pull_number}/`;
 
             const body = `## 📚 API Documentation Preview
 
             The OpenAPI documentation preview has been deployed for this PR.
 
-            **🔍 PR Preview:** [${previewUrl}](${previewUrl})
+            **🔍 PR Preview:** [${deploymentUrl}](${deploymentUrl})
 
             ### Available APIs in this preview:
-            - [Experience API](${previewUrl}experience-api.html) - Game server management
-            - [Status API](${previewUrl}status-api.html) - Monitoring and health checks
-            - [Worker DAL API](${previewUrl}worker-dal-api.html) - Data access layer
+            - [Experience API](${deploymentUrl}experience-api.html) - Game server management
+            - [Status API](${deploymentUrl}status-api.html) - Monitoring and health checks
+            - [Worker DAL API](${deploymentUrl}worker-dal-api.html) - Data access layer
 
-            **📖 Main Documentation Hub:** [${deploymentUrl}](${deploymentUrl})
+            **Environment:** \`pr-preview-${pull_number}\`
 
             *This preview is automatically updated with each commit to this PR and will be cleaned up when the PR is closed.*
             
@@ -625,7 +623,7 @@ jobs:
       id-token: write
 
     concurrency:
-      group: "openapi-pages-deploy"
+      group: "openapi-main-docs-deploy"
       cancel-in-progress: false
 
     environment:
@@ -972,52 +970,10 @@ jobs:
     timeout-minutes: 5
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     permissions:
-      contents: read
-      pages: write
-      id-token: write
       deployments: write
 
-    concurrency:
-      group: "openapi-pages-deploy"
-      cancel-in-progress: false
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Create minimal site without this PR
+      - name: Log cleanup action
         run: |
-          mkdir -p site
-          
-          # Create a simple cleanup notice
-          cat > site/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>ManMan API Documentation</title>
-              <meta http-equiv="refresh" content="0;url=main/">
-          </head>
-          <body>
-              <p>Redirecting to main documentation...</p>
-              <a href="main/">Click here if not redirected</a>
-          </body>
-          </html>
-          EOF
-
-          echo "PR preview cleanup completed for PR #${{ github.event.pull_request.number }}"
-
-      - name: Setup Pages for cleanup
-        uses: actions/configure-pages@v4
-
-      - name: Upload cleaned site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy cleaned site
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "🧹 PR #${{ github.event.pull_request.number }} closed - per-PR environment will be automatically cleaned up"
+          echo "Environment: pr-preview-${{ github.event.pull_request.number }}"
