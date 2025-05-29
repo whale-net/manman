@@ -34,19 +34,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "0.7.8"
-          enable-cache: true
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
 
-      - name: Install the project
-        run: uv sync
+      - name: Install the project with pip
+        run: |
+          echo "📦 Installing project dependencies..."
+          python -m pip install --upgrade pip
+          pip install -e .
 
       - name: Create OpenAPI specs directory
         run: mkdir -p openapi-specs
@@ -54,19 +51,19 @@ jobs:
       - name: Generate OpenAPI spec for Experience API
         run: |
           echo "🔄 Generating Experience API specification..."
-          uv run openapi experience-api
+          openapi experience-api
           echo "✅ Experience API specification generated"
 
       - name: Generate OpenAPI spec for Status API
         run: |
           echo "🔄 Generating Status API specification..."
-          uv run openapi status-api
+          openapi status-api
           echo "✅ Status API specification generated"
 
       - name: Generate OpenAPI spec for Worker DAL API
         run: |
           echo "🔄 Generating Worker DAL API specification..."
-          uv run openapi worker-dal-api
+          openapi worker-dal-api
           echo "✅ Worker DAL API specification generated"
 
       - name: List generated files
@@ -158,7 +155,7 @@ jobs:
           for attempt in 1 2 3; do
             echo "Attempt $attempt/3 for npm package installation..."
             
-            if npm install -g @apidevtools/swagger-parser @redocly/openapi-cli; then
+            if npm install -g @redocly/openapi-cli; then
               echo "✅ Validation tools installed successfully"
               break
             else
@@ -184,17 +181,9 @@ jobs:
               exit 1
             fi
 
-            # Validate with swagger-parser
-            echo "  📋 Swagger Parser validation:"
-            if swagger-parser validate "$spec_file"; then
-              echo "  ✅ Swagger Parser validation passed"
-            else
-              echo "  ⚠️ Swagger Parser validation failed for $spec_file"
-            fi
-
             # Validate with Redocly CLI
             echo "  📋 Redocly validation:"
-            if redocly lint "$spec_file"; then
+            if npx @redocly/openapi-cli validate "$spec_file"; then
               echo "  ✅ Redocly validation passed"
             else
               echo "  ⚠️ Redocly validation failed for $spec_file"
@@ -232,6 +221,7 @@ jobs:
             api_name=$(basename "$spec_file" .json)
             echo "🔄 Generating docs for $api_name..."
             
+            # Use redoc-cli despite deprecation warning since it works reliably
             if redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"; then
               echo "✅ Documentation generated for $api_name"
             else
@@ -388,7 +378,7 @@ jobs:
               </style>
           </head>
           <body>
-              <a href="../" class="back-link">← Back to Main Documentation</a>
+              <a href="../" class="back-link">← Back to Documentation Hub</a>
 
               <div class="pr-banner">
                   <h2>🔍 Pull Request Preview</h2>
@@ -510,14 +500,14 @@ jobs:
                   <div class="preview-card main-docs">
                       <h2 class="preview-title">🚀 Latest Release Documentation</h2>
                       <p>Official API documentation from the latest release</p>
-                      <a href="/main/" class="preview-link">View Main Documentation</a>
+                      <a href="main/" class="preview-link">View Main Documentation</a>
                   </div>
 
                   <div class="preview-card pr-preview">
                       <h2 class="preview-title">🔍 PR #${{ github.event.pull_request.number }} Preview</h2>
                       <p><strong>${{ github.event.pull_request.title }}</strong></p>
                       <p>Preview of API changes in this pull request</p>
-                      <a href="/pr-${{ github.event.pull_request.number }}/" class="preview-link">View PR Preview</a>
+                      <a href="pr-${{ github.event.pull_request.number }}/" class="preview-link">View PR Preview</a>
                   </div>
               </div>
           </body>
@@ -1009,11 +999,11 @@ jobs:
           <html>
           <head>
               <title>ManMan API Documentation</title>
-              <meta http-equiv="refresh" content="0;url=/main/">
+              <meta http-equiv="refresh" content="0;url=main/">
           </head>
           <body>
               <p>Redirecting to main documentation...</p>
-              <a href="/main/">Click here if not redirected</a>
+              <a href="main/">Click here if not redirected</a>
           </body>
           </html>
           EOF
