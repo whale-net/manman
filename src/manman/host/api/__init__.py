@@ -4,8 +4,7 @@ from .experience import router as experience_router
 from .status import router as status_router
 from .worker_dal import server_router, worker_router
 
-# TODO - create second fastapp for internal/external if desired
-# all code is going to be in deployable anyway
+# External facing app (experience + status APIs)
 fastapp = FastAPI()
 fastapp.include_router(experience_router)
 fastapp.include_router(status_router)
@@ -17,3 +16,10 @@ worker_dal_app = FastAPI(
 )
 worker_dal_app.include_router(server_router)
 worker_dal_app.include_router(worker_router)
+
+# Internal app that combines all endpoints for internal access
+internal_app = FastAPI(title="ManMan Internal API")
+internal_app.include_router(experience_router)
+internal_app.include_router(status_router)
+internal_app.include_router(server_router)
+internal_app.include_router(worker_router)

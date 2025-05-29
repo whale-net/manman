@@ -30,6 +30,14 @@ apis:
     port: 8000
     command: "start-status-api"
 
+  # Internal API (combines all endpoints)
+  internal:
+    enabled: false
+    name: manman-internal
+    replicas: 1
+    port: 8000
+    command: "start-experience-api"
+
 # Configuration for background processors (pub/sub services)
 processors:
   # Status Event Processor (handles status-related messages)

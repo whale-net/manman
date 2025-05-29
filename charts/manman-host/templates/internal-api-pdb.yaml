@@ -1,0 +1,12 @@
+{{- if .Values.apis.internal.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.apis.internal.name }}-{{ .Values.env.app_env }}-pdb
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.apis.internal.name }}-{{ .Values.env.app_env }}
+  minAvailable: 1
+{{- end }}

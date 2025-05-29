@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     component: status-api
+    api-type: external
+    service-group: manman-apis
 spec:
   type: ClusterIP
   selector:

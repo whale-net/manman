@@ -1,0 +1,20 @@
+{{- if .Values.apis.internal.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.apis.internal.name }}-{{ .Values.env.app_env }}-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    component: internal-api
+    api-type: internal
+    service-group: manman-apis
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.apis.internal.name }}-{{ .Values.env.app_env }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.apis.internal.port }}
+      targetPort: {{ .Values.apis.internal.port }}
+      name: http
+{{- end }}

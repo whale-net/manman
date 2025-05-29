@@ -106,10 +106,14 @@ def start_experience_api(
     create_vhost: Annotated[
         bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
+    internal: Annotated[
+        bool, typer.Option(help="Start internal API with all endpoints")
+    ] = False,
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
-    setup_logging(service_name="experience-api", enable_otel=log_otlp)
+    service_name = "internal-api" if internal else "experience-api"
+    setup_logging(service_name=service_name, enable_otel=log_otlp)
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -123,21 +127,30 @@ def start_experience_api(
         create_vhost=create_vhost,
     )
 
-    # Create FastAPI app with only host/experience routes
-    from fastapi import FastAPI
+    if internal:
+        # Use the internal app that combines all endpoints
+        from manman.host.api import internal_app
+        from manman.host.api.shared import add_health_check
+        
+        add_health_check(internal_app)
+        app_to_run = internal_app
+    else:
+        # Create FastAPI app with only host/experience routes
+        from fastapi import FastAPI
 
-    from manman.host.api.experience import router as experience_router
-    from manman.host.api.shared import add_health_check
+        from manman.host.api.experience import router as experience_router
+        from manman.host.api.shared import add_health_check
 
-    experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
-    experience_app.include_router(experience_router)
-    add_health_check(experience_app)
+        experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
+        experience_app.include_router(experience_router)
+        add_health_check(experience_app)
+        app_to_run = experience_app
 
     uvicorn.run(
-        experience_app,
+        app_to_run,
         host="0.0.0.0",
         port=port,
-        log_config=get_uvicorn_log_config("experience-api"),
+        log_config=get_uvicorn_log_config(service_name),
     )
 
 
@@ -261,70 +274,6 @@ def start_worker_dal_api(
         host="0.0.0.0",
         port=port,
         log_config=get_uvicorn_log_config("worker-dal-api"),
-    )
-
-
-@app.command()
-def start_internal_api(
-    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
-    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
-    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
-    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
-    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
-    port: int = 8000,
-    should_run_migration_check: Optional[bool] = True,
-    enable_ssl: Annotated[
-        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
-    ] = False,
-    rabbitmq_ssl_hostname: Annotated[
-        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
-    ] = None,
-    log_otlp: Annotated[
-        bool,
-        typer.Option(
-            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
-        ),
-    ] = False,
-    create_vhost: Annotated[
-        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
-    ] = False,
-):
-    """Start the internal API that exposes all endpoints (experience, status, worker DAL) in one service."""
-    # Setup logging first
-    setup_logging(service_name="internal-api", enable_otel=log_otlp)
-
-    _init_common_services(
-        rabbitmq_host=rabbitmq_host,
-        rabbitmq_port=rabbitmq_port,
-        rabbitmq_username=rabbitmq_username,
-        rabbitmq_password=rabbitmq_password,
-        app_env=app_env,
-        enable_ssl=enable_ssl,
-        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
-        should_run_migration_check=should_run_migration_check,
-        create_vhost=create_vhost,
-    )
-
-    # Create FastAPI app with all routes combined
-    from fastapi import FastAPI
-
-    from manman.host.api.experience import router as experience_router
-    from manman.host.api.shared import add_health_check
-    from manman.host.api.status import router as status_router
-    from manman.host.api.worker_dal import server_router, worker_router
-
-    internal_app = FastAPI(title="ManMan Internal API")
-    internal_app.include_router(experience_router)
-    internal_app.include_router(status_router)
-    internal_app.include_router(server_router)
-    internal_app.include_router(worker_router)
-    add_health_check(internal_app)
-
-    uvicorn.run(
-        internal_app,
-        host="0.0.0.0",
-        port=port,
-        log_config=get_uvicorn_log_config("internal-api"),
     )
 
 
