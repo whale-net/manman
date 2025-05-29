@@ -24,6 +24,7 @@ permissions:
 jobs:
   generate-openapi:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write  # Required for release attachment
       actions: write   # Required for artifact upload
@@ -139,6 +140,7 @@ jobs:
   # Additional job to validate the generated OpenAPI specs
   validate-openapi:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: generate-openapi
     if: always() && needs.generate-openapi.result == 'success'
 
@@ -150,8 +152,24 @@ jobs:
 
       - name: Install OpenAPI validation tools
         run: |
-          npm install -g @apidevtools/swagger-parser
-          npm install -g @redocly/openapi-cli
+          echo "📦 Installing validation tools..."
+          
+          # Retry npm installs in case of network issues
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt/3 for npm package installation..."
+            
+            if npm install -g @apidevtools/swagger-parser @redocly/openapi-cli; then
+              echo "✅ Validation tools installed successfully"
+              break
+            else
+              if [ $attempt -eq 3 ]; then
+                echo "❌ Failed to install validation tools after 3 attempts"
+                exit 1
+              fi
+              echo "⚠️ Installation failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
 
       - name: Validate OpenAPI specifications
         run: |
@@ -192,8 +210,21 @@ jobs:
         run: |
           echo "📚 Generating documentation previews..."
 
-          # Install redoc-cli for documentation generation
-          npm install -g redoc-cli
+          # Install redoc-cli for documentation generation with retry logic
+          for attempt in 1 2 3; do
+            echo "Installing redoc-cli (attempt $attempt/3)..."
+            if npm install -g redoc-cli; then
+              echo "✅ redoc-cli installed successfully"
+              break
+            else
+              if [ $attempt -eq 3 ]; then
+                echo "❌ Failed to install redoc-cli after 3 attempts"
+                exit 1
+              fi
+              echo "⚠️ Installation failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
 
           mkdir -p docs-preview
 
@@ -222,6 +253,7 @@ jobs:
   # Deploy PR documentation preview (using GitHub Pages preview environments)
   deploy-pr-preview:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: validate-openapi
     if: github.event_name == 'pull_request' && needs.validate-openapi.result == 'success'
     permissions:
@@ -564,6 +596,7 @@ jobs:
   # Deploy main documentation (only for main branch pushes and releases)
   deploy-main-docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: validate-openapi
     if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.validate-openapi.result == 'success'
     permissions:
@@ -908,6 +941,7 @@ jobs:
   # Cleanup PR previews when PR is closed
   cleanup-pr-preview:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     permissions:
       contents: read
