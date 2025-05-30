@@ -34,9 +34,11 @@ class WorkerService:
         sa_client_id: str,
         sa_client_secret: str,
         rabbitmq_connection: Connection,
+        mock_mode: bool = False,
     ):
         self.__is_started = False
         self.__is_stopped = False
+        self._mock_mode = mock_mode
 
         # TODO error checking
         self._install_dir = install_dir
@@ -198,6 +200,7 @@ class WorkerService:
             root_install_directory=self._install_dir,
             config=config,
             worker_id=self._worker_instance.worker_id,
+            mock_mode=self._mock_mode,
         )
         future = self._threadpool.submit(
             server.run,

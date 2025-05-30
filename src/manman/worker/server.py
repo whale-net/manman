@@ -37,11 +37,13 @@ class Server:
         root_install_directory: str,
         config: GameServerConfig,
         worker_id: int,
+        mock_mode: bool = False,
     ) -> None:
         # Extra status trackers to handle shutdown
         # and to provide expected state which may be useful for debugging later
         self.__is_started = False
         self.__is_stopped = False
+        self._mock_mode = mock_mode
 
         self._wapi = wapi
         self._config = config
@@ -74,7 +76,7 @@ class Server:
         )
 
         executable_path = os.path.join(self._server_directory, self._config.executable)
-        pb = ProcessBuilder(executable=executable_path)
+        pb = ProcessBuilder(executable=executable_path, mock_mode=mock_mode)
         for arg in self._config.args:
             pb.add_parameter(arg)
         self._proc = pb
@@ -233,8 +235,11 @@ class Server:
         )
 
         if should_update:
-            steam = SteamCMD(self._server_directory)
-            steam.install(app_id=self._game_server.app_id)
+            if self._mock_mode:
+                logger.info("Mock server skipping steamcmd installation")
+            else:
+                steam = SteamCMD(self._server_directory)
+                steam.install(app_id=self._game_server.app_id)
 
         try:
             # TODO - temp workaround for env var, need to come from config
@@ -269,6 +274,14 @@ class Server:
                     self.execute_command(command)
 
             status = self._proc.status
+            
+            # Sleep briefly to avoid busy waiting, shorter in mock mode
+            if self._mock_mode:
+                import time
+                time.sleep(0.1)
+            else:
+                import time  
+                time.sleep(0.5)
 
         # do it one more time to clean up anything leftover
         self._proc.read_output()
