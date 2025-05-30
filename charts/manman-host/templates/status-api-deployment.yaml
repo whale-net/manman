@@ -82,7 +82,7 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.apis.status.name }}-{{ .Values.env.app_env }}
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "deployment-name={{ .Values.apis.status.name }}-{{ .Values.env.app_env }}"
+              value: "deployment-name=dev"
             - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
               value: {{ .Values.env.otelCollector.logs.endpoint }}
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
