@@ -148,3 +148,140 @@ def test_import_mock_modules():
     
     # Check that typer app exists
     assert app is not None
+
+
+class TestMockWorkerServiceIntegration:
+    """Test mock worker service integration points."""
+
+    @pytest.fixture
+    def mock_dependencies(self):
+        """Create mocked dependencies for MockWorkerService initialization."""
+        mock_wapi = Mock()
+        mock_rabbitmq_connection = Mock()
+        
+        # Mock worker instance creation
+        mock_worker_instance = Mock()
+        mock_worker_instance.worker_id = 42
+        mock_wapi.worker_create.return_value = mock_worker_instance
+        mock_wapi.close_other_workers.return_value = None
+        mock_wapi.worker_heartbeat.return_value = None
+        
+        return {
+            "wapi": mock_wapi,
+            "rabbitmq_connection": mock_rabbitmq_connection,
+            "worker_instance": mock_worker_instance,
+        }
+
+    @patch("manman.mock.worker_service.RabbitStatusPublisher")
+    @patch("manman.mock.worker_service.RabbitCommandSubscriber")
+    @patch("manman.mock.worker_service.WorkerAPIClient")
+    @patch("manman.mock.worker_service.get_auth_api_client")
+    def test_mock_worker_service_initialization(
+        self, mock_auth_api, mock_wapi_class, mock_cmd_sub, mock_status_pub, mock_dependencies
+    ):
+        """Test that mock worker service can be initialized."""
+        from manman.mock.worker_service import MockWorkerService
+
+        # Setup mocks
+        mock_wapi_class.return_value = mock_dependencies["wapi"]
+        mock_auth_api.return_value = Mock()
+        mock_status_pub.return_value = Mock()
+        mock_cmd_sub.return_value = Mock()
+
+        # Create a MockWorkerService instance
+        service = MockWorkerService(
+            install_dir="/test/path",
+            host_url="http://test.example.com",
+            sa_client_id=None,
+            sa_client_secret=None,
+            rabbitmq_connection=mock_dependencies["rabbitmq_connection"],
+        )
+
+        # Verify the service was created successfully
+        assert service is not None
+        assert hasattr(service, '_worker_instance')
+        assert hasattr(service, '_servers')
+        assert len(service._servers) == 0
+
+    def test_queue_name_generation(self):
+        """Test queue name generation methods."""
+        from manman.mock.worker_service import MockWorkerService
+        
+        worker_id = 123
+        cmd_queue = MockWorkerService.generate_command_queue_name(worker_id)
+        status_queue = MockWorkerService.generate_status_queue_name(worker_id)
+        
+        assert cmd_queue == "cmd.worker-instance.123"
+        assert status_queue == "status.worker-instance.123"
+
+
+class TestMockServerCommands:
+    """Test mock server command handling."""
+
+    @pytest.fixture
+    def mock_server(self):
+        """Create a mock server for testing."""
+        with patch("manman.mock.server.RabbitCommandSubscriber") as mock_cmd_sub, \
+             patch("manman.mock.server.RabbitStatusPublisher") as mock_status_pub:
+            
+            from manman.mock.server import MockServer
+
+            # Create mock dependencies
+            mock_wapi = Mock()
+            mock_config = Mock()
+            mock_config.game_server_id = 1
+            mock_config.name = "test-server"
+            mock_config.executable = "server.exe"
+            mock_config.args = ["--port", "27015"]
+
+            mock_instance = Mock()
+            mock_instance.game_server_instance_id = 123
+            mock_wapi.game_server_instance_create.return_value = mock_instance
+
+            mock_game_server = Mock()
+            mock_game_server.server_type = 1
+            mock_game_server.app_id = 730
+            mock_wapi.game_server.return_value = mock_game_server
+
+            mock_cmd_sub.return_value = Mock()
+            mock_status_pub.return_value = Mock()
+
+            server = MockServer(
+                wapi=mock_wapi,
+                rabbitmq_connection=Mock(),
+                root_install_directory="/test/path",
+                config=mock_config,
+                worker_id=1,
+            )
+            
+            return server
+
+    def test_queue_name_generation(self):
+        """Test queue name generation for mock server."""
+        from manman.mock.server import MockServer
+        
+        instance_id = 456
+        cmd_queue = MockServer.generate_command_queue_name(instance_id)
+        status_queue = MockServer.generate_status_queue_name(instance_id)
+        
+        assert cmd_queue == "cmd.game-server-instance.456"
+        assert status_queue == "status.game-server-instance.456"
+
+    def test_execute_stop_command(self, mock_server):
+        """Test executing a stop command."""
+        from manman.models import Command, CommandType
+        
+        stop_command = Command(command_type=CommandType.STOP, command_args=["123"])
+        
+        # Should not raise exception
+        mock_server.execute_command(stop_command)
+        assert mock_server.is_shutdown
+
+    def test_execute_stdin_command(self, mock_server):
+        """Test executing a stdin command."""
+        from manman.models import Command, CommandType
+        
+        stdin_command = Command(command_type=CommandType.STDIN, command_args=["123", "test", "input"])
+        
+        # Should not raise exception
+        mock_server.execute_command(stdin_command)
