@@ -1,7 +1,7 @@
 import logging
 import os
 
-from manman.worker.processbuilder import ProcessBuilder
+from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -69,4 +69,8 @@ class SteamCMD:
         pb.add_parameter("+exit")
 
         pb.run(wait=True)
-        logger.info("installed app_id=[%s]", app_id)
+        if pb.status == ProcessBuilderStatus.STOPPED:
+            logger.info("successfully installed app_id=[%s]", app_id)
+        elif pb.status == ProcessBuilderStatus.FAILED:
+            logger.error("failed to install app_id=[%s], exit code: %s", app_id, pb.exit_code)
+            raise Exception(f"SteamCMD failed (exit code: {pb.exit_code})")
