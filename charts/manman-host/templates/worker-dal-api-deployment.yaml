@@ -43,6 +43,9 @@ spec:
             {{ if and .Values.env.rabbitmq.createVhost (eq .Values.env.app_env "dev") }}
             - --create-vhost
             {{- end }}
+            {{- if .Values.env.otel.logging_enabled }}
+            - --log-otlp
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /workerdal/health
@@ -76,8 +79,6 @@ spec:
             - name: APP_ENV
               value: {{ .Values.env.app_env }}
 {{- if .Values.env.otel.logging_enabled }}
-            - name: MANMAN_LOG_OTLP
-              value: "true"
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.apis.workerDal.name }}-{{ .Values.env.app_env }}
             - name: OTEL_RESOURCE_ATTRIBUTES

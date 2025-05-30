@@ -15,6 +15,7 @@ class ProcessBuilderStatus(enum.Enum):
     INIT = 1
     RUNNING = 2
     STOPPED = 3
+    FAILED = 4
 
 
 class ProcessBuilder:
@@ -32,7 +33,11 @@ class ProcessBuilder:
         proc_status = self._proc.poll()
         # logger.info('status %s', proc_status)
         if proc_status is not None:
-            return ProcessBuilderStatus.STOPPED
+            # Process has exited, check the return code
+            if proc_status == 0:
+                return ProcessBuilderStatus.STOPPED
+            else:
+                return ProcessBuilderStatus.FAILED
 
         current_time = datetime.datetime.now()
         if current_time < self._process_start_time + datetime.timedelta(
@@ -40,6 +45,17 @@ class ProcessBuilder:
         ):
             return ProcessBuilderStatus.INIT
         return ProcessBuilderStatus.RUNNING
+
+    @property
+    def exit_code(self) -> int | None:
+        """
+        Get the exit code of the process if it has exited.
+
+        :return: Exit code if process has exited, None if still running or not started
+        """
+        if self._process_start_time is None:
+            return None
+        return self._proc.poll()
 
     def add_parameter(self, *parameters: str):
         for parm in parameters:
