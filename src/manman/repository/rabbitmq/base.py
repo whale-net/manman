@@ -66,3 +66,58 @@ class MessageSubscriber(abc.ABC):
         This method should clean up any resources used by the message subscriber.
         """
         pass
+
+
+class ExchangeConfig(abc.ABC):
+    """
+    Abstract base class for exchange configuration.
+    This class defines the interface for managing exchange names and types.
+    """
+
+    @property
+    @abc.abstractmethod
+    def exchange_name(self) -> str:
+        """Get the exchange name for this configuration."""
+        pass
+
+    @property
+    def exchange_type(self) -> str:
+        """Get the exchange type. Defaults to 'topic'."""
+        return "topic"
+
+    @property
+    def durable(self) -> bool:
+        """Whether the exchange should be durable. Defaults to True."""
+        return True
+
+    @property
+    def auto_delete(self) -> bool:
+        """Whether the exchange should auto-delete. Defaults to False."""
+        return False
+
+
+class RoutingKeyStrategy(abc.ABC):
+    """
+    Abstract base class for routing key generation strategies.
+    This class defines the interface for generating routing keys for different message types.
+    """
+
+    @abc.abstractmethod
+    def generate_command_routing_key(self, instance_id: int) -> str:
+        """
+        Generate a routing key for commands targeting a specific instance.
+        
+        :param instance_id: The ID of the target instance
+        :return: The routing key for commands
+        """
+        pass
+
+    @abc.abstractmethod
+    def generate_status_routing_key(self, instance_id: int) -> str:
+        """
+        Generate a routing key for status messages from a specific instance.
+        
+        :param instance_id: The ID of the source instance
+        :return: The routing key for status messages
+        """
+        pass

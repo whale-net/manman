@@ -16,8 +16,12 @@ from manman.models import (
 
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
-from manman.repository.rabbitmq.util import add_routing_key_prefix
+from manman.repository.rabbitmq import (
+    RabbitCommandSubscriber,
+    RabbitStatusPublisher,
+    WorkerExchangeConfig,
+    WorkerRoutingKeyStrategy,
+)
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
 
@@ -25,8 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 class WorkerService:
-    RMQ_EXCHANGE = "worker"
-
     def __init__(
         self,
         install_dir: str,
@@ -39,6 +41,10 @@ class WorkerService:
         self.__is_started = False
         self.__is_stopped = False
         self._mock_mode = mock_mode
+
+        # Initialize exchange and routing key configurations
+        self._exchange_config = WorkerExchangeConfig()
+        self._routing_key_strategy = WorkerRoutingKeyStrategy()
 
         # TODO error checking
         self._install_dir = install_dir
@@ -70,12 +76,12 @@ class WorkerService:
         self._rabbitmq_connection = rabbitmq_connection
         self._status_publisher = RabbitStatusPublisher(
             connection=self._rabbitmq_connection,
-            exchange=WorkerService.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             routing_key_base=self.status_routing_key,
         )
         self._command_provider = RabbitCommandSubscriber(
             connection=self._rabbitmq_connection,
-            exchange=WorkerService.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             queue_name=self.command_routing_key,
         )
 
@@ -99,9 +105,9 @@ class WorkerService:
 
     @staticmethod
     def generate_command_queue_name(worker_id: int) -> str:
-        return add_routing_key_prefix(
-            WorkerService._generate_common_queue_name(worker_id), "cmd"
-        )
+        # Use the routing key strategy for consistency
+        strategy = WorkerRoutingKeyStrategy()
+        return strategy.generate_command_routing_key(worker_id)
 
     @property
     def command_routing_key(self) -> str:
@@ -109,9 +115,9 @@ class WorkerService:
 
     @staticmethod
     def generate_status_queue_name(worker_id: int) -> str:
-        return add_routing_key_prefix(
-            WorkerService._generate_common_queue_name(worker_id), "status"
-        )
+        # Use the routing key strategy for consistency
+        strategy = WorkerRoutingKeyStrategy()
+        return strategy.generate_status_routing_key(worker_id)
 
     @property
     def status_routing_key(self) -> str:

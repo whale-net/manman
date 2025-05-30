@@ -17,8 +17,12 @@ from manman.models import (
     StatusType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
-from manman.repository.rabbitmq.util import add_routing_key_prefix
+from manman.repository.rabbitmq import (
+    RabbitCommandSubscriber,
+    RabbitStatusPublisher,
+    ServerExchangeConfig,
+    ServerRoutingKeyStrategy,
+)
 from manman.util import env_list_to_dict
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
@@ -28,8 +32,6 @@ logger = logging.getLogger(__name__)
 
 # TODO logging
 class Server:
-    RMQ_EXCHANGE = "server"
-
     def __init__(
         self,
         wapi: WorkerAPIClient,
@@ -45,6 +47,10 @@ class Server:
         self.__is_stopped = False
         self._mock_mode = mock_mode
 
+        # Initialize exchange and routing key configurations
+        self._exchange_config = ServerExchangeConfig()
+        self._routing_key_strategy = ServerRoutingKeyStrategy()
+
         self._wapi = wapi
         self._config = config
         self._worker_id = worker_id
@@ -55,13 +61,13 @@ class Server:
 
         self._command_message_provider = RabbitCommandSubscriber(
             connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             queue_name=self.command_routing_key,
         )
 
         self._status_publisher = RabbitStatusPublisher(
             connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             routing_key_base=self.status_routing_key,
         )
 
@@ -100,16 +106,15 @@ class Server:
 
     @staticmethod
     def generate_command_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id),
-            "cmd",
-        )
+        # Use the routing key strategy for consistency
+        strategy = ServerRoutingKeyStrategy()
+        return strategy.generate_command_routing_key(game_server_instance_id)
 
     @staticmethod
     def generate_status_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id), "status"
-        )
+        # Use the routing key strategy for consistency
+        strategy = ServerRoutingKeyStrategy()
+        return strategy.generate_status_routing_key(game_server_instance_id)
 
     @property
     def command_routing_key(self) -> str:
