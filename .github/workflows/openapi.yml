@@ -240,7 +240,7 @@ jobs:
           path: docs-preview/
           retention-days: 30
 
-  # Deploy PR documentation preview (using per-PR environments)
+  # Deploy PR documentation preview (using artifacts only - no Pages deployment)
   deploy-pr-preview:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -248,8 +248,6 @@ jobs:
     if: github.event_name == 'pull_request' && needs.validate-openapi.result == 'success'
     permissions:
       contents: read
-      pages: write
-      id-token: write
       pull-requests: write
       deployments: write
 
@@ -260,7 +258,7 @@ jobs:
 
     environment:
       name: pr-preview-${{ github.event.pull_request.number }}
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
       - name: Checkout repository
@@ -276,14 +274,12 @@ jobs:
 
       - name: Create PR preview directory structure
         run: |
-          # For per-PR environments, deploy directly to site root
-          # since the environment itself is already PR-specific
           mkdir -p site
 
           # Copy documentation directly to site root
           cp -r docs-preview/* site/
           
-          echo "📁 Created PR preview in site root for per-PR environment"
+          echo "📁 Created PR preview in site root"
           ls -la site/
 
       - name: Create PR-specific index page
@@ -367,14 +363,31 @@ jobs:
                       font-size: 0.875rem;
                       color: #475569;
                   }
-                  .back-link {
-                      display: inline-block;
-                      margin-bottom: 1rem;
-                      color: #6b7280;
-                      text-decoration: none;
+                  .download-section {
+                      background: #fef3c7;
+                      border: 1px solid #f59e0b;
+                      border-radius: 8px;
+                      padding: 1.5rem;
+                      margin-top: 2rem;
                   }
-                  .back-link:hover {
-                      color: #374151;
+                  .download-title {
+                      font-weight: 600;
+                      color: #92400e;
+                      margin-bottom: 1rem;
+                  }
+                  .download-link {
+                      display: inline-block;
+                      background: #f59e0b;
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 6px;
+                      text-decoration: none;
+                      font-weight: 500;
+                      margin-right: 0.5rem;
+                      margin-bottom: 0.5rem;
+                  }
+                  .download-link:hover {
+                      background: #d97706;
                   }
               </style>
           </head>
@@ -410,6 +423,12 @@ jobs:
                   </div>
               </div>
 
+              <div class="download-section">
+                  <h3 class="download-title">📥 Download OpenAPI Specifications</h3>
+                  <p>Download the raw OpenAPI JSON files for this PR:</p>
+                  <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" class="download-link">View All Artifacts</a>
+              </div>
+
               <div class="build-info">
                   <strong>PR Information:</strong><br>
                   PR: <code>#${{ github.event.pull_request.number }}</code><br>
@@ -422,39 +441,44 @@ jobs:
           </html>
           EOF
 
-      - name: Create site archive for deployment
-        run: |
-          echo "📦 Preparing site for deployment..."
-          echo "Site contents:"
-          find site -type f | sort
-          echo ""
-          echo "Site structure:"
-          tree site || ls -laR site
-          
-          cd site
-          tar -czf ../site.tar.gz .
-          cd ..
-          
-          echo "✅ Site archive created: $(ls -lh site.tar.gz)"
-
-      - name: Setup Pages for PR preview
-        uses: actions/configure-pages@v4
-
-      - name: Upload PR preview to Pages
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload PR preview as artifact
+        uses: actions/upload-artifact@v4
         with:
-          path: site
+          name: pr-${{ github.event.pull_request.number }}-preview-site
+          path: site/
+          retention-days: 30
 
-      - name: Deploy PR preview
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Log deployment results
-        run: |
-          echo "🚀 Deployment completed!"
-          echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "PR Number: ${{ github.event.pull_request.number }}"
+      - name: Create deployment record
+        uses: actions/github-script@v7
+        id: create_deployment
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            const run_id = context.runId;
+            const artifactUrl = `https://github.com/${owner}/${repo}/actions/runs/${run_id}`;
+            
+            // Create a deployment status to track this preview
+            const deployment = await github.rest.repos.createDeployment({
+              owner,
+              repo,
+              ref: context.sha,
+              environment: `pr-preview-${pull_number}`,
+              description: `PR #${pull_number} API documentation preview`,
+              auto_merge: false,
+              required_contexts: []
+            });
+            
+            await github.rest.repos.createDeploymentStatus({
+              owner,
+              repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              target_url: artifactUrl,
+              description: 'PR preview available as artifact'
+            });
+            
+            return artifactUrl;
 
       - name: Comment on PR with preview link
         uses: actions/github-script@v7
@@ -462,18 +486,25 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
-            const deploymentUrl = '${{ steps.deployment.outputs.page_url }}';
+            const run_id = context.runId;
+            const artifactUrl = `https://github.com/${owner}/${repo}/actions/runs/${run_id}`;
 
             const body = `## 📚 API Documentation Preview
 
-            The OpenAPI documentation preview has been deployed for this PR.
+            The OpenAPI documentation preview has been generated for this PR and is available as a downloadable artifact.
 
-            **🔍 PR Documentation:** [${deploymentUrl}](${deploymentUrl})
+            **🔍 PR Documentation Preview:** [Download from Artifacts](${artifactUrl})
+
+            ### How to view the preview:
+            1. Click the link above to go to the workflow run
+            2. Scroll down to the "Artifacts" section  
+            3. Download the \`pr-${pull_number}-preview-site\` artifact
+            4. Extract the ZIP file and open \`index.html\` in your browser
 
             ### Available APIs in this preview:
-            - [Experience API](${deploymentUrl}experience-api.html) - Game server management
-            - [Status API](${deploymentUrl}status-api.html) - Monitoring and health checks
-            - [Worker DAL API](${deploymentUrl}worker-dal-api.html) - Data access layer
+            - **Experience API** - Game server management and user-facing functionality
+            - **Status API** - Status and monitoring functionality  
+            - **Worker DAL API** - Data access endpoints for worker services
 
             **Environment:** \`pr-preview-${pull_number}\`
 
@@ -879,9 +910,42 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     permissions:
       deployments: write
+      pull-requests: write
 
     steps:
+      - name: Cleanup deployment environment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            
+            try {
+              // List all deployments for the PR environment
+              const deployments = await github.rest.repos.listDeployments({
+                owner,
+                repo,
+                environment: `pr-preview-${pull_number}`
+              });
+              
+              // Mark all deployments as inactive
+              for (const deployment of deployments.data) {
+                await github.rest.repos.createDeploymentStatus({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  state: 'inactive',
+                  description: 'PR closed - preview cleaned up'
+                });
+              }
+              
+              console.log(`Cleaned up ${deployments.data.length} deployment(s) for pr-preview-${pull_number}`);
+            } catch (error) {
+              console.log(`Cleanup completed for pr-preview-${pull_number}`);
+              // Don't fail if there's nothing to clean up
+            }
+
       - name: Log cleanup action
         run: |
-          echo "🧹 PR #${{ github.event.pull_request.number }} closed - per-PR environment will be automatically cleaned up"
+          echo "🧹 PR #${{ github.event.pull_request.number }} closed - preview artifacts will expire automatically"
           echo "Environment: pr-preview-${{ github.event.pull_request.number }}"
