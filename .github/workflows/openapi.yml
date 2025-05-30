@@ -276,18 +276,19 @@ jobs:
 
       - name: Create PR preview directory structure
         run: |
-          # Create directory for this PR preview
-          mkdir -p site/pr-${{ github.event.pull_request.number }}
+          # For per-PR environments, deploy directly to site root
+          # since the environment itself is already PR-specific
+          mkdir -p site
 
-          # Copy documentation to PR-specific directory  
-          cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
+          # Copy documentation directly to site root
+          cp -r docs-preview/* site/
           
-          echo "📁 Created PR preview at site/pr-${{ github.event.pull_request.number }}/"
-          ls -la site/pr-${{ github.event.pull_request.number }}/
+          echo "📁 Created PR preview in site root for per-PR environment"
+          ls -la site/
 
       - name: Create PR-specific index page
         run: |
-          cat > site/pr-${{ github.event.pull_request.number }}/index.html << 'EOF'
+          cat > site/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -378,8 +379,6 @@ jobs:
               </style>
           </head>
           <body>
-              <a href="../" class="back-link">← Back to Documentation Hub</a>
-
               <div class="pr-banner">
                   <h2>🔍 Pull Request Preview</h2>
                   <p>This is a preview of the API documentation for PR #${{ github.event.pull_request.number }}</p>
@@ -418,97 +417,6 @@ jobs:
                   Branch: <code>${{ github.head_ref }}</code><br>
                   Commit: <code>${{ github.sha }}</code><br>
                   Generated at: <code>$(date -u)</code>
-              </div>
-          </body>
-          </html>
-          EOF
-
-      - name: Create main index with PR links
-        run: |
-          # Create a master index that lists all available previews
-          cat > site/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>ManMan API Documentation Hub</title>
-              <style>
-                  body {
-                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                      max-width: 900px;
-                      margin: 0 auto;
-                      padding: 2rem;
-                      background: #f8fafc;
-                  }
-                  .header {
-                      text-align: center;
-                      margin-bottom: 3rem;
-                      padding-bottom: 2rem;
-                      border-bottom: 2px solid #e2e8f0;
-                  }
-                  .preview-grid {
-                      display: grid;
-                      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-                      gap: 2rem;
-                      margin-top: 2rem;
-                  }
-                  .preview-card {
-                      background: white;
-                      border-radius: 12px;
-                      padding: 2rem;
-                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                      border: 1px solid #e2e8f0;
-                  }
-                  .main-docs {
-                      border-left: 4px solid #10b981;
-                  }
-                  .pr-preview {
-                      border-left: 4px solid #f59e0b;
-                  }
-                  .preview-title {
-                      font-size: 1.25rem;
-                      font-weight: 600;
-                      margin-bottom: 1rem;
-                      color: #1e293b;
-                  }
-                  .preview-link {
-                      display: inline-block;
-                      background: #3b82f6;
-                      color: white;
-                      padding: 0.5rem 1rem;
-                      border-radius: 6px;
-                      text-decoration: none;
-                      font-weight: 500;
-                      margin-top: 1rem;
-                  }
-                  .main-docs .preview-link {
-                      background: #10b981;
-                  }
-                  .pr-preview .preview-link {
-                      background: #f59e0b;
-                  }
-              </style>
-          </head>
-          <body>
-              <div class="header">
-                  <h1>ManMan API Documentation Hub</h1>
-                  <p>Access the latest API documentation and PR previews</p>
-              </div>
-
-              <div class="preview-grid">
-                  <div class="preview-card main-docs">
-                      <h2 class="preview-title">🚀 Latest Release Documentation</h2>
-                      <p>Official API documentation from the latest release</p>
-                      <a href="main/" class="preview-link">View Main Documentation</a>
-                  </div>
-
-                  <div class="preview-card pr-preview">
-                      <h2 class="preview-title">🔍 PR #${{ github.event.pull_request.number }} Preview</h2>
-                      <p><strong>${{ github.event.pull_request.title }}</strong></p>
-                      <p>Preview of API changes in this pull request</p>
-                      <a href="pr-${{ github.event.pull_request.number }}/" class="preview-link">View PR Preview</a>
-                  </div>
               </div>
           </body>
           </html>
@@ -560,7 +468,7 @@ jobs:
 
             The OpenAPI documentation preview has been deployed for this PR.
 
-            **🔍 PR Preview:** [${deploymentUrl}](${deploymentUrl})
+            **🔍 PR Documentation:** [${deploymentUrl}](${deploymentUrl})
 
             ### Available APIs in this preview:
             - [Experience API](${deploymentUrl}experience-api.html) - Game server management
