@@ -251,10 +251,10 @@ jobs:
       pull-requests: write
       deployments: write
 
-    # Use PR-specific concurrency group to allow parallel deployments
+    # Use unified concurrency group to prevent deployment conflicts
     concurrency:
-      group: "openapi-pr-preview-${{ github.event.pull_request.number }}"
-      cancel-in-progress: true
+      group: "openapi-deployment"
+      cancel-in-progress: false
 
     environment:
       name: pr-preview-${{ github.event.pull_request.number }}
@@ -562,7 +562,7 @@ jobs:
       id-token: write
 
     concurrency:
-      group: "openapi-main-docs-deploy"
+      group: "openapi-deployment"
       cancel-in-progress: false
 
     environment:
