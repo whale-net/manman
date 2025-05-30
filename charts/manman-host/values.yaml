@@ -110,7 +110,7 @@ env:
 
   # OpenTelemetry configuration
   otel:
-    logging_enabled: false
+    logging_enabled: true
 
   db:
     url: <postgresql+psycopg2://user:password@host:port/database>
