@@ -17,8 +17,12 @@ from manman.models import (
     StatusType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
-from manman.repository.rabbitmq.util import add_routing_key_prefix
+from manman.repository.rabbitmq import (
+    RabbitCommandSubscriber,
+    RabbitStatusPublisher,
+    ServerExchangeConfig,
+    ServerRoutingKeyStrategy,
+)
 from manman.util import env_list_to_dict
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
@@ -28,8 +32,6 @@ logger = logging.getLogger(__name__)
 
 # TODO logging
 class Server:
-    RMQ_EXCHANGE = "server"
-
     def __init__(
         self,
         wapi: WorkerAPIClient,
@@ -37,11 +39,17 @@ class Server:
         root_install_directory: str,
         config: GameServerConfig,
         worker_id: int,
+        mock_mode: bool = False,
     ) -> None:
         # Extra status trackers to handle shutdown
         # and to provide expected state which may be useful for debugging later
         self.__is_started = False
         self.__is_stopped = False
+        self._mock_mode = mock_mode
+
+        # Initialize exchange and routing key configurations
+        self._exchange_config = ServerExchangeConfig()
+        self._routing_key_strategy = ServerRoutingKeyStrategy()
 
         self._wapi = wapi
         self._config = config
@@ -53,13 +61,13 @@ class Server:
 
         self._command_message_provider = RabbitCommandSubscriber(
             connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             queue_name=self.command_routing_key,
         )
 
         self._status_publisher = RabbitStatusPublisher(
             connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
+            exchange=self._exchange_config.exchange_name,
             routing_key_base=self.status_routing_key,
         )
 
@@ -74,7 +82,7 @@ class Server:
         )
 
         executable_path = os.path.join(self._server_directory, self._config.executable)
-        pb = ProcessBuilder(executable=executable_path)
+        pb = ProcessBuilder(executable=executable_path, mock_mode=mock_mode)
         for arg in self._config.args:
             pb.add_parameter(arg)
         self._proc = pb
@@ -98,16 +106,15 @@ class Server:
 
     @staticmethod
     def generate_command_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id),
-            "cmd",
-        )
+        # Use the routing key strategy for consistency
+        strategy = ServerRoutingKeyStrategy()
+        return strategy.generate_command_routing_key(game_server_instance_id)
 
     @staticmethod
     def generate_status_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id), "status"
-        )
+        # Use the routing key strategy for consistency
+        strategy = ServerRoutingKeyStrategy()
+        return strategy.generate_status_routing_key(game_server_instance_id)
 
     @property
     def command_routing_key(self) -> str:
@@ -233,8 +240,11 @@ class Server:
         )
 
         if should_update:
-            steam = SteamCMD(self._server_directory)
-            steam.install(app_id=self._game_server.app_id)
+            if self._mock_mode:
+                logger.info("Mock server skipping steamcmd installation")
+            else:
+                steam = SteamCMD(self._server_directory)
+                steam.install(app_id=self._game_server.app_id)
 
         try:
             # TODO - temp workaround for env var, need to come from config
@@ -269,6 +279,14 @@ class Server:
                     self.execute_command(command)
 
             status = self._proc.status
+            
+            # Sleep briefly to avoid busy waiting, shorter in mock mode
+            if self._mock_mode:
+                import time
+                time.sleep(0.1)
+            else:
+                import time  
+                time.sleep(0.5)
 
         # do it one more time to clean up anything leftover
         self._proc.read_output()

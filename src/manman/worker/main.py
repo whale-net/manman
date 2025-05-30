@@ -23,6 +23,7 @@ def start(
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
     ] = "./data",
+    mock_mode: Annotated[bool, typer.Option("--mock-mode", help="Run in mock mode without executing real processes")] = False,
     # steamcmd_override: Annotated[
     #     Optional[str], typer.Option(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
     # ] = None,
@@ -35,6 +36,7 @@ def start(
         None,
         None,
         rabbitmq_connection=get_rabbitmq_connection(),
+        mock_mode=mock_mode,
     )
     service.run()
 
