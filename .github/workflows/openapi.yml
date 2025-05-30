@@ -659,19 +659,81 @@ jobs:
           name: openapi-documentation
           path: docs-preview
 
-      - name: Setup site structure
-        run: |
-          mkdir -p site/main
-
-          # Copy current documentation to main directory
-          cp -r docs-preview/* site/main/
-
-          # If this is a tag, also create a versioned copy
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${{ github.ref_name }}"
-            mkdir -p "site/versions/$VERSION"
-            cp -r docs-preview/* "site/versions/$VERSION/"
-          fi
+      - name: Setup site structure and clean up closed PR previews
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+            
+            // Create basic site structure
+            fs.mkdirSync('site/main', { recursive: true });
+            execSync('cp -r docs-preview/* site/main/');
+            
+            // If this is a tag, also create a versioned copy
+            if (context.ref.startsWith('refs/tags/v')) {
+              const version = context.ref.replace('refs/tags/', '');
+              fs.mkdirSync(`site/versions/${version}`, { recursive: true });
+              execSync(`cp -r docs-preview/* site/versions/${version}/`);
+            }
+            
+            // Clean up closed PR previews
+            try {
+              // List all directories in the site folder
+              const siteDirs = fs.readdirSync('site');
+              
+              // Find PR preview directories (format: pr-NUMBER)
+              const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
+              
+              if (prDirs.length > 0) {
+                console.log(`Found ${prDirs.length} PR preview directories to check`);
+                
+                for (const prDir of prDirs) {
+                  // Extract PR number from directory name (pr-123 -> 123)
+                  const prNumber = parseInt(prDir.replace('pr-', ''), 10);
+                  
+                  if (isNaN(prNumber)) {
+                    console.log(`Invalid PR directory format: ${prDir}, skipping`);
+                    continue;
+                  }
+                  
+                  console.log(`Checking status of PR #${prNumber}`);
+                  
+                  try {
+                    // Check if PR is still open using GitHub API
+                    const { data: pr } = await github.rest.pulls.get({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: prNumber
+                    });
+                    
+                    if (pr.state === 'open') {
+                      console.log(`PR #${prNumber} is still open, keeping preview directory`);
+                    } else {
+                      console.log(`PR #${prNumber} is ${pr.state}, removing preview directory`);
+                      // Remove the PR preview directory
+                      execSync(`rm -rf site/${prDir}`);
+                      console.log(`Removed ${prDir} directory`);
+                    }
+                  } catch (error) {
+                    // PR might not exist anymore
+                    if (error.status === 404) {
+                      console.log(`PR #${prNumber} not found, removing preview directory`);
+                      execSync(`rm -rf site/${prDir}`);
+                      console.log(`Removed ${prDir} directory`);
+                    } else {
+                      console.log(`Error checking PR #${prNumber}: ${error.message}`);
+                    }
+                  }
+                }
+              } else {
+                console.log('No PR preview directories found to clean up');
+              }
+            } catch (error) {
+              console.log(`Error during PR preview cleanup: ${error.message}`);
+              // Don't fail the workflow if cleanup encounters an issue
+            }
 
       - name: Create main documentation index
         run: |
@@ -989,15 +1051,118 @@ jobs:
     permissions:
       deployments: write
       pull-requests: write
+      contents: read
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: "openapi-deployment"
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download current GitHub Pages site (if exists)
+        run: |
+          echo "📥 Downloading current GitHub Pages site (if it exists)..."
+          
+          # Create directory for site
+          mkdir -p site
+          
+          # Try to download the current site (will fail silently if not exists)
+          gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
+          
+          echo "Attempting to download from: $gh_pages_url"
+          
+          if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
+            echo "GitHub Pages site exists, downloading..."
+            curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
+            
+            # If main docs exist, preserve them
+            if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
+              echo "Main docs exist, preserving them..."
+              mkdir -p site/main
+              curl -sSL "$gh_pages_url/main/index.html" -o site/main/index.html || true
+              curl -sSL "$gh_pages_url/main/experience-api.html" -o site/main/experience-api.html || true
+              curl -sSL "$gh_pages_url/main/status-api.html" -o site/main/status-api.html || true
+              curl -sSL "$gh_pages_url/main/worker-dal-api.html" -o site/main/worker-dal-api.html || true
+            fi
+            
+            # If version docs exist, preserve them
+            if curl -sSL --head "$gh_pages_url/versions/" | grep -q "HTTP/2 200"; then
+              echo "Version docs exist, preserving them..."
+              mkdir -p site/versions
+              # This is a simplification - in real implementation you might want to download all version folders
+              curl -sSL "$gh_pages_url/versions/index.html" -o site/versions/index.html || true
+            fi
+            
+            # Find and preserve other PR preview directories except the current one
+            current_pr="${{ github.event.pull_request.number }}"
+            
+            # List directories from GitHub Pages root
+            echo "Looking for other PR directories to preserve..."
+            for dir in $(curl -sSL "$gh_pages_url" | grep -o 'href="pr-[0-9]*/' | sed 's/href="//g' | sed 's/\/$//g'); do
+              pr_num=$(echo "$dir" | sed 's/pr-//g')
+              
+              if [ "$pr_num" != "$current_pr" ]; then
+                echo "Found other PR preview: $dir, preserving it"
+                mkdir -p "site/$dir"
+                curl -sSL "$gh_pages_url/$dir/index.html" -o "site/$dir/index.html" || true
+                curl -sSL "$gh_pages_url/$dir/experience-api.html" -o "site/$dir/experience-api.html" || true
+                curl -sSL "$gh_pages_url/$dir/status-api.html" -o "site/$dir/status-api.html" || true
+                curl -sSL "$gh_pages_url/$dir/worker-dal-api.html" -o "site/$dir/worker-dal-api.html" || true
+              else
+                echo "Skipping current PR directory: $dir (will be removed)"
+              fi
+            done
+          else
+            echo "No existing GitHub Pages site found, creating new one"
+          fi
+
+      - name: Remove PR preview directory
+        run: |
+          echo "🗑️ Removing PR preview directory for PR #${{ github.event.pull_request.number }}"
+          rm -rf "site/pr-${{ github.event.pull_request.number }}"
+
+      - name: Update main index to remove closed PR
+        run: |
+          # Only regenerate index if it exists
+          if [ -f "site/index.html" ]; then
+            echo "Updating main index to remove closed PR reference..."
+            # A more robust approach would be to use a templating system or parse the HTML
+            # This simple grep/sed approach might work for simple cases
+            cat site/index.html | grep -v "PR #${{ github.event.pull_request.number }}" > site/index.html.tmp
+            mv site/index.html.tmp site/index.html
+          else
+            echo "No index.html exists yet, skipping index update"
+          fi
+
+      - name: Upload site to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
       - name: Cleanup deployment environment
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
-
+            
             try {
               // List all deployments for the PR environment
               const deployments = await github.rest.repos.listDeployments({
@@ -1005,7 +1170,7 @@ jobs:
                 repo,
                 environment: `pr-preview-${pull_number}`
               });
-
+              
               // Mark all deployments as inactive
               for (const deployment of deployments.data) {
                 await github.rest.repos.createDeploymentStatus({
@@ -1016,7 +1181,7 @@ jobs:
                   description: 'PR closed - preview cleaned up'
                 });
               }
-
+              
               console.log(`Cleaned up ${deployments.data.length} deployment(s) for pr-preview-${pull_number}`);
             } catch (error) {
               console.log(`Cleanup completed for pr-preview-${pull_number}`);
@@ -1025,5 +1190,5 @@ jobs:
 
       - name: Log cleanup action
         run: |
-          echo "🧹 PR #${{ github.event.pull_request.number }} closed - preview artifacts will expire automatically"
-          echo "Environment: pr-preview-${{ github.event.pull_request.number }}"
+          echo "🧹 PR #${{ github.event.pull_request.number }} closed - preview cleaned up"
+          echo "Removed from GitHub Pages: pr-${{ github.event.pull_request.number }} directory"
