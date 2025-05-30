@@ -678,7 +678,9 @@ jobs:
               execSync(`cp -r docs-preview/* site/versions/${version}/`);
             }
             
-            // Clean up closed PR previews
+            // ISSUE #73: Clean up closed PR previews when deploying from main branch
+            // This ensures that PR previews are removed not only when PRs are closed
+            // but also during subsequent deployments from main
             try {
               // List all directories in the site folder
               const siteDirs = fs.readdirSync('site');
@@ -1069,6 +1071,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ISSUE #73: Download and preserve the current GitHub Pages site
+      # so we can remove just the closed PR's preview while keeping all other content
       - name: Download current GitHub Pages site (if exists)
         run: |
           echo "📥 Downloading current GitHub Pages site (if it exists)..."
@@ -1126,11 +1130,13 @@ jobs:
             echo "No existing GitHub Pages site found, creating new one"
           fi
 
+      # ISSUE #73: Remove the closed PR's preview directory from GitHub Pages
       - name: Remove PR preview directory
         run: |
           echo "🗑️ Removing PR preview directory for PR #${{ github.event.pull_request.number }}"
           rm -rf "site/pr-${{ github.event.pull_request.number }}"
 
+      # ISSUE #73: Update the index page to remove references to the closed PR
       - name: Update main index to remove closed PR
         run: |
           # Only regenerate index if it exists
