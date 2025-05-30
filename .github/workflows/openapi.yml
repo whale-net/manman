@@ -152,11 +152,11 @@ jobs:
       - name: Install OpenAPI validation tools
         run: |
           echo "📦 Installing validation tools..."
-          
+
           # Retry npm installs in case of network issues
           for attempt in 1 2 3; do
             echo "Attempt $attempt/3 for npm package installation..."
-            
+
             if npm install -g @redocly/openapi-cli; then
               echo "✅ Validation tools installed successfully"
               break
@@ -222,7 +222,7 @@ jobs:
           for spec_file in openapi-specs/*.json; do
             api_name=$(basename "$spec_file" .json)
             echo "🔄 Generating docs for $api_name..."
-            
+
             # Use redoc-cli despite deprecation warning since it works reliably
             if redoc-cli build "$spec_file" --output "docs-preview/${api_name}.html"; then
               echo "✅ Documentation generated for $api_name"
@@ -273,19 +273,19 @@ jobs:
       - name: Download current GitHub Pages site (if exists)
         run: |
           echo "📥 Downloading current GitHub Pages site (if it exists)..."
-          
+
           # Create directory for site
           mkdir -p site
-          
+
           # Try to download the current site (will fail silently if not exists)
           gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
-          
+
           echo "Attempting to download from: $gh_pages_url"
-          
+
           if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
             echo "GitHub Pages site exists, downloading..."
             curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
-            
+
             # If main docs exist, try to download them too
             if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
               echo "Main docs exist, preserving them..."
@@ -312,7 +312,7 @@ jobs:
 
           # Copy documentation to PR-specific directory
           cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
-          
+
           echo "📁 Created PR preview at site/pr-${{ github.event.pull_request.number }}/"
           ls -la site/pr-${{ github.event.pull_request.number }}/
 
@@ -410,7 +410,7 @@ jobs:
           </head>
           <body>
               <a href="../" class="back-link">← Back to Documentation Hub</a>
-              
+
               <div class="pr-banner">
                   <h2>🔍 Pull Request Preview</h2>
                   <p>This is a preview of the API documentation for PR #${{ github.event.pull_request.number }}</p>
@@ -581,13 +581,13 @@ jobs:
 
             ### Available APIs in this preview:
             - [Experience API](${prPreviewUrl}experience-api.html) - Game server management and user-facing functionality
-            - [Status API](${prPreviewUrl}status-api.html) - Status and monitoring functionality  
+            - [Status API](${prPreviewUrl}status-api.html) - Status and monitoring functionality
             - [Worker DAL API](${prPreviewUrl}worker-dal-api.html) - Data access endpoints for worker services
 
             **Environment:** \`github-pages\`
 
             *This preview is automatically updated with each commit to this PR and will be available as long as the PR is open.*
-            
+
             <!-- openapi-preview-comment:${pull_number} -->`;
 
             try {
@@ -997,7 +997,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
-            
+
             try {
               // List all deployments for the PR environment
               const deployments = await github.rest.repos.listDeployments({
@@ -1005,7 +1005,7 @@ jobs:
                 repo,
                 environment: `pr-preview-${pull_number}`
               });
-              
+
               // Mark all deployments as inactive
               for (const deployment of deployments.data) {
                 await github.rest.repos.createDeploymentStatus({
@@ -1016,7 +1016,7 @@ jobs:
                   description: 'PR closed - preview cleaned up'
                 });
               }
-              
+
               console.log(`Cleaned up ${deployments.data.length} deployment(s) for pr-preview-${pull_number}`);
             } catch (error) {
               console.log(`Cleanup completed for pr-preview-${pull_number}`);
