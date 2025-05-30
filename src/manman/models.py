@@ -280,3 +280,32 @@ class StatusInfo(ManManBase, table=True):
             worker_id=worker_id,
             game_server_instance_id=game_server_instance_id,
         )
+
+
+# todo make this useful
+# this is ust dummy for now
+class CustomCommandBase(ManManBase):
+    name: str = Field()
+    description: Optional[str] = Field(default=None)
+
+    # This is a JSON field, but SQLModel does not support it directly
+    # so we use a string and handle serialization/deserialization manually
+    command_data: str = Field(sa_column=Column(String, nullable=False))
+
+    __table_args__ = (Index("ixu_custom_commands_name", "name", unique=True),)
+
+
+class CustomCommand(CustomCommandBase, table=True):
+    """
+    CustomCommand is a table that stores custom commands that can be executed
+    on game server instances. The command_data field is a JSON string that
+    contains the command data.
+    """
+
+    __tablename__ = "custom_commands"
+
+    custom_command_id: int = Field(primary_key=True)
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Here you could add any additional initialization logic if needed
