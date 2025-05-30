@@ -256,7 +256,10 @@ class Server:
             raise
 
         status = self._proc.status
-        while status not in (ProcessBuilderStatus.STOPPED, ProcessBuilderStatus.FAILED) and not self.__is_stopped:
+        while (
+            status not in (ProcessBuilderStatus.STOPPED, ProcessBuilderStatus.FAILED)
+            and not self.__is_stopped
+        ):
             # TODO - make this available through property or something
             self._proc.read_output()
             commands = self._command_message_provider.get_commands()

@@ -50,7 +50,7 @@ class ProcessBuilder:
     def exit_code(self) -> int | None:
         """
         Get the exit code of the process if it has exited.
-        
+
         :return: Exit code if process has exited, None if still running or not started
         """
         if self._process_start_time is None:
