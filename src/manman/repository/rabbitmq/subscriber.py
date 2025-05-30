@@ -15,6 +15,7 @@ from amqpstorm import Connection, Message
 from manman.models import Command, StatusInfo
 
 from .base import MessageSubscriber, StatusMessage
+from .util import bind_queue_to_exchanges, declare_queue, generate_name_from_exchanges
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +47,12 @@ class RabbitCommandSubscriber(MessageSubscriber):
         self._exchange = exchange
         self._channel = connection.channel()
 
-        # Declare queue
-        result = self._channel.queue.declare(
-            queue=self._queue_name or "",
-            # exclusive=True,
-            auto_delete=True,
+        # Declare queue using helper function
+        self._queue_name = declare_queue(
+            self._channel,
+            queue_name=self._queue_name,
+            auto_delete=True
         )
-        if not result:
-            logger.error("Unable to declare queue with name %s", self._queue_name)
-            raise RuntimeError("Failed to create queue")
-
-        self._queue_name = result["queue"]
-        logger.info("Queue declared %s", self._queue_name)
 
         # Bind the queue to the exchange
         self._channel.queue.bind(
@@ -185,40 +180,19 @@ class RabbitStatusSubscriber:
         else:
             raise ValueError("Either 'exchange' or 'exchanges_config' must be provided")
 
-        # Declare queue
-        result = self._channel.queue.declare(
-            queue=self._queue_name or "",
-            auto_delete=False,
+        # Declare queue using helper function
+        self._queue_name = declare_queue(
+            self._channel,
+            queue_name=self._queue_name,
+            auto_delete=False
         )
-        if not result:
-            logger.error("Unable to declare queue with name %s", self._queue_name)
-            raise RuntimeError("Failed to create queue")
 
-        self._queue_name = result["queue"]
-        logger.info("Status queue declared %s", self._queue_name)
+        # Bind the queue to all configured exchanges using helper function
+        bind_queue_to_exchanges(self._channel, self._queue_name, self._exchanges_config)
 
-        # Bind the queue to all configured exchanges with their routing keys
-        for exchange_name, routing_keys in self._exchanges_config.items():
-            # Ensure routing_keys is always a list
-            if isinstance(routing_keys, str):
-                routing_keys = [routing_keys]
-
-            for routing_key in routing_keys:
-                self._channel.queue.bind(
-                    exchange=exchange_name,
-                    queue=self._queue_name,
-                    routing_key=routing_key,
-                )
-                logger.info(
-                    "Queue %s bound to exchange %s with routing key '%s'",
-                    self._queue_name,
-                    exchange_name,
-                    routing_key,
-                )
-
-        # Generate a descriptive name based on all exchanges
-        exchange_names = "-".join(self._exchanges_config.keys())
-        self._name = f"rmq-status-{exchange_names}-{self._queue_name}"
+        # Generate a descriptive name based on all exchanges using helper function
+        exchange_names = generate_name_from_exchanges(self._exchanges_config, "rmq-status")
+        self._name = f"{exchange_names}-{self._queue_name}"
         self._status_queue = queue.Queue()
         self._consumer_tag = None
 

@@ -13,7 +13,7 @@ from amqpstorm import Connection
 from manman.models import StatusInfo
 
 from .base import MessagePublisher
-from .util import add_routing_key_suffix
+from .util import add_routing_key_suffix, declare_exchange, generate_name_from_exchanges
 
 logger = logging.getLogger(__name__)
 
@@ -58,28 +58,12 @@ class RabbitStatusPublisher(MessagePublisher):
                 "Either 'exchange' and 'routing_key_base' or 'exchanges_config' must be provided"
             )
 
-        # Declare all exchanges and normalize routing keys to lists
-        normalized_config = {}
-        for exchange_name, routing_keys in self._exchanges_config.items():
-            # Declare the exchange
-            self._channel.exchange.declare(
-                exchange=exchange_name,
-                exchange_type="topic",
-                durable=True,
-                auto_delete=False,
-            )
+        # Declare all exchanges using helper function
+        for exchange_name in self._exchanges_config.keys():
+            declare_exchange(self._channel, exchange_name)
 
-            # Ensure routing_keys is always a list
-            if isinstance(routing_keys, str):
-                routing_keys = [routing_keys]
-            normalized_config[exchange_name] = routing_keys
-
-            logger.info("Exchange declared: %s", exchange_name)
-
-        self._exchanges_config = normalized_config
-
-        # Generate a descriptive name based on all exchanges
-        exchange_names = "-".join(self._exchanges_config.keys())
+        # Generate a descriptive name based on all exchanges using helper function
+        exchange_names = generate_name_from_exchanges(self._exchanges_config)
         logger.info(
             "Rabbit message publisher created for exchanges: %s", exchange_names
         )
@@ -115,6 +99,10 @@ class RabbitStatusPublisher(MessagePublisher):
 
         # Publish to all configured exchanges with their routing keys
         for exchange_name, routing_keys in self._exchanges_config.items():
+            # Ensure routing_keys is always a list for iteration
+            if isinstance(routing_keys, str):
+                routing_keys = [routing_keys]
+            
             for routing_key in routing_keys:
                 final_routing_key = add_routing_key_suffix(
                     routing_key, routing_key_suffix
