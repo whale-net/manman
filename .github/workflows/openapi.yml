@@ -1163,8 +1163,8 @@ jobs:
       id-token: write
 
     concurrency:
-      group: "openapi-deployment"
-      cancel-in-progress: false
+      group: "openapi-pr-cleanup-${{ github.event.pull_request.number }}"
+      cancel-in-progress: true
 
     environment:
       name: github-pages
@@ -1243,17 +1243,159 @@ jobs:
 
       # ISSUE #73: Update the index page to remove references to the closed PR
       - name: Update main index to remove closed PR
-        run: |
-          # Only regenerate index if it exists
-          if [ -f "site/index.html" ]; then
-            echo "Updating main index to remove closed PR reference..."
-            # A more robust approach would be to use a templating system or parse the HTML
-            # This simple grep/sed approach might work for simple cases
-            cat site/index.html | grep -v "PR #${{ github.event.pull_request.number }}" > site/index.html.tmp
-            mv site/index.html.tmp site/index.html
-          else
-            echo "No index.html exists yet, skipping index update"
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            console.log('🔍 Regenerating index after PR cleanup...');
+            
+            // Scan the site directory for remaining PR preview folders
+            let siteDirs = [];
+            if (fs.existsSync('site')) {
+              siteDirs = fs.readdirSync('site');
+            }
+            const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
+            
+            console.log(`Found ${prDirs.length} remaining PR preview directories: ${prDirs.join(', ')}`);
+            
+            // Sort PR directories by number (newest first)
+            prDirs.sort((a, b) => {
+              const numA = parseInt(a.replace('pr-', ''));
+              const numB = parseInt(b.replace('pr-', ''));
+              return numB - numA;
+            });
+            
+            // Generate PR preview cards HTML
+            let prCardsHtml = '';
+            if (prDirs.length > 0) {
+              for (const prDir of prDirs) {
+                const prNumber = prDir.replace('pr-', '');
+                
+                prCardsHtml += `
+                    <div class="preview-card pr-preview">
+                        <h2 class="preview-title">🔍 PR #${prNumber} Preview</h2>
+                        <p><strong>Loading...</strong></p>
+                        <p>Preview of API changes in pull request #${prNumber}</p>
+                        <a href="${prDir}/" class="preview-link">View PR Preview</a>
+                    </div>`;
+              }
+            } else {
+              prCardsHtml = '<div class="empty-state">No active PR previews</div>';
+            }
+            
+            // Generate the complete index.html
+            const indexHtml = `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>ManMan API Documentation Hub</title>
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        max-width: 900px;
+                        margin: 0 auto;
+                        padding: 2rem;
+                        background: #f8fafc;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 3rem;
+                        padding-bottom: 2rem;
+                        border-bottom: 2px solid #e2e8f0;
+                    }
+                    .section {
+                        margin-bottom: 3rem;
+                    }
+                    .section-title {
+                        font-size: 1.5rem;
+                        font-weight: 600;
+                        margin-bottom: 1rem;
+                        color: #1e293b;
+                    }
+                    .preview-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                        gap: 2rem;
+                        margin-top: 2rem;
+                    }
+                    .preview-card {
+                        background: white;
+                        border-radius: 12px;
+                        padding: 2rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        border: 1px solid #e2e8f0;
+                    }
+                    .main-docs {
+                        border-left: 4px solid #10b981;
+                    }
+                    .pr-preview {
+                        border-left: 4px solid #f59e0b;
+                    }
+                    .preview-title {
+                        font-size: 1.25rem;
+                        font-weight: 600;
+                        margin-bottom: 1rem;
+                        color: #1e293b;
+                    }
+                    .preview-link {
+                        display: inline-block;
+                        background: #3b82f6;
+                        color: white;
+                        padding: 0.5rem 1rem;
+                        border-radius: 6px;
+                        text-decoration: none;
+                        font-weight: 500;
+                        margin-top: 1rem;
+                    }
+                    .main-docs .preview-link {
+                        background: #10b981;
+                    }
+                    .pr-preview .preview-link {
+                        background: #f59e0b;
+                    }
+                    .empty-state {
+                        text-align: center;
+                        color: #64748b;
+                        font-style: italic;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>ManMan API Documentation Hub</h1>
+                    <p>Access the latest API documentation and PR previews</p>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">🚀 Latest Release Documentation</h2>
+                    <div class="preview-grid">
+                        <div class="preview-card main-docs">
+                            <h2 class="preview-title">Latest Release Documentation</h2>
+                            <p>Official API documentation from the latest stable release</p>
+                            <a href="main/" class="preview-link">View Main Documentation</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">🔍 PR Previews (${prDirs.length})</h2>
+                    <div class="preview-grid">
+                        ${prCardsHtml}
+                    </div>
+                </div>
+
+                <div style="margin-top: 3rem; padding: 1rem; background: #f1f5f9; border-radius: 8px; font-size: 0.875rem; color: #475569;">
+                    <strong>Last updated:</strong> ${new Date().toISOString()}<br>
+                    <strong>Generated by:</strong> OpenAPI Documentation Workflow (cleanup)
+                </div>
+            </body>
+            </html>`;
+            
+            // Write the index.html file
+            fs.writeFileSync('site/index.html', indexHtml);
+            console.log(`✅ Regenerated index.html after cleanup, showing ${prDirs.length} remaining PR previews`);
 
       - name: Upload site to GitHub Pages
         uses: actions/upload-pages-artifact@v3
