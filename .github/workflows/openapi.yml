@@ -242,7 +242,7 @@ jobs:
           path: docs-preview/
           retention-days: 30
 
-  # Deploy PR documentation preview (using artifacts only - no Pages deployment)
+  # Deploy PR documentation preview with GitHub Pages
   deploy-pr-preview:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -252,6 +252,8 @@ jobs:
       contents: read
       pull-requests: write
       deployments: write
+      pages: write
+      id-token: write
 
     # Use unified concurrency group to prevent deployment conflicts
     concurrency:
@@ -259,14 +261,43 @@ jobs:
       cancel-in-progress: false
 
     environment:
-      name: pr-preview-${{ github.event.pull_request.number }}
-      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Download current GitHub Pages site (if exists)
+        run: |
+          echo "📥 Downloading current GitHub Pages site (if it exists)..."
+          
+          # Create directory for site
+          mkdir -p site
+          
+          # Try to download the current site (will fail silently if not exists)
+          gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
+          
+          echo "Attempting to download from: $gh_pages_url"
+          
+          if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
+            echo "GitHub Pages site exists, downloading..."
+            curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
+            
+            # If main docs exist, try to download them too
+            if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
+              echo "Main docs exist, preserving them..."
+              mkdir -p site/main
+              curl -sSL "$gh_pages_url/main/index.html" -o site/main/index.html || true
+              curl -sSL "$gh_pages_url/main/experience-api.html" -o site/main/experience-api.html || true
+              curl -sSL "$gh_pages_url/main/status-api.html" -o site/main/status-api.html || true
+              curl -sSL "$gh_pages_url/main/worker-dal-api.html" -o site/main/worker-dal-api.html || true
+            fi
+          else
+            echo "No existing GitHub Pages site found, creating new one"
+          fi
 
       - name: Download OpenAPI documentation artifacts
         uses: actions/download-artifact@v4
@@ -276,17 +307,18 @@ jobs:
 
       - name: Create PR preview directory structure
         run: |
-          mkdir -p site
+          # Create PR-specific directory
+          mkdir -p site/pr-${{ github.event.pull_request.number }}
 
-          # Copy documentation directly to site root
-          cp -r docs-preview/* site/
+          # Copy documentation to PR-specific directory
+          cp -r docs-preview/* site/pr-${{ github.event.pull_request.number }}/
           
-          echo "📁 Created PR preview in site root"
-          ls -la site/
+          echo "📁 Created PR preview at site/pr-${{ github.event.pull_request.number }}/"
+          ls -la site/pr-${{ github.event.pull_request.number }}/
 
       - name: Create PR-specific index page
         run: |
-          cat > site/index.html << 'EOF'
+          cat > site/pr-${{ github.event.pull_request.number }}/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -365,35 +397,20 @@ jobs:
                       font-size: 0.875rem;
                       color: #475569;
                   }
-                  .download-section {
-                      background: #fef3c7;
-                      border: 1px solid #f59e0b;
-                      border-radius: 8px;
-                      padding: 1.5rem;
-                      margin-top: 2rem;
-                  }
-                  .download-title {
-                      font-weight: 600;
-                      color: #92400e;
-                      margin-bottom: 1rem;
-                  }
-                  .download-link {
+                  .back-link {
                       display: inline-block;
-                      background: #f59e0b;
-                      color: white;
-                      padding: 0.5rem 1rem;
-                      border-radius: 6px;
+                      margin-bottom: 1rem;
+                      color: #6b7280;
                       text-decoration: none;
-                      font-weight: 500;
-                      margin-right: 0.5rem;
-                      margin-bottom: 0.5rem;
                   }
-                  .download-link:hover {
-                      background: #d97706;
+                  .back-link:hover {
+                      color: #374151;
                   }
               </style>
           </head>
           <body>
+              <a href="../" class="back-link">← Back to Documentation Hub</a>
+              
               <div class="pr-banner">
                   <h2>🔍 Pull Request Preview</h2>
                   <p>This is a preview of the API documentation for PR #${{ github.event.pull_request.number }}</p>
@@ -425,12 +442,6 @@ jobs:
                   </div>
               </div>
 
-              <div class="download-section">
-                  <h3 class="download-title">📥 Download OpenAPI Specifications</h3>
-                  <p>Download the raw OpenAPI JSON files for this PR:</p>
-                  <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" class="download-link">View All Artifacts</a>
-              </div>
-
               <div class="build-info">
                   <strong>PR Information:</strong><br>
                   PR: <code>#${{ github.event.pull_request.number }}</code><br>
@@ -443,44 +454,115 @@ jobs:
           </html>
           EOF
 
-      - name: Upload PR preview as artifact
+      - name: Update main index with PR links
+        run: |
+          # Create a master index that lists all available previews
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>ManMan API Documentation Hub</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 900px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: #f8fafc;
+                  }
+                  .header {
+                      text-align: center;
+                      margin-bottom: 3rem;
+                      padding-bottom: 2rem;
+                      border-bottom: 2px solid #e2e8f0;
+                  }
+                  .preview-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                      gap: 2rem;
+                      margin-top: 2rem;
+                  }
+                  .preview-card {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 2rem;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                      border: 1px solid #e2e8f0;
+                  }
+                  .main-docs {
+                      border-left: 4px solid #10b981;
+                  }
+                  .pr-preview {
+                      border-left: 4px solid #f59e0b;
+                  }
+                  .preview-title {
+                      font-size: 1.25rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e293b;
+                  }
+                  .preview-link {
+                      display: inline-block;
+                      background: #3b82f6;
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 6px;
+                      text-decoration: none;
+                      font-weight: 500;
+                      margin-top: 1rem;
+                  }
+                  .main-docs .preview-link {
+                      background: #10b981;
+                  }
+                  .pr-preview .preview-link {
+                      background: #f59e0b;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>ManMan API Documentation Hub</h1>
+                  <p>Access the latest API documentation and PR previews</p>
+              </div>
+
+              <div class="preview-grid">
+                  <div class="preview-card main-docs">
+                      <h2 class="preview-title">🚀 Latest Release Documentation</h2>
+                      <p>Official API documentation from the latest release</p>
+                      <a href="main/" class="preview-link">View Main Documentation</a>
+                  </div>
+
+                  <div class="preview-card pr-preview">
+                      <h2 class="preview-title">🔍 PR #${{ github.event.pull_request.number }} Preview</h2>
+                      <p><strong>${{ github.event.pull_request.title }}</strong></p>
+                      <p>Preview of API changes in this pull request</p>
+                      <a href="pr-${{ github.event.pull_request.number }}/" class="preview-link">View PR Preview</a>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload artifact for backup
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ github.event.pull_request.number }}-preview-site
           path: site/
           retention-days: 30
 
-      - name: Create deployment record
-        uses: actions/github-script@v7
-        id: create_deployment
+      - name: Setup Pages for deployment
+        uses: actions/configure-pages@v4
+
+      - name: Upload site to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          script: |
-            const { owner, repo } = context.repo;
-            const pull_number = context.payload.pull_request.number;
-            const run_id = context.runId;
-            const artifactUrl = `https://github.com/${owner}/${repo}/actions/runs/${run_id}`;
-            
-            // Create a deployment status to track this preview
-            const deployment = await github.rest.repos.createDeployment({
-              owner,
-              repo,
-              ref: context.sha,
-              environment: `pr-preview-${pull_number}`,
-              description: `PR #${pull_number} API documentation preview`,
-              auto_merge: false,
-              required_contexts: []
-            });
-            
-            await github.rest.repos.createDeploymentStatus({
-              owner,
-              repo,
-              deployment_id: deployment.data.id,
-              state: 'success',
-              target_url: artifactUrl,
-              description: 'PR preview available as artifact'
-            });
-            
-            return artifactUrl;
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
       - name: Comment on PR with preview link
         uses: actions/github-script@v7
@@ -488,29 +570,23 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
-            const run_id = context.runId;
-            const artifactUrl = `https://github.com/${owner}/${repo}/actions/runs/${run_id}`;
+            const pageUrl = '${{ steps.deployment.outputs.page_url }}';
+            const prPreviewUrl = `${pageUrl}pr-${pull_number}/`;
 
             const body = `## 📚 API Documentation Preview
 
-            The OpenAPI documentation preview has been generated for this PR and is available as a downloadable artifact.
+            The OpenAPI documentation preview has been deployed for this PR.
 
-            **🔍 PR Documentation Preview:** [Download from Artifacts](${artifactUrl})
-
-            ### How to view the preview:
-            1. Click the link above to go to the workflow run
-            2. Scroll down to the "Artifacts" section  
-            3. Download the \`pr-${pull_number}-preview-site\` artifact
-            4. Extract the ZIP file and open \`index.html\` in your browser
+            **🔍 PR Documentation:** [View Documentation](${prPreviewUrl})
 
             ### Available APIs in this preview:
-            - **Experience API** - Game server management and user-facing functionality
-            - **Status API** - Status and monitoring functionality  
-            - **Worker DAL API** - Data access endpoints for worker services
+            - [Experience API](${prPreviewUrl}experience-api.html) - Game server management and user-facing functionality
+            - [Status API](${prPreviewUrl}status-api.html) - Status and monitoring functionality  
+            - [Worker DAL API](${prPreviewUrl}worker-dal-api.html) - Data access endpoints for worker services
 
-            **Environment:** \`pr-preview-${pull_number}\`
+            **Environment:** \`github-pages\`
 
-            *This preview is automatically updated with each commit to this PR and will be cleaned up when the PR is closed.*
+            *This preview is automatically updated with each commit to this PR and will be available as long as the PR is open.*
             
             <!-- openapi-preview-comment:${pull_number} -->`;
 
