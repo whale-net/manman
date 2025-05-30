@@ -39,11 +39,13 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      - name: Install the project with pip
+      - name: Install UV and project dependencies
         run: |
-          echo "📦 Installing project dependencies..."
+          echo "📦 Installing UV package manager..."
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install uv
+          echo "📦 Installing project dependencies with UV..."
+          uv sync --dev
 
       - name: Create OpenAPI specs directory
         run: mkdir -p openapi-specs
@@ -51,19 +53,19 @@ jobs:
       - name: Generate OpenAPI spec for Experience API
         run: |
           echo "🔄 Generating Experience API specification..."
-          openapi experience-api
+          uv run openapi experience-api
           echo "✅ Experience API specification generated"
 
       - name: Generate OpenAPI spec for Status API
         run: |
           echo "🔄 Generating Status API specification..."
-          openapi status-api
+          uv run openapi status-api
           echo "✅ Status API specification generated"
 
       - name: Generate OpenAPI spec for Worker DAL API
         run: |
           echo "🔄 Generating Worker DAL API specification..."
-          openapi worker-dal-api
+          uv run openapi worker-dal-api
           echo "✅ Worker DAL API specification generated"
 
       - name: List generated files
