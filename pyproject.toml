@@ -36,8 +36,6 @@ build-backend = "hatchling.build"
 host = "manman.host.main:app"
 worker = "manman.worker.main:app"
 openapi = "manman.host.openapi:app"
-mock-worker = "manman.mock.main:app"
-mock-server = "manman.mock.main:app"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
