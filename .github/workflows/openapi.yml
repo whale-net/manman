@@ -666,42 +666,42 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             const { execSync } = require('child_process');
-            
+
             // Create basic site structure
             fs.mkdirSync('site/main', { recursive: true });
             execSync('cp -r docs-preview/* site/main/');
-            
+
             // If this is a tag, also create a versioned copy
             if (context.ref.startsWith('refs/tags/v')) {
               const version = context.ref.replace('refs/tags/', '');
               fs.mkdirSync(`site/versions/${version}`, { recursive: true });
               execSync(`cp -r docs-preview/* site/versions/${version}/`);
             }
-            
+
             // ISSUE #73: Clean up closed PR previews when deploying from main branch
             // This ensures that PR previews are removed not only when PRs are closed
             // but also during subsequent deployments from main
             try {
               // List all directories in the site folder
               const siteDirs = fs.readdirSync('site');
-              
+
               // Find PR preview directories (format: pr-NUMBER)
               const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
-              
+
               if (prDirs.length > 0) {
                 console.log(`Found ${prDirs.length} PR preview directories to check`);
-                
+
                 for (const prDir of prDirs) {
                   // Extract PR number from directory name (pr-123 -> 123)
                   const prNumber = parseInt(prDir.replace('pr-', ''), 10);
-                  
+
                   if (isNaN(prNumber)) {
                     console.log(`Invalid PR directory format: ${prDir}, skipping`);
                     continue;
                   }
-                  
+
                   console.log(`Checking status of PR #${prNumber}`);
-                  
+
                   try {
                     // Check if PR is still open using GitHub API
                     const { data: pr } = await github.rest.pulls.get({
@@ -709,7 +709,7 @@ jobs:
                       repo: context.repo.repo,
                       pull_number: prNumber
                     });
-                    
+
                     if (pr.state === 'open') {
                       console.log(`PR #${prNumber} is still open, keeping preview directory`);
                     } else {
@@ -1076,19 +1076,19 @@ jobs:
       - name: Download current GitHub Pages site (if exists)
         run: |
           echo "📥 Downloading current GitHub Pages site (if it exists)..."
-          
+
           # Create directory for site
           mkdir -p site
-          
+
           # Try to download the current site (will fail silently if not exists)
           gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
-          
+
           echo "Attempting to download from: $gh_pages_url"
-          
+
           if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
             echo "GitHub Pages site exists, downloading..."
             curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
-            
+
             # If main docs exist, preserve them
             if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
               echo "Main docs exist, preserving them..."
@@ -1098,7 +1098,7 @@ jobs:
               curl -sSL "$gh_pages_url/main/status-api.html" -o site/main/status-api.html || true
               curl -sSL "$gh_pages_url/main/worker-dal-api.html" -o site/main/worker-dal-api.html || true
             fi
-            
+
             # If version docs exist, preserve them
             if curl -sSL --head "$gh_pages_url/versions/" | grep -q "HTTP/2 200"; then
               echo "Version docs exist, preserving them..."
@@ -1106,15 +1106,15 @@ jobs:
               # This is a simplification - in real implementation you might want to download all version folders
               curl -sSL "$gh_pages_url/versions/index.html" -o site/versions/index.html || true
             fi
-            
+
             # Find and preserve other PR preview directories except the current one
             current_pr="${{ github.event.pull_request.number }}"
-            
+
             # List directories from GitHub Pages root
             echo "Looking for other PR directories to preserve..."
             for dir in $(curl -sSL "$gh_pages_url" | grep -o 'href="pr-[0-9]*/' | sed 's/href="//g' | sed 's/\/$//g'); do
               pr_num=$(echo "$dir" | sed 's/pr-//g')
-              
+
               if [ "$pr_num" != "$current_pr" ]; then
                 echo "Found other PR preview: $dir, preserving it"
                 mkdir -p "site/$dir"
@@ -1154,10 +1154,10 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
-          
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
-          
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
@@ -1168,7 +1168,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
-            
+
             try {
               // List all deployments for the PR environment
               const deployments = await github.rest.repos.listDeployments({
@@ -1176,7 +1176,7 @@ jobs:
                 repo,
                 environment: `pr-preview-${pull_number}`
               });
-              
+
               // Mark all deployments as inactive
               for (const deployment of deployments.data) {
                 await github.rest.repos.createDeploymentStatus({
@@ -1187,7 +1187,7 @@ jobs:
                   description: 'PR closed - preview cleaned up'
                 });
               }
-              
+
               console.log(`Cleaned up ${deployments.data.length} deployment(s) for pr-preview-${pull_number}`);
             } catch (error) {
               console.log(`Cleanup completed for pr-preview-${pull_number}`);
