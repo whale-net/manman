@@ -23,10 +23,19 @@ def start(
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
     ] = "./data",
+    log_otlp: Annotated[
+        bool,
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
+        ),
+    ] = False,
     # steamcmd_override: Annotated[
     #     Optional[str], typer.Option(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
     # ] = None,
 ):
+    # Setup logging first
+    setup_logging(service_name="worker", enable_otel=log_otlp)
+    
     install_directory = os.path.abspath(install_directory)
     # todo - re-add authcz
     service = WorkerService(
@@ -54,9 +63,6 @@ def callback(
         str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
     ] = None,
 ):
-    # Setup logging first
-    setup_logging(service_name="worker")
-
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
     # Initialize with AMQPStorm connection parameters
