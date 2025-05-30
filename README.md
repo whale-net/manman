@@ -167,3 +167,10 @@ With the new standalone CLI, you can generate OpenAPI specs without environment 
 uv run openapi <api-name>
 ```
 Replace `<api-name>` with one of: `experience-api`, `status-api`, or `worker-dal-api`.
+
+### Testing OpenAPI Generation
+You can test that OpenAPI generation is working correctly by running:
+```bash
+./scripts/test-openapi.sh
+```
+This will generate all API specifications and validate their basic structure.
