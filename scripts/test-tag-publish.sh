@@ -51,13 +51,13 @@ echo "🔧 Testing OpenAPI generation..."
 if command -v uv &> /dev/null; then
     echo "Installing dependencies..."
     uv sync --dev > /dev/null 2>&1
-    
+
     echo "Testing OpenAPI generation for all APIs..."
-    
+
     # Create temp directory for test outputs
     temp_dir="/tmp/test-openapi-$$"
     mkdir -p "$temp_dir"
-    
+
     for api in "experience-api" "status-api" "worker-dal-api"; do
         echo "  Testing $api..."
         if uv run openapi "$api" > /dev/null 2>&1; then
@@ -67,11 +67,11 @@ if command -v uv &> /dev/null; then
             exit 1
         fi
     done
-    
+
     # Cleanup
     rm -rf openapi-specs
     rm -rf "$temp_dir"
-    
+
     echo -e "${GREEN}✅ All OpenAPI generation tests passed${NC}"
 else
     echo -e "${YELLOW}⚠️  UV not available, skipping OpenAPI generation test${NC}"
