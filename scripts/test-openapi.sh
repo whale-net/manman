@@ -39,22 +39,22 @@ echo "🔄 Generating OpenAPI specifications..."
 
 for api in "${APIS[@]}"; do
     echo -e "\n${YELLOW}Generating $api...${NC}"
-    
+
     if uv run openapi "$api"; then
         echo -e "${GREEN}✅ $api generated successfully${NC}"
-        
+
         # Validate the generated JSON
         output_file="$OUTPUT_DIR/$api.json"
         if [ -f "$output_file" ]; then
             # Check if it's valid JSON
             if jq empty "$output_file" 2>/dev/null; then
                 echo -e "${GREEN}✅ $api JSON is valid${NC}"
-                
+
                 # Show basic info
                 title=$(jq -r '.info.title' "$output_file" 2>/dev/null || echo "Unknown")
                 version=$(jq -r '.info.version' "$output_file" 2>/dev/null || echo "Unknown")
                 paths_count=$(jq '.paths | length' "$output_file" 2>/dev/null || echo "0")
-                
+
                 echo "  📋 Title: $title"
                 echo "  🏷️  Version: $version"
                 echo "  🛣️  Paths: $paths_count"
@@ -89,18 +89,18 @@ if command -v redoc-cli &> /dev/null; then
     echo ""
     echo "🌐 Generating HTML documentation previews..."
     mkdir -p docs-preview
-    
+
     for api in "${APIS[@]}"; do
         input_file="$OUTPUT_DIR/$api.json"
         output_file="docs-preview/$api.html"
-        
+
         if redoc-cli build "$input_file" --output "$output_file" 2>/dev/null; then
             echo -e "${GREEN}✅ Generated HTML docs for $api${NC}"
         else
             echo -e "${YELLOW}⚠️  Could not generate HTML docs for $api${NC}"
         fi
     done
-    
+
     if [ -n "$(ls -A docs-preview 2>/dev/null)" ]; then
         echo "HTML documentation available in docs-preview/"
     fi

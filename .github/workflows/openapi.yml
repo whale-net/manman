@@ -301,14 +301,14 @@ jobs:
             if [ -f "site/index.html" ]; then
               # Extract PR directory names from the index.html (look for pr-NUMBER patterns)
               pr_dirs=$(grep -o 'href="pr-[0-9]*/' site/index.html | sed 's/href="//g' | sed 's/\/$//g' | sort -u)
-              
+
               for pr_dir in $pr_dirs; do
                 pr_number=$(echo "$pr_dir" | sed 's/pr-//g')
-                
+
                 # Skip the current PR to avoid conflicts
                 if [ "$pr_number" != "${{ github.event.pull_request.number }}" ]; then
                   echo "Preserving existing PR preview: $pr_dir"
-                  
+
                   if curl -sSL --head "$gh_pages_url/$pr_dir/" | grep -q "HTTP/2 200"; then
                     mkdir -p "site/$pr_dir"
                     curl -sSL "$gh_pages_url/$pr_dir/index.html" -o "site/$pr_dir/index.html" || true
@@ -493,41 +493,41 @@ jobs:
             const path = require('path');
 
             console.log('🔍 Discovering existing PR preview directories...');
-            
+
             // Scan the site directory for PR preview folders
             const siteDirs = fs.readdirSync('site');
             const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
-            
+
             console.log(`Found ${prDirs.length} PR preview directories: ${prDirs.join(', ')}`);
-            
+
             // Always include the current PR
             const currentPR = ${{ github.event.pull_request.number }};
             const currentPRDir = `pr-${currentPR}`;
             if (!prDirs.includes(currentPRDir)) {
               prDirs.push(currentPRDir);
             }
-            
+
             // Sort PR directories by number (newest first)
             prDirs.sort((a, b) => {
               const numA = parseInt(a.replace('pr-', ''));
               const numB = parseInt(b.replace('pr-', ''));
               return numB - numA;
             });
-            
+
             console.log(`Including PR directories: ${prDirs.join(', ')}`);
-            
+
             // Generate PR preview cards HTML
             let prCardsHtml = '';
             for (const prDir of prDirs) {
               const prNumber = prDir.replace('pr-', '');
-              
+
               let prTitle = 'Loading...';
               let prUrl = `${prDir}/`;
-              
+
               if (prNumber == currentPR) {
                 prTitle = `${{ github.event.pull_request.title }}`;
               }
-              
+
               prCardsHtml += `
                   <div class="preview-card pr-preview">
                       <h2 class="preview-title">🔍 PR #${prNumber} Preview</h2>
@@ -536,7 +536,7 @@ jobs:
                       <a href="${prUrl}" class="preview-link">View PR Preview</a>
                   </div>`;
             }
-            
+
             // Generate the complete index.html
             const indexHtml = `<!DOCTYPE html>
             <html lang="en">
@@ -645,7 +645,7 @@ jobs:
                 </div>
             </body>
             </html>`;
-            
+
             // Write the index.html file
             fs.writeFileSync('site/index.html', indexHtml);
             console.log('✅ Generated dynamic index.html with all PR previews');
@@ -1247,31 +1247,31 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             console.log('🔍 Regenerating index after PR cleanup...');
-            
+
             // Scan the site directory for remaining PR preview folders
             let siteDirs = [];
             if (fs.existsSync('site')) {
               siteDirs = fs.readdirSync('site');
             }
             const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
-            
+
             console.log(`Found ${prDirs.length} remaining PR preview directories: ${prDirs.join(', ')}`);
-            
+
             // Sort PR directories by number (newest first)
             prDirs.sort((a, b) => {
               const numA = parseInt(a.replace('pr-', ''));
               const numB = parseInt(b.replace('pr-', ''));
               return numB - numA;
             });
-            
+
             // Generate PR preview cards HTML
             let prCardsHtml = '';
             if (prDirs.length > 0) {
               for (const prDir of prDirs) {
                 const prNumber = prDir.replace('pr-', '');
-                
+
                 prCardsHtml += `
                     <div class="preview-card pr-preview">
                         <h2 class="preview-title">🔍 PR #${prNumber} Preview</h2>
@@ -1283,7 +1283,7 @@ jobs:
             } else {
               prCardsHtml = '<div class="empty-state">No active PR previews</div>';
             }
-            
+
             // Generate the complete index.html
             const indexHtml = `<!DOCTYPE html>
             <html lang="en">
@@ -1392,7 +1392,7 @@ jobs:
                 </div>
             </body>
             </html>`;
-            
+
             // Write the index.html file
             fs.writeFileSync('site/index.html', indexHtml);
             console.log(`✅ Regenerated index.html after cleanup, showing ${prDirs.length} remaining PR previews`);
