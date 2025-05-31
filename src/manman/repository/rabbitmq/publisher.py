@@ -13,7 +13,7 @@ from amqpstorm import Connection
 from manman.models import StatusInfo
 
 from .base import MessagePublisher
-from .util import add_routing_key_suffix, declare_exchange, generate_name_from_exchanges
+from .util import add_routing_key_suffix, declare_exchange, ExchangesConfig, generate_name_from_exchanges
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +49,18 @@ class RabbitStatusPublisher(MessagePublisher):
 
         # Handle both old single exchange and new multiple exchanges configuration
         if exchanges_config:
-            self._exchanges_config = exchanges_config
+            self._exchanges_config = ExchangesConfig.from_dict(exchanges_config)
         elif exchange and routing_key_base is not None:
             # Legacy single exchange support
-            self._exchanges_config = {exchange: routing_key_base}
+            self._exchanges_config = ExchangesConfig.from_legacy(exchange, routing_key_base)
         else:
             raise ValueError(
                 "Either 'exchange' and 'routing_key_base' or 'exchanges_config' must be provided"
             )
 
         # Declare all exchanges using helper function
-        for exchange_name in self._exchanges_config.keys():
-            declare_exchange(self._channel, exchange_name)
+        for exchange_obj in self._exchanges_config.exchanges:
+            declare_exchange(self._channel, exchange_obj.name)
 
         # Generate a descriptive name based on all exchanges using helper function
         exchange_names = generate_name_from_exchanges(self._exchanges_config)
@@ -98,23 +98,19 @@ class RabbitStatusPublisher(MessagePublisher):
         message = status.model_dump_json()
 
         # Publish to all configured exchanges with their routing keys
-        for exchange_name, routing_keys in self._exchanges_config.items():
-            # Ensure routing_keys is always a list for iteration
-            if isinstance(routing_keys, str):
-                routing_keys = [routing_keys]
-            
-            for routing_key in routing_keys:
+        for exchange_obj in self._exchanges_config.exchanges:
+            for routing_key in exchange_obj.routing_keys:
                 final_routing_key = add_routing_key_suffix(
                     routing_key, routing_key_suffix
                 )
                 self._channel.basic.publish(
                     body=message,
-                    exchange=exchange_name,
+                    exchange=exchange_obj.name,
                     routing_key=final_routing_key,
                 )
                 logger.debug(
                     "Message published to exchange %s with routing_key %s",
-                    exchange_name,
+                    exchange_obj.name,
                     final_routing_key,
                 )
 

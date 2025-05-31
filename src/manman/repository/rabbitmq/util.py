@@ -1,7 +1,74 @@
 import logging
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExchangeConfig:
+    """Configuration for a single exchange and its routing keys."""
+    name: str
+    routing_keys: List[str]
+    
+    def __init__(self, name: str, routing_keys: Union[str, List[str]]):
+        """
+        Initialize ExchangeConfig with automatic string-to-list conversion.
+        
+        :param name: Exchange name
+        :param routing_keys: Either a single routing key string or list of routing keys
+        """
+        self.name = name
+        if isinstance(routing_keys, str):
+            self.routing_keys = [routing_keys]
+        else:
+            self.routing_keys = list(routing_keys)  # Create a copy
+
+
+@dataclass  
+class ExchangesConfig:
+    """Collection of exchange configurations."""
+    exchanges: List[ExchangeConfig]
+    
+    def __init__(self, exchanges: List[ExchangeConfig]):
+        """Initialize with a list of ExchangeConfig objects."""
+        self.exchanges = exchanges
+    
+    @classmethod
+    def from_legacy(cls, exchange: str, routing_key: str) -> 'ExchangesConfig':
+        """
+        Create from legacy single exchange format.
+        
+        :param exchange: Single exchange name
+        :param routing_key: Single routing key
+        :return: ExchangesConfig instance
+        """
+        return cls([ExchangeConfig(exchange, routing_key)])
+    
+    @classmethod
+    def from_dict(cls, exchanges_config: Dict[str, Union[str, List[str]]]) -> 'ExchangesConfig':
+        """
+        Create from dictionary format.
+        
+        :param exchanges_config: Dictionary mapping exchange names to routing keys
+        :return: ExchangesConfig instance
+        """
+        exchanges = []
+        for name, routing_keys in exchanges_config.items():
+            exchanges.append(ExchangeConfig(name, routing_keys))
+        return cls(exchanges)
+    
+    def to_dict(self) -> Dict[str, List[str]]:
+        """
+        Convert to dictionary format for compatibility.
+        
+        :return: Dictionary mapping exchange names to routing key lists
+        """
+        return {exchange.name: exchange.routing_keys for exchange in self.exchanges}
+    
+    def get_exchange_names(self) -> List[str]:
+        """Get list of all exchange names."""
+        return [exchange.name for exchange in self.exchanges]
 
 
 def add_routing_key_prefix(routing_key: str, prefix: Optional[str]) -> str:
@@ -86,75 +153,72 @@ def declare_queue(channel, queue_name: Optional[str] = None,
 
 def normalize_exchanges_config(exchange: Optional[str] = None, 
                               routing_key_base: Optional[str] = None,
-                              exchanges_config: Optional[Dict[str, Union[str, List[str]]]] = None) -> Dict[str, List[str]]:
+                              exchanges_config: Optional[Dict[str, Union[str, List[str]]]] = None) -> ExchangesConfig:
     """
-    Normalize exchange configuration to a standard format.
+    Normalize exchange configuration to a standard ExchangesConfig format.
     
     Converts both legacy single exchange format and new multiple exchanges format 
-    to a dictionary mapping exchange names to lists of routing keys.
+    to an ExchangesConfig object.
     
     :param exchange: Single exchange name (legacy parameter).
     :param routing_key_base: Single routing key (legacy parameter).
     :param exchanges_config: Dictionary mapping exchanges to routing keys.
-    :return: Normalized configuration with routing keys as lists.
+    :return: Normalized ExchangesConfig object.
     """
     if exchanges_config:
-        config = exchanges_config
+        return ExchangesConfig.from_dict(exchanges_config)
     elif exchange and routing_key_base is not None:
         # Legacy single exchange support
-        config = {exchange: routing_key_base}
+        return ExchangesConfig.from_legacy(exchange, routing_key_base)
     else:
         raise ValueError(
             "Either 'exchange' and 'routing_key_base' or 'exchanges_config' must be provided"
         )
-    
-    # Normalize routing keys to lists
-    normalized_config = {}
-    for exchange_name, routing_keys in config.items():
-        if isinstance(routing_keys, str):
-            routing_keys = [routing_keys]
-        normalized_config[exchange_name] = routing_keys
-    
-    return normalized_config
 
 
-def generate_name_from_exchanges(exchanges_config: Dict[str, Union[str, List[str]]], prefix: str = "") -> str:
+def generate_name_from_exchanges(exchanges_config: Union[ExchangesConfig, Dict[str, Union[str, List[str]]]], prefix: str = "") -> str:
     """
     Generate a descriptive name based on exchange names.
     
-    :param exchanges_config: Dictionary mapping exchange names to routing keys.
+    :param exchanges_config: ExchangesConfig object or dictionary mapping exchange names to routing keys.
     :param prefix: Optional prefix for the generated name.
     :return: Generated name string.
     """
-    exchange_names = "-".join(exchanges_config.keys())
+    if isinstance(exchanges_config, ExchangesConfig):
+        exchange_names = "-".join(exchanges_config.get_exchange_names())
+    else:
+        exchange_names = "-".join(exchanges_config.keys())
+    
     if prefix:
         return f"{prefix}-{exchange_names}"
     return exchange_names
 
 
 def bind_queue_to_exchanges(channel, queue_name: str, 
-                           exchanges_config: Dict[str, Union[str, List[str]]]) -> None:
+                           exchanges_config: Union[ExchangesConfig, Dict[str, Union[str, List[str]]]]) -> None:
     """
     Bind a queue to multiple exchanges with their routing keys.
     
     :param channel: The AMQP channel to use for binding.
     :param queue_name: Name of the queue to bind.
-    :param exchanges_config: Dictionary mapping exchange names to routing key(s).
+    :param exchanges_config: ExchangesConfig object or dictionary mapping exchange names to routing key(s).
     """
-    for exchange_name, routing_keys in exchanges_config.items():
-        # Ensure routing_keys is always a list for iteration
-        if isinstance(routing_keys, str):
-            routing_keys = [routing_keys]
-
-        for routing_key in routing_keys:
+    if isinstance(exchanges_config, ExchangesConfig):
+        exchanges = exchanges_config.exchanges
+    else:
+        # Convert dict to ExchangesConfig for uniform processing
+        exchanges = ExchangesConfig.from_dict(exchanges_config).exchanges
+    
+    for exchange in exchanges:
+        for routing_key in exchange.routing_keys:
             channel.queue.bind(
-                exchange=exchange_name,
+                exchange=exchange.name,
                 queue=queue_name,
                 routing_key=routing_key,
             )
             logger.info(
                 "Queue %s bound to exchange %s with routing key '%s'",
                 queue_name,
-                exchange_name,
+                exchange.name,
                 routing_key,
             )

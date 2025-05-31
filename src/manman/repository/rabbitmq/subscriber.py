@@ -15,7 +15,7 @@ from amqpstorm import Connection, Message
 from manman.models import Command, StatusInfo
 
 from .base import MessageSubscriber, StatusMessage
-from .util import bind_queue_to_exchanges, declare_queue, generate_name_from_exchanges
+from .util import bind_queue_to_exchanges, declare_queue, ExchangesConfig, generate_name_from_exchanges
 
 logger = logging.getLogger(__name__)
 
@@ -173,10 +173,10 @@ class RabbitStatusSubscriber:
 
         # Handle both old single exchange and new multiple exchanges configuration
         if exchanges_config:
-            self._exchanges_config = exchanges_config
+            self._exchanges_config = ExchangesConfig.from_dict(exchanges_config)
         elif exchange:
             # Legacy single exchange support
-            self._exchanges_config = {exchange: routing_key}
+            self._exchanges_config = ExchangesConfig.from_legacy(exchange, routing_key)
         else:
             raise ValueError("Either 'exchange' or 'exchanges_config' must be provided")
 
