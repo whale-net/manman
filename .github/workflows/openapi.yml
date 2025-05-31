@@ -744,9 +744,10 @@ jobs:
       pages: write
       id-token: write
 
+    # Use different concurrency groups for main branch vs tag deployments to prevent conflicts
     concurrency:
-      group: "openapi-deployment"
-      cancel-in-progress: false
+      group: ${{ startsWith(github.ref, 'refs/tags/v') && 'openapi-tag-deployment' || 'openapi-main-deployment' }}
+      cancel-in-progress: true
 
     environment:
       name: github-pages

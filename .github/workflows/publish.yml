@@ -19,6 +19,11 @@ jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
 
+    # Prevent concurrent builds of the same ref to avoid conflicts
+    concurrency:
+      group: "publish-${{ github.ref }}"
+      cancel-in-progress: false
+
     permissions:
       contents: read
       packages: write
