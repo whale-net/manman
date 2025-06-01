@@ -135,6 +135,50 @@ class DatabaseRepository:
             )
             return session.exec(stmt).all()
 
+    def get_lost_game_server_instances(
+        self, worker_id: int
+    ) -> List[GameServerInstance]:
+        """
+        Get all game server instances for a given worker that are currently marked as LOST.
+
+        Args:
+            worker_id: The ID of the worker
+
+        Returns:
+            List of GameServerInstance objects that are marked as LOST
+        """
+        with self._get_session_context() as session:
+            # Subquery to get latest status for each game server instance
+            inner = select(StatusInfo).alias("si2")
+            last_instance_status = (
+                select(StatusInfo).where(
+                    not_(StatusInfo.game_server_instance_id.is_(None)),
+                    not_(
+                        select(inner)
+                        .where(
+                            inner.c.game_server_instance_id == StatusInfo.game_server_instance_id,
+                            inner.c.as_of > StatusInfo.as_of,
+                        )
+                        .exists()
+                    ),
+                )
+            ).subquery()
+
+            # Query for game server instances that are LOST and not ended
+            stmt = (
+                select(GameServerInstance)
+                .join(
+                    last_instance_status,
+                    GameServerInstance.game_server_instance_id == last_instance_status.c.game_server_instance_id
+                )
+                .where(
+                    GameServerInstance.worker_id == worker_id,
+                    GameServerInstance.end_date.is_(None),
+                    last_instance_status.c.status_type == StatusType.LOST,
+                )
+            )
+            return session.exec(stmt).all()
+
     def write_status_to_database(self, status_info: StatusInfo) -> None:
         """
         Write a status message to the database.
