@@ -109,5 +109,122 @@ class TestWorkerShutdownOther:
 # check for heartbeat to work
 # TBH, this should probably just be a queue
 # check that we can't heartbeat dead ones
-# class TestWorkerHeartbeat:
-#     """Test GET /worker/heartbeat endpoint."""
+class TestWorkerHeartbeat:
+    """Test POST /worker/heartbeat endpoint."""
+
+    def test_worker_heartbeat_recovery_from_lost(self, client):
+        """Test worker heartbeat recovery when worker was previously LOST."""
+        # Arrange
+        worker_input = {"worker_id": 123}
+        expected_worker = Worker(
+            worker_id=123,
+            created_date=datetime(2024, 1, 1, 0, 0, 0),
+            end_date=None,
+            last_heartbeat=datetime(2024, 1, 2, 0, 0, 0),
+        )
+
+        # Mock the required repositories and their methods
+        with (
+            patch("manman.host.api.worker_dal.worker.WorkerRepository") as mock_worker_repo_class,
+            patch("manman.host.api.worker_dal.worker.StatusRepository") as mock_status_repo_class,
+            patch("manman.host.api.worker_dal.worker.DatabaseRepository") as mock_db_repo_class,
+            patch("manman.host.api.worker_dal.worker.RabbitStatusPublisher") as mock_publisher_class,
+            patch("manman.host.api.worker_dal.worker.get_rabbitmq_connection") as mock_get_connection,
+        ):
+            # Set up mocks
+            mock_worker_repo = mock_worker_repo_class.return_value
+            mock_status_repo = mock_status_repo_class.return_value  
+            mock_db_repo = mock_db_repo_class.return_value
+            mock_publisher = mock_publisher_class.return_value
+            mock_connection = Mock()
+            mock_get_connection.return_value = mock_connection
+            
+            # Mock that worker was previously LOST
+            from manman.models import StatusInfo, StatusType
+            lost_status = StatusInfo.create(
+                class_name="TestClass",
+                status_type=StatusType.LOST,
+                worker_id=123,
+            )
+            mock_status_repo.get_latest_worker_status.return_value = lost_status
+            
+            # Mock successful heartbeat update
+            mock_worker_repo.update_worker_heartbeat.return_value = expected_worker
+            
+            # Mock no lost game server instances for simplicity
+            mock_db_repo.get_lost_game_server_instances.return_value = []
+
+            # Act
+            response = client.post("/worker/heartbeat", json=worker_input)
+
+            # Assert
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["worker_id"] == 123
+
+            # Verify worker status check was called
+            mock_status_repo.get_latest_worker_status.assert_called_once_with(123)
+            
+            # Verify heartbeat was updated
+            mock_worker_repo.update_worker_heartbeat.assert_called_once_with(123)
+            
+            # Verify RUNNING status was published for recovery
+            mock_publisher_class.assert_called()
+            mock_publisher.publish.assert_called()
+            
+            # Get the StatusInfo object that was published
+            published_status = mock_publisher.publish.call_args[0][0]
+            assert published_status.status_type == StatusType.RUNNING
+            assert published_status.worker_id == 123
+            assert published_status.class_name == "WorkerDal"
+
+    def test_worker_heartbeat_no_recovery_when_not_lost(self, client):
+        """Test worker heartbeat does not send recovery status when worker was not LOST."""
+        # Arrange
+        worker_input = {"worker_id": 123}
+        expected_worker = Worker(
+            worker_id=123,
+            created_date=datetime(2024, 1, 1, 0, 0, 0),
+            end_date=None,
+            last_heartbeat=datetime(2024, 1, 2, 0, 0, 0),
+        )
+
+        # Mock the required repositories and their methods
+        with (
+            patch("manman.host.api.worker_dal.worker.WorkerRepository") as mock_worker_repo_class,
+            patch("manman.host.api.worker_dal.worker.StatusRepository") as mock_status_repo_class,
+            patch("manman.host.api.worker_dal.worker.DatabaseRepository") as mock_db_repo_class,
+            patch("manman.host.api.worker_dal.worker.RabbitStatusPublisher") as mock_publisher_class,
+        ):
+            # Set up mocks
+            mock_worker_repo = mock_worker_repo_class.return_value
+            mock_status_repo = mock_status_repo_class.return_value
+            
+            # Mock that worker was previously RUNNING (not LOST)
+            from manman.models import StatusInfo, StatusType
+            running_status = StatusInfo.create(
+                class_name="TestClass",
+                status_type=StatusType.RUNNING,
+                worker_id=123,
+            )
+            mock_status_repo.get_latest_worker_status.return_value = running_status
+            
+            # Mock successful heartbeat update
+            mock_worker_repo.update_worker_heartbeat.return_value = expected_worker
+
+            # Act
+            response = client.post("/worker/heartbeat", json=worker_input)
+
+            # Assert
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["worker_id"] == 123
+
+            # Verify worker status check was called
+            mock_status_repo.get_latest_worker_status.assert_called_once_with(123)
+            
+            # Verify heartbeat was updated
+            mock_worker_repo.update_worker_heartbeat.assert_called_once_with(123)
+            
+            # Verify NO status was published since worker was not LOST
+            mock_publisher_class.assert_not_called()
