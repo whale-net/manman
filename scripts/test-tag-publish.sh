@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 echo "📋 Verifying workflow configurations..."
 
 # Check if openapi.yml has proper concurrency configuration
-if grep -q "openapi-tag-deployment\|openapi-main-deployment" .github/workflows/openapi.yml; then
+if grep -q "openapi-.*-deployment" .github/workflows/openapi.yml; then
     echo -e "${GREEN}✅ OpenAPI workflow has proper concurrency groups${NC}"
 else
     echo -e "${RED}❌ OpenAPI workflow missing concurrency groups${NC}"
