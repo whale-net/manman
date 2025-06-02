@@ -3,6 +3,7 @@ import enum
 import logging
 import os
 import subprocess
+import time
 from typing import Optional
 
 from manman.util import log_stream
@@ -19,17 +20,34 @@ class ProcessBuilderStatus(enum.Enum):
 
 
 class ProcessBuilder:
-    def __init__(self, executable: str, stdin_delay_seconds: int = 20) -> None:
+    def __init__(self, executable: str, stdin_delay_seconds: int = 20, mock_mode: bool = False) -> None:
         self._executable: str = executable
         self._args: list[str] = []
         self._parameter_stdin: list[str] = []
         self._stdin_delay_seconds = stdin_delay_seconds
         self._process_start_time: datetime.datetime | None = None
+        self._mock_mode = mock_mode
+        self._mock_stopped = False
+        self._mock_killed = False
 
     @property
     def status(self) -> ProcessBuilderStatus:
         if self._process_start_time is None:
             return ProcessBuilderStatus.NOTSTARTED
+        
+        if self._mock_mode:
+            # In mock mode, simulate status transitions
+            if self._mock_stopped or self._mock_killed:
+                return ProcessBuilderStatus.STOPPED
+            
+            current_time = datetime.datetime.now()
+            if current_time < self._process_start_time + datetime.timedelta(
+                seconds=self._stdin_delay_seconds
+            ):
+                return ProcessBuilderStatus.INIT
+            return ProcessBuilderStatus.RUNNING
+        
+        # Real mode - existing logic
         proc_status = self._proc.poll()
         # logger.info('status %s', proc_status)
         if proc_status is not None:
@@ -55,6 +73,13 @@ class ProcessBuilder:
         """
         if self._process_start_time is None:
             return None
+        
+        if self._mock_mode:
+            # In mock mode, return 0 if stopped/killed, None if still running
+            if self._mock_stopped or self._mock_killed:
+                return 0
+            return None
+        
         return self._proc.poll()
 
     def add_parameter(self, *parameters: str):
@@ -85,6 +110,20 @@ class ProcessBuilder:
         command_base = os.path.basename(self._executable)
         logger.info("About to start executing [%s]", command_base)
 
+        if self._mock_mode:
+            # Mock mode - simulate process startup without actually running anything
+            logger.info("Mock process starting [%s]", self._executable)
+            self._process_start_time = datetime.datetime.now()
+            
+            if wait:
+                logger.info("Mock process running and waiting...")
+                # Simulate some processing time
+                time.sleep(0.1)
+                self._mock_stopped = True
+                logger.info("Mock process finished")
+            return
+
+        # Real mode - existing logic
         parm_stdinput_bytes: bytes | None = None
         if len(self._parameter_stdin) > 0:
             # this may contain sensitive info and I don't have a more sophisticated way to handle it
@@ -141,20 +180,33 @@ class ProcessBuilder:
 
     def stop(self):
         if self.status in (ProcessBuilderStatus.INIT, ProcessBuilderStatus.RUNNING):
-            # TODO this needs to run in loop
-            # with asyncio.timeout(10):
-            #     self._proc.terminate()
-            self.kill()
+            if self._mock_mode:
+                logger.info("Mock process stopping")
+                self._mock_stopped = True
+            else:
+                # TODO this needs to run in loop
+                # with asyncio.timeout(10):
+                #     self._proc.terminate()
+                self.kill()
 
     def kill(self):
         if self.status in (ProcessBuilderStatus.INIT, ProcessBuilderStatus.RUNNING):
-            self._proc.kill()
+            if self._mock_mode:
+                logger.info("Mock process killed")
+                self._mock_killed = True
+            else:
+                self._proc.kill()
 
     def read_output(self):
         if self.status == ProcessBuilderStatus.NOTSTARTED:
             return
-        log_stream(self._proc.stdout, logger=logger)
-        log_stream(self._proc.stderr, logger=logger, prefix="stderr:")
+        
+        if self._mock_mode:
+            # Mock reading output - no actual output to read
+            logger.debug("Mock process output read (no actual output)")
+        else:
+            log_stream(self._proc.stdout, logger=logger)
+            log_stream(self._proc.stderr, logger=logger, prefix="stderr:")
 
     def write_stdin(self, stdin_command: str):
         status = self.status
@@ -163,8 +215,12 @@ class ProcessBuilder:
                 "process is %s, cannot write to stdin. ignored input", status.name
             )
             return
-        if not stdin_command.endswith("\n"):
-            stdin_command = stdin_command + "\n"
-        self._proc.stdin.write(stdin_command.encode(encoding="ascii"))
-        self._proc.stdin.flush()
-        logger.info("wrote to stdin: %s", stdin_command)
+        
+        if self._mock_mode:
+            logger.info("Mock process received stdin: %s", stdin_command)
+        else:
+            if not stdin_command.endswith("\n"):
+                stdin_command = stdin_command + "\n"
+            self._proc.stdin.write(stdin_command.encode(encoding="ascii"))
+            self._proc.stdin.flush()
+            logger.info("wrote to stdin: %s", stdin_command)
