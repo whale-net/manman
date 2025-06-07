@@ -111,30 +111,6 @@ jobs:
             openapi-specs-bundle.tar.gz
             openapi-*.tar.gz
             openapi-specs/*.json
-          tag_name: ${{ github.ref_name }}
-          append_body: true
-          body: |
-            ## OpenAPI Specifications
-
-            This release includes OpenAPI specifications for all ManMan APIs:
-
-            - **experience-api.json**: Experience API (host layer) - Game server management and user-facing functionality
-            - **status-api.json**: Status API - Status and monitoring functionality
-            - **worker-dal-api.json**: Worker DAL API - Data access endpoints for worker services
-
-            ### Usage
-
-            You can use these specifications to:
-            - Generate client SDKs using tools like OpenAPI Generator
-            - Import into API testing tools like Postman or Insomnia
-            - Generate documentation using tools like Redoc or Swagger UI
-            - Validate API contracts in your integration tests
-
-            ### Formats Available
-
-            - Individual JSON files: `experience-api.json`, `status-api.json`, `worker-dal-api.json`
-            - Individual archives: `openapi-experience-api.tar.gz`, etc.
-            - Complete bundle: `openapi-specs-bundle.tar.gz` (contains all specifications)
 
   # Additional job to validate the generated OpenAPI specs
   validate-openapi:
