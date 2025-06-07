@@ -82,9 +82,10 @@ echo "🎯 Simulating tag publishing scenario..."
 
 echo "Scenario: Tag v0.2.1 is pushed for the same commit that was already pushed to main"
 echo "Expected behavior:"
-echo "  1. OpenAPI workflow should use 'openapi-tag-deployment' concurrency group"
+echo "  1. OpenAPI workflow should use 'openapi-release-deployment' concurrency group"
 echo "  2. Publish workflow should use 'publish-refs/tags/v0.2.1' concurrency group"
 echo "  3. No conflicts should occur between main and tag builds"
+echo "  4. Release documentation should be created in versions/ directory"
 
 # Check concurrency group logic
 echo "🔍 Verifying concurrency group logic..."
@@ -94,7 +95,7 @@ export GITHUB_REF="refs/tags/v0.2.1"
 
 # Test the concurrency group logic using bash (approximation)
 if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-    expected_openapi_group="openapi-tag-deployment"
+    expected_openapi_group="openapi-release-deployment"
     expected_publish_group="publish-refs/tags/v0.2.1"
 else
     expected_openapi_group="openapi-main-deployment"
@@ -109,7 +110,7 @@ echo "  Expected Publish concurrency group: $expected_publish_group"
 export GITHUB_REF="refs/heads/main"
 
 if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-    expected_openapi_group="openapi-tag-deployment"
+    expected_openapi_group="openapi-release-deployment"
     expected_publish_group="publish-refs/heads/main"
 else
     expected_openapi_group="openapi-main-deployment"
@@ -125,7 +126,8 @@ echo -e "${GREEN}🎉 All tests passed! Tag publishing workflow fix is working c
 echo ""
 echo "The fix should resolve the GitHub Actions failure that occurred when tags were pushed."
 echo "Key improvements:"
-echo "  ✅ Separate concurrency groups for main vs tag deployments"
+echo "  ✅ Separate concurrency groups for main vs release deployments"
 echo "  ✅ Proper cancellation behavior to prevent conflicts"
 echo "  ✅ No more 'same file specified twice' errors"
 echo "  ✅ Maintained functionality for both OpenAPI generation and Docker publishing"
+echo "  ✅ Release tags create versioned documentation instead of overwriting main docs"
