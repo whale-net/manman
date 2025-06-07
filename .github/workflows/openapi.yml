@@ -105,12 +105,39 @@ jobs:
       # Only attach to release if this is a tag push
       - name: Attach OpenAPI specs to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            openapi-specs-bundle.tar.gz
-            openapi-*.tar.gz
-            openapi-specs/*.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 Uploading OpenAPI specifications to release ${{ github.ref_name }}"
+
+          # Check if release exists, exit if it doesn't
+          if ! gh release view "${{ github.ref_name }}" > /dev/null 2>&1; then
+            echo "❌ Release ${{ github.ref_name }} does not exist. Exiting."
+            echo "This action should only run when triggered by an existing release."
+            exit 1
+          fi
+
+          # Upload all files
+          echo "📦 Uploading bundle..."
+          gh release upload "${{ github.ref_name }}" openapi-specs-bundle.tar.gz --clobber
+
+          echo "📦 Uploading individual API archives..."
+          for file in openapi-*.tar.gz; do
+            if [ -f "$file" ]; then
+              echo "  Uploading $file..."
+              gh release upload "${{ github.ref_name }}" "$file" --clobber
+            fi
+          done
+
+          echo "📦 Uploading JSON specifications..."
+          for file in openapi-specs/*.json; do
+            if [ -f "$file" ]; then
+              echo "  Uploading $file..."
+              gh release upload "${{ github.ref_name }}" "$file" --clobber
+            fi
+          done
+
+          echo "✅ All OpenAPI specifications uploaded to release"
 
   # Additional job to validate the generated OpenAPI specs
   validate-openapi:
