@@ -4,7 +4,7 @@
 - assume `uv` is already properly configured
 - refer to `project.scripts` in `pyproject.toml` for available commands
 - before commiting, always run `uvx pre-commit` to ensure code quality and consistency
-    - this my require installing `pre-commit` as a tool in `uv`
+    - this may require installing `pre-commit` as a tool in `uv`
 
 ## Project Overview
 ManMan is a game server management system that orchestrates Steam-based game servers through a distributed worker architecture. The system uses RabbitMQ for messaging, PostgreSQL for persistence, FastAPI for REST APIs, and Kubernetes for deployment.
