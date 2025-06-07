@@ -51,20 +51,10 @@ class DatabaseRepository:
 
     def _get_session_context(self):
         """Get a session context manager."""
-        if self._session is not None:
-            # If we have a persistent session, create a context manager that yields it
-            from contextlib import contextmanager
-
-            @contextmanager
-            def session_context():
-                yield self._session
-
-            return session_context()
-
         # Import here to avoid circular import
         from manman.util import get_sqlalchemy_session
 
-        return get_sqlalchemy_session()
+        return get_sqlalchemy_session(self._session)
 
     @staticmethod
     def get_worker_current_status_subquery():

@@ -51,22 +51,19 @@ async def worker_current() -> Worker:
 async def get_current_instances(
     worker_id: int, session: Optional[Session] = None
 ) -> list[GameServerInstance]:
-    # TODO - don't re-use a session in the context manager if one is provided
-    #        doing so will cause the session to be closed when the context manager exits
-    #        #35
-    sess = get_sqlalchemy_session(session)
-    stmt = (
-        select(GameServerInstance)
-        .where(GameServerInstance.worker_id == worker_id)
-        .where(GameServerInstance.end_date.is_(None))
-    )
-    results = sess.exec(stmt).all()
-    # If a session is provided, we don't want to expunge the instances
-    if session is None:
-        for instance in results:
-            sess.expunge(instance)
-        sess.close()
-    return results
+    with get_sqlalchemy_session(session) as sess:
+        stmt = (
+            select(GameServerInstance)
+            .where(GameServerInstance.worker_id == worker_id)
+            .where(GameServerInstance.end_date.is_(None))
+        )
+        results = sess.exec(stmt).all()
+        # If a session is provided, we don't want to expunge the instances
+        # because the caller may still need them attached to the session
+        if session is None:
+            for instance in results:
+                sess.expunge(instance)
+        return results
 
 
 @router.get("/gameserver")
