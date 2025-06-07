@@ -9,7 +9,10 @@ from manman.models import (
     StatusType,
 )
 from manman.repository.database import DatabaseRepository
-from manman.repository.rabbitmq import RabbitStatusPublisher, RabbitStatusSubscriber
+from manman.repository.rabbitmq import (
+    LegacyRabbitStatusPublisher,
+    RabbitStatusSubscriber,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +54,7 @@ class StatusEventProcessor:
 
         # NOTE: consumers of this data should be using the external exchagne
         # and subscribe to the topics they want
-        self._external_status_publisher = RabbitStatusPublisher(
+        self._external_status_publisher = LegacyRabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange="external",
             routing_key_base="external.status",

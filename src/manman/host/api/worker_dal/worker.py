@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from manman.exceptions import WorkerAlreadyClosedException
 from manman.models import StatusInfo, StatusType, Worker
 from manman.repository.database import WorkerRepository
-from manman.repository.rabbitmq import RabbitStatusPublisher
+from manman.repository.rabbitmq import LegacyRabbitStatusPublisher
 from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ async def worker_shutdown_other(instance: Worker):
 
         # Send COMPLETE status to worker status queue for each shutdown worker
         for worker in lost_workers:
-            worker_publisher = RabbitStatusPublisher(
+            worker_publisher = LegacyRabbitStatusPublisher(
                 connection=get_rabbitmq_connection(),
                 exchanges_config={
                     "worker": [f"status.worker-instance.{worker.worker_id}"]

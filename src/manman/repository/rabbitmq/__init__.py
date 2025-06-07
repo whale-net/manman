@@ -12,18 +12,18 @@ Public API:
     - RabbitStatusSubscriber: Subscribes to status messages from RabbitMQ
 """
 
-from .base import MessagePublisher, MessageSubscriber, StatusMessage
-from .publisher import RabbitStatusPublisher
-from .subscriber import RabbitCommandSubscriber, RabbitStatusSubscriber
+from .base import LegacyMessagePublisher, LegacyMessageSubscriber, StatusMessage
+from .publisher import LegacyRabbitStatusPublisher
+from .subscriber import LegacyRabbitCommandSubscriber, RabbitStatusSubscriber
 
 __all__ = [
     # Abstract base classes
-    "MessagePublisher",
-    "MessageSubscriber",
+    "LegacyMessagePublisher",
+    "LegacyMessageSubscriber",
     # Data types
     "StatusMessage",
     # Concrete implementations
-    "RabbitStatusPublisher",
-    "RabbitCommandSubscriber",
+    "LegacyRabbitStatusPublisher",
+    "LegacyRabbitCommandSubscriber",
     "RabbitStatusSubscriber",
 ]

@@ -17,7 +17,10 @@ from manman.models import (
     StatusType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq import (
+    LegacyRabbitCommandSubscriber,
+    LegacyRabbitStatusPublisher,
+)
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
@@ -51,13 +54,13 @@ class Server:
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
 
-        self._command_message_provider = RabbitCommandSubscriber(
+        self._command_message_provider = LegacyRabbitCommandSubscriber(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
             queue_name=self.command_routing_key,
         )
 
-        self._status_publisher = RabbitStatusPublisher(
+        self._status_publisher = LegacyRabbitStatusPublisher(
             connection=rabbitmq_connection,
             exchange=Server.RMQ_EXCHANGE,
             routing_key_base=self.status_routing_key,

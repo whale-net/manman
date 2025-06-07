@@ -14,12 +14,12 @@ from amqpstorm import Connection, Message
 
 from manman.models import Command, StatusInfo
 
-from .base import MessageSubscriber, StatusMessage
+from .base import LegacyMessageSubscriber, StatusMessage
 
 logger = logging.getLogger(__name__)
 
 
-class RabbitCommandSubscriber(MessageSubscriber):
+class LegacyRabbitCommandSubscriber(LegacyMessageSubscriber):
     """
     A message subscriber that retrieves commands from a RabbitMQ queue.
 

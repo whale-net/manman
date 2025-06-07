@@ -16,7 +16,10 @@ from manman.models import (
 
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
+from manman.repository.rabbitmq import (
+    LegacyRabbitCommandSubscriber,
+    LegacyRabbitStatusPublisher,
+)
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
@@ -66,12 +69,12 @@ class WorkerService:
         self._wapi.close_other_workers(self._worker_instance)
 
         self._rabbitmq_connection = rabbitmq_connection
-        self._status_publisher = RabbitStatusPublisher(
+        self._status_publisher = LegacyRabbitStatusPublisher(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
             routing_key_base=self.status_routing_key,
         )
-        self._command_provider = RabbitCommandSubscriber(
+        self._command_provider = LegacyRabbitCommandSubscriber(
             connection=self._rabbitmq_connection,
             exchange=WorkerService.RMQ_EXCHANGE,
             queue_name=self.command_routing_key,
