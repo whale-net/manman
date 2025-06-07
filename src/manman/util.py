@@ -3,6 +3,7 @@ import io
 import logging
 import ssl
 import threading
+from contextlib import contextmanager
 from typing import Optional
 
 import amqpstorm
@@ -69,11 +70,33 @@ def init_sql_alchemy_engine(
     )
 
 
-def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
-    # TODO : apply lessons from fcm on session management. this doesn't seem right.
+@contextmanager
+def get_sqlalchemy_session(session: Optional[Session] = None):
+    """
+    Get a SQLAlchemy session context manager.
+    
+    If a session is provided (dependency injection), yields it without managing lifecycle.
+    If no session is provided, creates a new session and manages its lifecycle.
+    
+    Args:
+        session: Optional existing session to use
+        
+    Yields:
+        Session: Database session
+    """
     if session is not None:
-        return session
-    return Session(get_sqlalchemy_engine())
+        # Use provided session without managing its lifecycle
+        yield session
+    else:
+        # Create and manage a new session
+        new_session = Session(get_sqlalchemy_engine())
+        try:
+            yield new_session
+        except Exception:
+            new_session.rollback()
+            raise
+        finally:
+            new_session.close()
 
 
 # Update RabbitMQ functions to use AMQPStorm
