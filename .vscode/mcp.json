@@ -1,0 +1,18 @@
+{
+    "servers": {
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "@playwright/mcp@latest"
+            ]
+        },
+        "g-search": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "g-search-mcp"
+            ]
+        }
+    },
+    "inputs": []
+}
