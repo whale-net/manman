@@ -5,17 +5,27 @@ CLI for generating OpenAPI specs without environment dependencies.
 import json
 import logging
 from pathlib import Path
+from typing import Dict, Tuple
 
 import typer
 from fastapi import FastAPI
 from typing_extensions import Annotated
 
-from manman.config import ManManConfig
 from manman.host.api.shared import add_health_check
 from manman.logging_config import setup_logging
 
 app = typer.Typer()
 logger = logging.getLogger(__name__)
+
+# API configurations matching those in main.py
+API_CONFIGS: Dict[str, Tuple[str, str]] = {
+    "experience-api": ("ManMan Experience API", "/experience"),
+    "status-api": ("ManMan Status API", "/status"),
+    "worker-dal-api": ("ManMan Worker DAL API", "/workerdal"),
+}
+
+# Known API names for validation
+KNOWN_API_NAMES = frozenset(API_CONFIGS.keys())
 
 
 def _generate_openapi_spec(fastapi_app: FastAPI, service_name: str) -> None:
@@ -37,7 +47,7 @@ def main(
     api_name: Annotated[
         str,
         typer.Argument(
-            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
+            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(KNOWN_API_NAMES)}"
         ),
     ],
 ):
@@ -47,37 +57,35 @@ def main(
     logger.info(f"Generating OpenAPI spec for {api_name}...")
 
     # Validate API name
-    try:
-        validated_api_name = ManManConfig.validate_api_name(api_name)
-        api_config = ManManConfig.get_api_config(validated_api_name)
-    except ValueError as e:
-        raise typer.BadParameter(str(e))
+    if api_name not in KNOWN_API_NAMES:
+        raise typer.BadParameter(
+            f"Unknown API name: {api_name}. Valid options are: {', '.join(KNOWN_API_NAMES)}"
+        )
+
+    # Get API configuration
+    title, root_path = API_CONFIGS[api_name]
 
     # Build FastAPI app based on API
-    fastapi_app = FastAPI(title=api_config.title, root_path=api_config.root_path)
-    if validated_api_name == ManManConfig.EXPERIENCE_API:
+    fastapi_app = FastAPI(title=title, root_path=root_path)
+    
+    if api_name == "experience-api":
         from manman.host.api.experience import router as experience_router
 
         fastapi_app.include_router(experience_router)
         add_health_check(fastapi_app)
 
-    elif validated_api_name == ManManConfig.STATUS_API:
+    elif api_name == "status-api":
         from manman.host.api.status import router as status_router
 
         fastapi_app.include_router(status_router)
         add_health_check(fastapi_app)
 
-    elif validated_api_name == ManManConfig.WORKER_DAL_API:
+    elif api_name == "worker-dal-api":
         from manman.host.api.worker_dal import server_router, worker_router
 
         fastapi_app.include_router(server_router)
         fastapi_app.include_router(worker_router)
         add_health_check(fastapi_app)
-
-    else:
-        raise typer.BadParameter(
-            f"Unknown API name: {api_name}. Valid options are: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
-        )
 
     # Generate and save the spec
     _generate_openapi_spec(fastapi_app, api_name)
