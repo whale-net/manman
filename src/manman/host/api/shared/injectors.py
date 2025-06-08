@@ -84,7 +84,7 @@ async def game_server_instance_db_repository(
 
 async def game_server_config_db_repository(
     session: Annotated[SQLSession, Depends(sql_session)],
-) -> GameServerInstanceRepository:
+) -> GameServerConfigRepository:
     """
     Dependency to inject a GameServerInstanceRepository for game server configs.
     This repository is used to interact with game server configurations in the database.

@@ -334,7 +334,7 @@ class ExternalStatusInfo(ManManBase, table=True):
             )
 
         return cls.create(
-            class_name=internal_status.entity_type,
+            class_name=str(internal_status.entity_type),
             status_type=internal_status.status_type,
             worker_id=worker_id,
             game_server_instance_id=game_server_instance_id,

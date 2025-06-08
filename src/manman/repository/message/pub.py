@@ -6,13 +6,17 @@ from manman.repository.message.abstract_interface import MessagePublisherInterfa
 logger = logging.getLogger(__name__)
 
 
-class InternalStatusInfoPubService:
+class PubServiceInterface:
     def __init__(self, publisher: MessagePublisherInterface) -> None:
         self._publisher = publisher
         logger.info(
-            "StatusInfoPubService initialized with publisher %s", self._publisher
+            "%s initialized with publisher %s",
+            self.__class__.__name__,
+            self._publisher,
         )
 
+
+class InternalStatusInfoPubService(PubServiceInterface):
     def publish_status(self, internal_status: InternalStatusInfo) -> None:
         """
         Publish a status message to RabbitMQ.
@@ -23,14 +27,7 @@ class InternalStatusInfoPubService:
         self._publisher.publish(message)
 
 
-class ExternalStatusInfoPubService:
-    def __init__(self, publisher: MessagePublisherInterface) -> None:
-        self._publisher = publisher
-        logger.info(
-            "ExternalStatusInfoPubService initialized with publisher %s",
-            self._publisher,
-        )
-
+class ExternalStatusInfoPubService(PubServiceInterface):
     def publish_external_status(self, external_status: ExternalStatusInfo) -> None:
         """
         Publish an external status message to RabbitMQ.
@@ -41,11 +38,7 @@ class ExternalStatusInfoPubService:
         self._publisher.publish(message)
 
 
-class CommandPubService:
-    def __init__(self, publisher: MessagePublisherInterface) -> None:
-        self._publisher = publisher
-        logger.info("CommandPubService initialized with publisher %s", self._publisher)
-
+class CommandPubService(PubServiceInterface):
     def publish_command(self, command: Command) -> None:
         """
         Publish a command message to RabbitMQ.

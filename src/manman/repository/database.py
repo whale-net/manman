@@ -421,7 +421,7 @@ class GameServerRepository(DatabaseRepository):
 class GameServerConfigRepository(DatabaseRepository):
     """Repository class for game server configuration-related database operations."""
 
-    def get_game_server_configs(self) -> List[GameServerConfig]:
+    def get_game_server_configs(self) -> list[GameServerConfig]:
         """
         Get all game server configurations.
 

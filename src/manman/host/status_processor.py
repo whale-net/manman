@@ -60,7 +60,7 @@ class StatusEventProcessor:
     )
 
     __SUPPORTED_ROUTING_KEYS: list[RoutingKeyConfig] = [
-        __GAME_SERVER_INSTANCE_KEY,
+        __WORKER_KEY,
         __GAME_SERVER_INSTANCE_KEY,
     ]
 
