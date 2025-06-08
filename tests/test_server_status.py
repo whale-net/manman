@@ -113,6 +113,15 @@ class TestServerStatusPublishing:
         mock_process.status = Mock()
         mock_pb.return_value = mock_process
 
+        # Create a Server instance to trigger the status publishing
+        Server(
+            wapi=mock_dependencies["wapi"],
+            rabbitmq_connection=mock_dependencies["rabbitmq_connection"],
+            root_install_directory="/test/path",
+            config=mock_dependencies["config"],
+            worker_id=123,
+        )
+
         # Verify that CREATED status was published during initialization
         mock_status_pub_service.publish_status.assert_called_once()
 
