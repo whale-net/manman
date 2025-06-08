@@ -8,7 +8,11 @@ from manman.models import (
     ExternalStatusInfo,
     StatusType,
 )
-from manman.repository.database import DatabaseRepository
+from manman.repository.database import (
+    GameServerInstanceRepository,
+    StatusRepository,
+    WorkerRepository,
+)
 from manman.repository.message.pub import ExternalStatusInfoPubService
 from manman.repository.message.sub import (
     ExternalStatusSubService,
@@ -108,9 +112,10 @@ class StatusEventProcessor:
         self._rabbitmq_connection = rabbitmq_connection
         self._is_running = False
 
-        # Initialize database repository
-        # TODO status repository
-        self._db_repository = DatabaseRepository()
+        # Initialize repositories
+        self._status_repository = StatusRepository()
+        self._worker_repository = WorkerRepository()
+        self._game_server_instance_repository = GameServerInstanceRepository()
 
         self._internal_status_subscriber = self.__build_internal_status_subscriber()
         self._external_worker_status_publisher = self.__build_external_status_publisher(
@@ -163,8 +168,8 @@ class StatusEventProcessor:
         This sends a notification to the external queue if a worker is marked as lost.
         """
         try:
-            # Get workers with stale heartbeats using the database repository
-            stale_workers = self._db_repository.get_workers_with_stale_heartbeats()
+            # Get workers with stale heartbeats using the worker repository
+            stale_workers = self._worker_repository.get_workers_with_stale_heartbeats()
 
             for worker, current_status in stale_workers:
                 logger.warning(
@@ -178,7 +183,7 @@ class StatusEventProcessor:
                 self._send_worker_lost_notification(worker.worker_id)
 
                 # Get all active game server instances for this worker
-                active_instances = self._db_repository.get_active_game_server_instances(
+                active_instances = self._game_server_instance_repository.get_active_game_server_instances(
                     worker.worker_id
                 )
 
@@ -220,7 +225,7 @@ class StatusEventProcessor:
             )
 
             self._send_external_status(lost_status)
-            self._db_repository.write_external_status_to_database(lost_status)
+            self._status_repository.write_external_status_to_database(lost_status)
             logger.info("Worker lost notification sent for worker %s", worker_id)
 
         except Exception as e:
@@ -240,7 +245,7 @@ class StatusEventProcessor:
             )
 
             self._send_external_status(lost_status)
-            self._db_repository.write_external_status_to_database(lost_status)
+            self._status_repository.write_external_status_to_database(lost_status)
             logger.info(
                 "Game server lost notification sent for instance %s",
                 game_server_instance_id,
@@ -276,7 +281,7 @@ class StatusEventProcessor:
                     internal_status_info
                 )
                 self._send_external_status(external_status_info)
-                self._db_repository.write_external_status_to_database(
+                self._status_repository.write_external_status_to_database(
                     external_status_info
                 )
         except Exception as e:
