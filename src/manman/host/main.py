@@ -21,7 +21,6 @@ from manman.util import (
     init_rabbitmq,
     init_sql_alchemy_engine,
 )
-from manman.worker.server import Server
 
 app = typer.Typer()
 logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ def _init_common_services(
 
     rmq_connection = get_rabbitmq_connection()
 
-    exchanges = [Server.RMQ_EXCHANGE]
+    exchanges = []
     for exchange in ExchangeRegistry:
         exchanges.append(exchange.value)
     for exchange in exchanges:

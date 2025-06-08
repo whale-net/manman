@@ -49,12 +49,12 @@ class RabbitPublisher(MessagePublisherInterface):
             for routing_key in binding_config.routing_keys:
                 self._channel.basic.publish(
                     body=message,
-                    exchange=binding_config.exchange.value,
+                    exchange=binding_config.exchange,
                     routing_key=str(routing_key),
                 )
                 logger.debug(
                     "Message published to exchange %s with routing key %s",
-                    binding_config.exchange.value,
+                    binding_config.exchange,
                     routing_key,
                 )
 

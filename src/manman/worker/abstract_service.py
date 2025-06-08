@@ -34,6 +34,7 @@ class ManManService(ABC):
     # this is surely too short, but it is just a heartbeat
     HEARTBEAT_INTERVAL: timedelta = timedelta(seconds=2)
     RUN_LOOP_INTERVAL: timedelta = timedelta(milliseconds=100)
+    LOG_LOOP_INTERVAL: timedelta = RUN_LOOP_INTERVAL * 300
 
     @property
     @abstractmethod
@@ -212,6 +213,18 @@ class ManManService(ABC):
         """
         pass
 
+    def _trigger_internal_shutdown(self):
+        """
+        Trigger an internal shutdown of the service.
+
+        This method is called to stop the service gracefully.
+        It sets the internal flag to indicate the service should stop.
+        """
+        logger.info(
+            "Triggering internal shutdown for service: %s", self.__class__.__name__
+        )
+        self.__is_stopped = True
+
     def run(self):
         """
         Run the service.
@@ -228,6 +241,7 @@ class ManManService(ABC):
                 ),
             )
             self._initialize_service()
+            logger.info("Service %s initialized successfully", self.__class__.__name__)
         except Exception as e:
             logger.exception(
                 "Error during initialization of service %s: %s",
@@ -239,40 +253,55 @@ class ManManService(ABC):
             ) from e
 
         try:
+            logger.info("about to start service: %s", self.__class__.__name__)
             # TODO - this gives no time for the service to start running
             # this will be problematic for game servers that take a while to start
             self._status_pub_service.publish_status(
                 internal_status=self.__create_internal_status_info(StatusType.RUNNING),
             )
             self._run()
-            # TODO - prevent double shutdown
-            # once run is complete, start shutdown
-            logger.info("Shutting down service: %s", self.__class__.__name__)
-            self._shutdown()
+            logger.info("Service %s has completed running", self.__class__.__name__)
         except Exception as e:
             logger.exception(
                 "Error during execution of service %s: %s", self.__class__.__name__, e
             )
             raise RuntimeError(
-                f"Failed to completely execute service {self.__class__.__name__}: {e}"
+                f"Failed to run service {self.__class__.__name__}: {e}"
             ) from e
         finally:
-            self._status_pub_service.publish_status(
-                internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
-            )
+            try:
+                # TODO - prevent double shutdown
+                # once run is complete, start shutdown
+                logger.info("Shutting down service: %s", self.__class__.__name__)
+                self._shutdown()
+            except Exception as e:
+                logger.exception(
+                    "Error during shutdown of service %s: %s",
+                    self.__class__.__name__,
+                    e,
+                )
+                raise RuntimeError(
+                    f"Failed to shutdown service {self.__class__.__name__}: {e}"
+                ) from e
+            finally:
+                self._status_pub_service.publish_status(
+                    internal_status=self.__create_internal_status_info(
+                        StatusType.COMPLETE
+                    ),
+                )
 
     def _run(self):
         """
         Contain main run loop logic for the service.
         """
-        loop_log_time = datetime.now(timezone.utc)
-        loop_heartbeat_time = datetime.now(timezone.utc)
+        loop_log_time = datetime.now(timezone.utc) - self.LOG_LOOP_INTERVAL
+        loop_heartbeat_time = datetime.now(timezone.utc) - self.HEARTBEAT_INTERVAL
         while not self.__is_stopped:
             # timing
             run_loop_start_time = datetime.now(timezone.utc)
-            log_still_running = (run_loop_start_time - loop_log_time) > timedelta(
-                seconds=30
-            )
+            log_still_running = (
+                run_loop_start_time - loop_log_time
+            ) > self.LOG_LOOP_INTERVAL
             if log_still_running:
                 logger.info("Service %s is running", self.__class__.__name__)
                 loop_log_time = run_loop_start_time

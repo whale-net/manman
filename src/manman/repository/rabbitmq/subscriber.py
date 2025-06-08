@@ -68,7 +68,7 @@ class RabbitSubscriber(MessageSubscriberInterface):
                 logger.info(
                     "Queue %s bound to exchange %s with routing key '%s'",
                     queue_config.actual_queue_name,
-                    binding_config.exchange.value,
+                    binding_config.exchange,
                     routing_key,
                 )
 

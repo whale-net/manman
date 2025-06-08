@@ -220,18 +220,24 @@ class WorkerService(ManManService):
         self._servers_lock.release()
 
         server = Server(
-            wapi=self._wapi,
             rabbitmq_connection=self._rabbitmq_connection,
+            wapi=self._wapi,
             root_install_directory=self._install_dir,
             config=config,
             worker_id=self._worker_instance.worker_id,
         )
-        future = self._threadpool.submit(
-            server.run,
-            name=server.instance.get_thread_name(),
-            # TODO - set this to false when we get blocked by steamcmd
-            should_update=True,
-        )
+        try:
+            future = self._threadpool.submit(
+                server.run,
+                name=server.instance.get_thread_name(),
+                # TODO - set this to false when we get blocked by steamcmd
+                # should_update=True,
+            )
+        except Exception as e:
+            logger.exception("Failed to start server: %s", e)
+            raise RuntimeError(
+                f"Failed to submit server work {config.game_server_config_id}: {e}"
+            ) from e
         # TODO - just make server responsible for its own thread management
         # TODO - does threadpool ever get too big with dead threads?
         # TODO - should I use a threadpool for this? I think I should move to explicit thread management

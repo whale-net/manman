@@ -265,8 +265,9 @@ class WorkerAPIClient(APIClientBase):
 
     def server_heartbeat(self, instance: GameServerInstance) -> GameServerInstance:
         response = self._session.post(
-            "/server/instance/heartbeat",
-            data=instance.model_dump_json(),
+            # TODO - make consisntent with other endpoints
+            f"/server/instance/heartbeat/{instance.game_server_instance_id}",
+            # data=instance.model_dump_json(),
         )
         if response.status_code != 200:
             raise RuntimeError(response.content)
