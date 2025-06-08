@@ -18,10 +18,10 @@ from manman.exceptions import (
 )
 from manman.models import (
     ACTIVE_STATUS_TYPES,
+    ExternalStatusInfo,
     GameServer,
     GameServerConfig,
     GameServerInstance,
-    StatusInfo,
     StatusType,
     Worker,
 )
@@ -69,15 +69,15 @@ class DatabaseRepository:
     @staticmethod
     def get_worker_current_status_subquery():
         # Subquery to get the latest status for each worker
-        inner = select(StatusInfo).alias("si2")
+        inner = select(ExternalStatusInfo).alias("si2")
         last_status = (
-            select(StatusInfo).where(
-                not_(StatusInfo.worker_id.is_(None)),
+            select(ExternalStatusInfo).where(
+                not_(ExternalStatusInfo.worker_id.is_(None)),
                 not_(
                     select(inner)
                     .where(
-                        inner.c.worker_id == StatusInfo.worker_id,
-                        inner.c.as_of > StatusInfo.as_of,
+                        inner.c.worker_id == ExternalStatusInfo.worker_id,
+                        inner.c.as_of > ExternalStatusInfo.as_of,
                     )
                     .exists()
                 ),
@@ -135,13 +135,17 @@ class DatabaseRepository:
             )
             return session.exec(stmt).all()
 
-    def write_status_to_database(self, status_info: StatusInfo) -> None:
+    def write_external_status_to_database(
+        self, status_info: ExternalStatusInfo
+    ) -> None:
         """
         Write a status message to the database.
 
         Args:
             status_info: The StatusInfo object to write to the database
         """
+        if status_info.status_info_id is not None and status_info.status_info_id < 0:
+            status_info.status_info_id = None  # Ensure ID is None for new records
         with self._get_session_context() as session:
             session.add(status_info)
             session.commit()
@@ -177,7 +181,7 @@ class DatabaseRepository:
 class StatusRepository(DatabaseRepository):
     """Repository class for status-related database operations."""
 
-    def get_latest_worker_status(self, worker_id: int) -> Optional[StatusInfo]:
+    def get_latest_worker_status(self, worker_id: int) -> Optional[ExternalStatusInfo]:
         """
         Get the latest status for a specific worker.
 
@@ -189,16 +193,16 @@ class StatusRepository(DatabaseRepository):
         """
         with self._get_session_context() as session:
             stmt = (
-                select(StatusInfo)
-                .where(StatusInfo.worker_id == worker_id)
-                .order_by(desc(StatusInfo.as_of))
+                select(ExternalStatusInfo)
+                .where(ExternalStatusInfo.worker_id == worker_id)
+                .order_by(desc(ExternalStatusInfo.as_of))
                 .limit(1)
             )
             return session.exec(stmt).first()
 
     def get_latest_instance_status(
         self, game_server_instance_id: int
-    ) -> Optional[StatusInfo]:
+    ) -> Optional[ExternalStatusInfo]:
         """
         Get the latest status for a specific game server instance.
 
@@ -210,9 +214,12 @@ class StatusRepository(DatabaseRepository):
         """
         with self._get_session_context() as session:
             stmt = (
-                select(StatusInfo)
-                .where(StatusInfo.game_server_instance_id == game_server_instance_id)
-                .order_by(desc(StatusInfo.as_of))
+                select(ExternalStatusInfo)
+                .where(
+                    ExternalStatusInfo.game_server_instance_id
+                    == game_server_instance_id
+                )
+                .order_by(desc(ExternalStatusInfo.as_of))
                 .limit(1)
             )
             return session.exec(stmt).first()
@@ -360,6 +367,18 @@ class WorkerRepository(DatabaseRepository):
             session.commit()
             return lost_workers
 
+    # TODO - this whole thing needs rethnking ,but just going to hack it together for now
+    def get_current_worker(self) -> Worker:
+        with self._get_session_context() as session:
+            stmt = (
+                select(Worker)
+                .where(Worker.end_date.is_(None))
+                .order_by(desc(Worker.created_date))
+                .limit(1)
+            )
+            worker = session.exec(stmt).one_or_none()
+            return worker
+
 
 class GameServerRepository(DatabaseRepository):
     """Repository class for game server-related database operations."""
@@ -397,6 +416,29 @@ class GameServerRepository(DatabaseRepository):
             if config:
                 session.expunge(config)
             return config
+
+
+class GameServerConfigRepository(DatabaseRepository):
+    """Repository class for game server configuration-related database operations."""
+
+    def get_game_server_configs(self) -> list[GameServerConfig]:
+        """
+        Get all game server configurations.
+
+        Returns:
+            List of GameServerConfig instances
+        """
+        # TODO - is_visible parameter
+        with self._get_session_context() as session:
+            stmt = (
+                select(GameServerConfig)
+                .where(GameServerConfig.is_visible.is_(True))
+                .order_by(GameServerConfig.name)
+            )
+            results = session.exec(stmt).all()
+            for config in results:
+                session.expunge(config)
+            return results
 
 
 class GameServerInstanceRepository(DatabaseRepository):
@@ -500,3 +542,19 @@ class GameServerInstanceRepository(DatabaseRepository):
             session.expunge(instance)
             session.commit()
             return instance
+
+    def get_current_instances(
+        self, worker_id: int, session: Optional[Session] = None
+    ) -> list[GameServerInstance]:
+        # TODO - don't re-use a session in the context manager if one is provided
+        #        doing so will cause the session to be closed when the context manager exits
+        #        #35
+        # TODO - addres if above todo is stil lrelevant - copy patsed from somewhere else in the project
+        with self._get_session_context() as session:
+            stmt = (
+                select(GameServerInstance)
+                .where(GameServerInstance.worker_id == worker_id)
+                .where(GameServerInstance.end_date.is_(None))
+            )
+            results = session.exec(stmt).all()
+            return results

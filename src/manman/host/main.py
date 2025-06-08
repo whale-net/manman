@@ -13,6 +13,7 @@ import uvicorn
 from typing_extensions import Annotated
 
 from manman.logging_config import get_uvicorn_log_config, setup_logging
+from manman.repository.rabbitmq.config import ExchangeRegistry
 from manman.util import (
     create_rabbitmq_vhost,
     get_rabbitmq_ssl_options,
@@ -20,8 +21,6 @@ from manman.util import (
     init_rabbitmq,
     init_sql_alchemy_engine,
 )
-from manman.worker.server import Server
-from manman.worker.worker_service import WorkerService
 
 app = typer.Typer()
 logger = logging.getLogger(__name__)
@@ -72,7 +71,9 @@ def _init_common_services(
 
     rmq_connection = get_rabbitmq_connection()
 
-    exchanges = [Server.RMQ_EXCHANGE, WorkerService.RMQ_EXCHANGE]
+    exchanges = []
+    for exchange in ExchangeRegistry:
+        exchanges.append(exchange.value)
     for exchange in exchanges:
         rmq_connection.channel().exchange.declare(
             exchange=exchange,

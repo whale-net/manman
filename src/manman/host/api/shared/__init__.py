@@ -1,9 +1,9 @@
 from .health import add_health_check
-from .injectors import get_access_token, has_basic_worker_authz, inject_rmq_channel
+from .injectors import get_access_token, has_basic_worker_authz, rmq_chan
 from .models import CurrentInstanceResponse, StdinCommandRequest
 
 __all__ = [
-    "inject_rmq_channel",
+    "rmq_chan",
     "get_access_token",
     "has_basic_worker_authz",
     "StdinCommandRequest",

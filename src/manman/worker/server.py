@@ -1,67 +1,73 @@
 import logging
 import os
-from typing import Self
 
 from amqpstorm import Connection
 
-# import sqlalchemy
-# from sqlalchemy.orm import Session
-# from pydantic import BaseModel
 from manman.models import (
     Command,
     CommandType,
     GameServerConfig,
     GameServerInstance,
     ServerType,
-    StatusInfo,
-    StatusType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import RabbitCommandSubscriber, RabbitStatusPublisher
-from manman.repository.rabbitmq.util import add_routing_key_prefix
+from manman.repository.rabbitmq.config import EntityRegistry
 from manman.util import env_list_to_dict
+from manman.worker.abstract_service import ManManService
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
 from manman.worker.steamcmd import SteamCMD
 
 logger = logging.getLogger(__name__)
 
 
-# TODO logging
-class Server:
-    RMQ_EXCHANGE = "server"
+class Server(ManManService):
+    @property
+    def service_entity_type(self) -> EntityRegistry:
+        return EntityRegistry.GAME_SERVER_INSTANCE
+
+    @property
+    def identifier(self) -> str:
+        if not hasattr(self, "_instance"):
+            raise RuntimeError("Server instance not initialized")
+        if not hasattr(self._instance, "game_server_instance_id"):
+            raise RuntimeError(
+                "Server instance does not have a game_server_instance_id"
+            )
+        if self._instance.game_server_instance_id is None:
+            raise RuntimeError("Server instance game_server_instance_id is None")
+        # Return the game server instance ID as a string
+        return str(self._instance.game_server_instance_id)
+
+    @property
+    def instance(self) -> GameServerInstance:
+        return self._instance
+
+    @property
+    def is_shutdown(self) -> bool:
+        return self._instance.end_date is not None
 
     def __init__(
         self,
-        wapi: WorkerAPIClient,
         rabbitmq_connection: Connection,
+        *,
+        wapi: WorkerAPIClient,
         root_install_directory: str,
         config: GameServerConfig,
         worker_id: int,
     ) -> None:
-        # Extra status trackers to handle shutdown
-        # and to provide expected state which may be useful for debugging later
-        self.__is_started = False
-        self.__is_stopped = False
-
+        # pre-init
         self._wapi = wapi
-        self._config = config
         self._worker_id = worker_id
+        self._config = config
+        self._instance = self._wapi.game_server_instance_create(
+            self._config, self._worker_id
+        )
 
-        self._instance = self._wapi.game_server_instance_create(config, self._worker_id)
+        # Initialize the ManManService base class
+        super().__init__(rabbitmq_connection)
+
         self._game_server = self._wapi.game_server(self._config.game_server_id)
         logger.info("starting instance %s", self._instance.model_dump_json())
-
-        self._command_message_provider = RabbitCommandSubscriber(
-            connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
-            queue_name=self.command_routing_key,
-        )
-
-        self._status_publisher = RabbitStatusPublisher(
-            connection=rabbitmq_connection,
-            exchange=Server.RMQ_EXCHANGE,
-            routing_key_base=self.status_routing_key,
-        )
 
         self._root_install_directory = root_install_directory
         self._server_directory = os.path.join(
@@ -78,77 +84,99 @@ class Server:
         for arg in self._config.args:
             pb.add_parameter(arg)
         self._proc = pb
+        logger.info("ProcessBuilder initialized with executable: %s", executable_path)
 
-        # Publish CREATED status
-        self._status_publisher.publish(
-            status=StatusInfo.create(
+    def _send_heartbeat(self):
+        """Send a heartbeat for the game server instance."""
+        self._wapi.server_heartbeat(self._instance)
+
+    def _initialize_service(self):
+        """Initialize the server service - install SteamCMD."""
+        logger.info(
+            "Initializing server service for instance %s",
+            self._instance.game_server_instance_id,
+        )
+
+        # Install game server via SteamCMD
+        steam = SteamCMD(self._server_directory)
+        try:
+            steam.install(app_id=self._game_server.app_id)
+        except Exception as e:
+            logger.exception("Failed to install game server: %s", e)
+            raise RuntimeError(
+                f"Failed to install game server {self._game_server.app_id}: {e}"
+            ) from e
+
+        # Start the game server process
+        try:
+            # TODO - temp workaround for env var, need to come from config
+            extra_env = env_list_to_dict(self._config.env_var)
+            logger.info("extra_env=%s", extra_env)
+            self._proc.run(extra_env=extra_env)
+        except Exception as e:
+            logger.exception(e)
+            raise RuntimeError(
+                f"Failed to start game server process for {self._game_server.app_id}: {e}"
+            ) from e
+
+    def _do_work(self, log_still_running: bool):
+        """Main work loop - read process output and check status."""
+        # Read process output
+        if hasattr(self, "_proc"):
+            self._proc.read_output()
+
+            # Check if process has stopped
+            status = self._proc.status
+            if status in (ProcessBuilderStatus.STOPPED, ProcessBuilderStatus.FAILED):
+                logger.info("Process has stopped, initiating shutdown")
+                self._trigger_internal_shutdown()
+
+    def _handle_commands(self, commands: list[Command]):
+        """Handle incoming commands."""
+        for command in commands:
+            self.execute_command(command)
+
+    def execute_command(self, command: Command) -> None:
+        # start commands can't be handled here, they are handled by the worker service
+        # but perhaps oneday it could be re-used for a restart?
+        if command.command_type == CommandType.STDIN:
+            self.__handle_stdin_command(command)
+        elif command.command_type == CommandType.STOP:
+            self.__handle_stop_command()
+        else:
+            logger.warning(
+                "unsupported command type: %s for %s",
+                command.command_type,
                 self.__class__.__name__,
-                StatusType.CREATED,
-                game_server_instance_id=self._instance.game_server_instance_id,
-            ),
-        )
+            )
 
-    @property
-    def instance(self) -> GameServerInstance:
-        return self._instance
+    def _shutdown(self):
+        """Shutdown the server service."""
+        # TODO kill
+        # TODO - move the prevent double shutdown check to the base class
+        if not self.is_shutdown:
+            logger.info(
+                "shutting down instance %s", self._instance.game_server_instance_id
+            )
 
-    @staticmethod
-    def _generate_common_queue_prefix(game_server_instance_id: int) -> str:
-        return f"game-server-instance.{game_server_instance_id}"
+            # Capture instance ID before shutdown for status publishing
+            instance_id = self._instance.game_server_instance_id
 
-    @staticmethod
-    def generate_command_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id),
-            "cmd",
-        )
+            if hasattr(self, "_proc"):
+                self._proc.stop()
+            self._instance = self._wapi.game_server_instance_shutdown(self._instance)
 
-    @staticmethod
-    def generate_status_queue_name(game_server_instance_id: int):
-        return add_routing_key_prefix(
-            Server._generate_common_queue_prefix(game_server_instance_id), "status"
-        )
-
-    @property
-    def command_routing_key(self) -> str:
-        return self.generate_command_queue_name(self._instance.game_server_instance_id)
-
-    @property
-    def status_routing_key(self) -> str:
-        return self.generate_status_queue_name(self._instance.game_server_instance_id)
-
-    # def add_stdin(self, input: str):
-    #     # TODO check if pb is running
-    #     self._pb.stdin_queue.put(input)
-
-    # def stop(self):
-    #     status = self._pb.status
-    #     if status not in (ProcessBuilderStatus.INIT, ProcessBuilderStatus.RUNNING):
-    #         logger.info("invalid stop received, current_status = %s", status)
-    #         return
-
-    @property
-    def is_shutdown(self) -> bool:
-        return self._instance.end_date is not None
+            logger.info(
+                "shutdown complete for instance %s",
+                instance_id,
+            )
 
     def __handle_stop_command(self) -> None:
-        if not self.__is_started:
-            logger.error(
-                "stop command received before start command, current_status = %s",
-                self._proc.status,
-            )
-            raise RuntimeError("server not started, cannot stop")
-        if self.__is_stopped:
-            logger.error(
-                "stop command received after stop command, current_status = %s",
-                self._proc.status,
-            )
-            raise RuntimeError("server already stopped, cannot stop again")
         logger.info(
             "stop command received for instance %s",
             self._instance.game_server_instance_id,
         )
-        self.__is_stopped = True
+        self._trigger_internal_shutdown()
 
     def __handle_stdin_command(self, command: Command) -> None:
         if len(command.command_args) < 2:
@@ -166,113 +194,3 @@ class Server:
             stdin_command,
         )
         self._proc.write_stdin(stdin_command)
-
-    def _shutdown(self):
-        # TODO kill
-        if not self.is_shutdown:
-            if not self.__is_stopped:
-                logger.warning("shutdown called before stop command")
-            logger.info(
-                "shutting down instance %s", self._instance.game_server_instance_id
-            )
-
-            # Capture instance ID before shutdown for status publishing
-            instance_id = self._instance.game_server_instance_id
-
-            self._proc.stop()
-            self._instance = self._wapi.game_server_instance_shutdown(self._instance)
-            self._command_message_provider.shutdown()
-
-            # Publish COMPLETE status
-            self._status_publisher.publish(
-                status=StatusInfo.create(
-                    self.__class__.__name__,
-                    StatusType.COMPLETE,
-                    game_server_instance_id=instance_id,
-                ),
-            )
-            self._status_publisher.shutdown()
-
-            logger.info(
-                "shutdown complete for instance %s",
-                instance_id,
-            )
-
-    def execute_command(self, command: Command) -> None:
-        if command.command_type == CommandType.STOP:
-            self.__handle_stop_command()
-        elif command.command_type == CommandType.START:
-            # do nothing, started through service
-            logger.info(
-                "received unnecessary start command for instance %s, ignoring",
-                self._instance.game_server_instance_id,
-            )
-            pass
-        elif command.command_type == CommandType.STDIN:
-            self.__handle_stdin_command(command)
-        else:
-            logger.warning("unknown command type %s", command.command_type)
-
-    def run(self, should_update: bool = True) -> Self:
-        if self.__is_started:
-            logger.error(
-                "duplicate start command received, current_status = %s",
-                self._proc.status,
-            )
-            raise RuntimeError("server already started, cannot start again")
-        self.__is_started = True
-        logger.info("instance %s starting", self._instance.game_server_instance_id)
-
-        # Publish INITIALIZING status
-        self._status_publisher.publish(
-            status=StatusInfo.create(
-                self.__class__.__name__,
-                StatusType.INITIALIZING,
-                game_server_instance_id=self._instance.game_server_instance_id,
-            ),
-        )
-
-        if should_update:
-            steam = SteamCMD(self._server_directory)
-            steam.install(app_id=self._game_server.app_id)
-
-        try:
-            # TODO - temp workaround for env var, need to come from config
-            extra_env = env_list_to_dict(self._config.env_var)
-            logger.info("extra_env=%s", extra_env)
-            self._proc.run(extra_env=extra_env)
-
-            # Publish RUNNING status once process is started
-            self._status_publisher.publish(
-                status=StatusInfo.create(
-                    self.__class__.__name__,
-                    StatusType.RUNNING,
-                    game_server_instance_id=self._instance.game_server_instance_id,
-                ),
-            )
-        except Exception as e:
-            logger.exception(e)
-            self._shutdown()
-            raise
-
-        status = self._proc.status
-        while (
-            status not in (ProcessBuilderStatus.STOPPED, ProcessBuilderStatus.FAILED)
-            and not self.__is_stopped
-        ):
-            # TODO - make this available through property or something
-            self._proc.read_output()
-            commands = self._command_message_provider.get_commands()
-            if len(commands) > 0:
-                logger.info("commands received: %s", commands)
-                for command in commands:
-                    self.execute_command(command)
-
-            status = self._proc.status
-
-        # do it one more time to clean up anything leftover
-        self._proc.read_output()
-        logger.info("instance %s has exited", self._instance.game_server_instance_id)
-        self._shutdown()
-
-        return self

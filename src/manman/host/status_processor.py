@@ -5,11 +5,30 @@ from datetime import datetime, timedelta, timezone
 from amqpstorm import Connection
 
 from manman.models import (
-    StatusInfo,
+    ExternalStatusInfo,
     StatusType,
 )
 from manman.repository.database import DatabaseRepository
-from manman.repository.rabbitmq import RabbitStatusPublisher, RabbitStatusSubscriber
+from manman.repository.message.pub import ExternalStatusInfoPubService
+from manman.repository.message.sub import (
+    ExternalStatusSubService,
+    InternalStatusSubService,
+)
+from manman.repository.rabbitmq.config import (
+    BindingConfig,
+    EntityRegistry,
+    ExchangeRegistry,
+    MessageTypeRegistry,
+    QueueConfig,
+    RoutingKeyConfig,
+    TopicWildcard,
+)
+from manman.repository.rabbitmq.publisher import (
+    RabbitPublisher,
+)
+from manman.repository.rabbitmq.subscriber import (
+    RabbitSubscriber,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,41 +47,82 @@ class StatusEventProcessor:
     and external consumers should be able to subscribe to status.
     """
 
+    __WORKER_KEY: RoutingKeyConfig = RoutingKeyConfig(
+        entity=EntityRegistry.WORKER,
+        identifier=TopicWildcard.ANY,
+        type=MessageTypeRegistry.STATUS,
+    )
+
+    __GAME_SERVER_INSTANCE_KEY: RoutingKeyConfig = RoutingKeyConfig(
+        entity=EntityRegistry.GAME_SERVER_INSTANCE,
+        identifier=TopicWildcard.ANY,
+        type=MessageTypeRegistry.STATUS,
+    )
+
+    __SUPPORTED_ROUTING_KEYS: list[RoutingKeyConfig] = [
+        __WORKER_KEY,
+        __GAME_SERVER_INSTANCE_KEY,
+    ]
+
+    def __build_internal_status_subscriber(self) -> InternalStatusSubService:
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+            routing_keys=StatusEventProcessor.__SUPPORTED_ROUTING_KEYS,
+        )
+        queue_config = QueueConfig(
+            name="status-processor-internal-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
+
+        rmq = RabbitSubscriber(self._rabbitmq_connection, binding_config, queue_config)
+        return InternalStatusSubService(rmq)
+
+    def __build_external_status_publisher(
+        self, key: RoutingKeyConfig
+    ) -> ExternalStatusInfoPubService:
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.EXTERNAL_SERVICE_EVENT,
+            routing_keys=[key],
+        )
+
+        rmq = RabbitPublisher(self._rabbitmq_connection, binding_config)
+        return ExternalStatusInfoPubService(rmq)
+
+    def __build_external_status_subscriber(self) -> ExternalStatusSubService:
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.EXTERNAL_SERVICE_EVENT,
+            routing_keys=StatusEventProcessor.__SUPPORTED_ROUTING_KEYS,
+        )
+        queue_config = QueueConfig(
+            name="status-processor-external-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
+        rmq = RabbitSubscriber(self._rabbitmq_connection, binding_config, queue_config)
+        return ExternalStatusSubService(rmq)
+
     def __init__(self, rabbitmq_connection: Connection):
         self._rabbitmq_connection = rabbitmq_connection
         self._is_running = False
 
         # Initialize database repository
+        # TODO status repository
         self._db_repository = DatabaseRepository()
 
-        # Subscribe to status messages from both worker and server exchanges
-        # Using the enhanced RabbitStatusSubscriber to consume from multiple exchanges
-        self._internal_status_subscriber = RabbitStatusSubscriber(
-            connection=self._rabbitmq_connection,
-            exchanges_config={
-                "worker": "status.worker-instance.*",
-                "server": "status.game-server-instance.*",
-            },
-            queue_name="status-processor-internal-queue",
+        self._internal_status_subscriber = self.__build_internal_status_subscriber()
+        self._external_worker_status_publisher = self.__build_external_status_publisher(
+            StatusEventProcessor.__WORKER_KEY
         )
-
-        # Publisher for sending worker lost notifications
-        # Use "worker" exchange for consistency with worker status messages
-
-        # NOTE: consumers of this data should be using the external exchagne
-        # and subscribe to the topics they want
-        self._external_status_publisher = RabbitStatusPublisher(
-            connection=self._rabbitmq_connection,
-            exchange="external",
-            routing_key_base="external.status",
+        self._external_gsi_status_publisher = self.__build_external_status_publisher(
+            StatusEventProcessor.__GAME_SERVER_INSTANCE_KEY
         )
+        self._external_status_subscriber = self.__build_external_status_subscriber()
 
-        self._external_status_consumer = RabbitStatusSubscriber(
-            connection=self._rabbitmq_connection,
-            exchange="external",
-            routing_key="external.status.*.*",
-            queue_name="status-processor-external-queue",
-        )
+        # "status-processor-external-queue"
+        # "status-processor-internal-queue"
 
         logger.info("Status Event Processor initialized")
 
@@ -136,19 +196,31 @@ class StatusEventProcessor:
         except Exception as e:
             logger.exception("Error checking worker heartbeats: %s", e)
 
+    def _send_external_status(self, external_status_info: ExternalStatusInfo):
+        if external_status_info.game_server_instance_id is not None:
+            # Publish to game server instance exchange
+            self._external_gsi_status_publisher.publish_external_status(
+                external_status_info
+            )
+        if external_status_info.worker_id is not None:
+            # Publish to worker exchange
+            self._external_worker_status_publisher.publish_external_status(
+                external_status_info
+            )
+
     def _send_worker_lost_notification(self, worker_id: int):
         """Send a worker lost notification to external queue"""
         try:
             # Create a status message indicating the worker is lost
-            lost_status = StatusInfo(
+            lost_status = ExternalStatusInfo(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
                 as_of=datetime.now(timezone.utc),
                 worker_id=worker_id,
             )
 
-            self._external_status_publisher.publish_external(lost_status)
-            self._db_repository.write_status_to_database(lost_status)
+            self._send_external_status(lost_status)
+            self._db_repository.write_external_status_to_database(lost_status)
             logger.info("Worker lost notification sent for worker %s", worker_id)
 
         except Exception as e:
@@ -160,15 +232,15 @@ class StatusEventProcessor:
         """Send a game server lost notification to external queue"""
         try:
             # Create a status message indicating the game server instance is lost
-            lost_status = StatusInfo(
+            lost_status = ExternalStatusInfo(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
                 as_of=datetime.now(timezone.utc),
                 game_server_instance_id=game_server_instance_id,
             )
 
-            self._external_status_publisher.publish_external(lost_status)
-            self._db_repository.write_status_to_database(lost_status)
+            self._send_external_status(lost_status)
+            self._db_repository.write_external_status_to_database(lost_status)
             logger.info(
                 "Game server lost notification sent for instance %s",
                 game_server_instance_id,
@@ -189,35 +261,39 @@ class StatusEventProcessor:
         This is not the best way to do this, but it's the way it's being done for now.
         """
         try:
-            status_messages = self._internal_status_subscriber.get_status_messages()
-            for status_message in status_messages:
-                status_info = status_message.status_info
+            internal_status_infos = (
+                self._internal_status_subscriber.get_internal_statuses()
+            )
+            for internal_status_info in internal_status_infos:
                 logger.info(
-                    "Status update received: class=%s, status=%s, timestamp=%s",
-                    status_info.class_name,
-                    status_info.status_type,
-                    status_info.as_of,
+                    "Internal status update received: type=%s id=%s, status=%s, timestamp=%s",
+                    internal_status_info.entity_type,
+                    internal_status_info.identifier,
+                    internal_status_info.status_type,
+                    internal_status_info.as_of,
                 )
-                self._external_status_publisher.publish_external(status_info)
-                self._db_repository.write_status_to_database(status_info)
+                external_status_info = ExternalStatusInfo.create_from_internal(
+                    internal_status_info
+                )
+                self._send_external_status(external_status_info)
+                self._db_repository.write_external_status_to_database(
+                    external_status_info
+                )
         except Exception as e:
             logger.exception("Error processing status messages: %s", e)
 
     def _process_external_status_messages(self):
         """Process available status messages from the external queue."""
         try:
-            status_messages = self._external_status_consumer.get_status_messages()
-            for status_message in status_messages:
-                status_info = status_message.status_info
-                logger.info(
-                    "External status update received: class=%s, status=%s, timestamp=%s",
-                    status_info.class_name,
-                    status_info.status_type,
-                    status_info.as_of,
-                )
+            external_status_infos = (
+                self._external_status_subscriber.get_external_status_infos()
+            )
+            for external_status_info in external_status_infos:
                 # do not write to database here, just consume it as an example
-                # should match DB
-                logger.info("processing external status message %s", status_info)
+                logger.info(
+                    "this is a sample processor for external status message %s",
+                    external_status_info,
+                )
         except Exception as e:
             logger.exception("Error processing external status messages: %s", e)
 
@@ -225,12 +301,4 @@ class StatusEventProcessor:
         """Clean shutdown of the processor."""
         logger.info("Shutting down Status Event Processor")
         self._is_running = False
-
-        if self._internal_status_subscriber:
-            self._internal_status_subscriber.shutdown()
-        if self._external_status_publisher:
-            self._external_status_publisher.shutdown()
-        if self._external_status_consumer:
-            self._external_status_consumer.shutdown()
-
         logger.info("Status Event Processor shutdown complete")

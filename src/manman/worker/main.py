@@ -30,13 +30,49 @@ def start(
     install_directory = os.path.abspath(install_directory)
     # todo - re-add authcz
     service = WorkerService(
-        install_directory,
-        host_url,
-        None,
-        None,
         rabbitmq_connection=get_rabbitmq_connection(),
+        install_directory=install_directory,
+        host_url=host_url,
+        sa_client_id=None,
+        sa_client_secret=None,
     )
     service.run()
+
+
+@app.command()
+def dev():
+    from manman.repository.rabbitmq.config import EntityRegistry
+    from manman.worker.abstract_service import ManManService
+
+    class DevService(ManManService):
+        @property
+        def service_entity_type(self):
+            return EntityRegistry.WORKER
+
+        @property
+        def identifier(self):
+            return "dev_service"
+
+        def __init__(self, connection: amqpstorm.Connection):
+            super().__init__(connection)
+
+        def _initialize_service(self):
+            logger.info("DevService setup called")
+
+        def _do_work(self):
+            logger.info("DevService started")
+
+        def _stop_service(self):
+            logger.info("DevService stopped")
+
+        def _handle_commands(self, commands):
+            for command in commands:
+                logger.info(f"DevService received command: {command}")
+
+        def _send_heartbeat(self):
+            logger.info("heartbeat sent from DevService")
+
+    DevService(get_rabbitmq_connection()).run()
 
 
 @app.callback()
