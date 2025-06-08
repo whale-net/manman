@@ -3,9 +3,17 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from manman.exceptions import WorkerAlreadyClosedException
-from manman.models import ExternalStatusInfo, StatusType, Worker
+from manman.models import InternalStatusInfo, StatusType, Worker
 from manman.repository.database import WorkerRepository
-from manman.repository.rabbitmq.publisher import LegacyRabbitStatusPublisher
+from manman.repository.message.pub import InternalStatusInfoPubService
+from manman.repository.rabbitmq.config import (
+    BindingConfig,
+    EntityRegistry,
+    ExchangeRegistry,
+    MessageTypeRegistry,
+    RoutingKeyConfig,
+)
+from manman.repository.rabbitmq.publisher import RabbitPublisher
 from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
@@ -56,20 +64,28 @@ async def worker_shutdown_other(instance: Worker):
 
         # Send COMPLETE status to worker status queue for each shutdown worker
         for worker in lost_workers:
-            worker_publisher = LegacyRabbitStatusPublisher(
+            rmq_publisher = RabbitPublisher(
                 connection=get_rabbitmq_connection(),
-                exchanges_config={
-                    "worker": [f"status.worker-instance.{worker.worker_id}"]
-                },
+                binding_configs=BindingConfig(
+                    exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+                    routing_keys=[
+                        RoutingKeyConfig(
+                            entity=EntityRegistry.WORKER,
+                            identifier=str(worker.worker_id),
+                            type=MessageTypeRegistry.STATUS,
+                        )
+                    ],
+                ),
             )
-            worker_publisher.publish(
-                ExternalStatusInfo.create(
-                    class_name="WorkerDal",
+            pub_svc = InternalStatusInfoPubService(rmq_publisher)
+
+            pub_svc.publish_status(
+                InternalStatusInfo.create(
+                    entity_type=EntityRegistry.WORKER,
+                    identifier=str(worker.worker_id),
                     status_type=StatusType.COMPLETE,
-                    worker_id=worker.worker_id,
                 )
             )
-            worker_publisher.shutdown()
 
 
 # heartbeat

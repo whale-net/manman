@@ -52,4 +52,5 @@ class CommandPubService:
 
         :param command: The command to publish.
         """
-        self._publisher.publish(command)
+        message = command.model_dump_json()
+        self._publisher.publish(message)
