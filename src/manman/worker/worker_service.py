@@ -12,7 +12,7 @@ from manman.models import (
 
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq.config import EntityRegistrar
+from manman.repository.rabbitmq.config import EntityRegistry
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.abstract_service import ManManService
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 class WorkerService(ManManService):
     @property
-    def service_entity_type(self) -> EntityRegistrar:
-        return EntityRegistrar.WORKER
+    def service_entity_type(self) -> EntityRegistry:
+        return EntityRegistry.WORKER
 
     @property
     def identifier(self) -> str:

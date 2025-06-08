@@ -58,9 +58,9 @@ class RabbitSubscriber(MessageSubscriberInterface):
         for binding_config in self._binding_configs:
             for routing_key in binding_config.routing_keys:
                 self._channel.queue.bind(
-                    exchange=binding_config.exchange.value,
+                    exchange=binding_config.exchange,
                     queue=queue_config.actual_queue_name,
-                    routing_key=routing_key,
+                    routing_key=str(routing_key),
                 )
                 logger.info(
                     "Queue %s bound to exchange %s with routing key '%s'",
@@ -90,6 +90,7 @@ class RabbitSubscriber(MessageSubscriberInterface):
         """
         self._internal_message_queue.put(message.body)
         message.ack()
+        logger.info("Message received and acknowledged: %s", message.delivery_tag)
 
     def consume(self) -> List[str]:
         """
@@ -139,6 +140,16 @@ class RabbitSubscriber(MessageSubscriberInterface):
                 logger.info("Channel closed.")
         except Exception as e:
             logger.exception("Error closing channel: %s", e)
+
+    def __del__(self) -> None:
+        """
+        Destructor to ensure the channel is closed when the object is deleted.
+        """
+        try:
+            self.shutdown()
+        except Exception:
+            # Suppress exceptions during cleanup to avoid issues during interpreter shutdown
+            pass
 
 
 class LegacyRabbitCommandSubscriber(LegacyMessageSubscriber):
@@ -263,7 +274,7 @@ class LegacyRabbitCommandSubscriber(LegacyMessageSubscriber):
             logger.exception("Error closing channel: %s", e)
 
 
-class RabbitStatusSubscriber:
+class LegacyRabbitStatusSubscriber:
     """
     A message subscriber that retrieves status messages from a RabbitMQ queue.
 

@@ -70,8 +70,8 @@ class TestStatusProcessor:
             assert processor is not None
             assert processor._rabbitmq_connection == mock_rabbitmq_connection
             assert processor._is_running is False
-            assert processor._internal_status_subscriber == mock_subscriber
-            assert processor._external_status_publisher == mock_publisher
+            assert processor._legacy_internal_status_subscriber == mock_subscriber
+            assert processor._legacy_external_status_publisher == mock_publisher
 
     def test_status_message_handling(self, mock_rabbitmq_connection):
         """Test status message handling without actual database/RabbitMQ."""
@@ -90,7 +90,7 @@ class TestStatusProcessor:
         with patch.object(
             processor._db_repository, "write_status_to_database"
         ) as mock_write:
-            processor._db_repository.write_status_to_database(status_info)
+            processor._db_repository.write_external_status_to_database(status_info)
 
             # Verify the database write method was called with correct parameters
             mock_write.assert_called_once_with(status_info)
@@ -132,7 +132,8 @@ class TestStatusProcessor:
                 with patch.object(processor, "_external_status_publisher"):
                     # Use the internal message processing which has exception handling
                     with patch.object(
-                        processor._internal_status_subscriber, "get_status_messages"
+                        processor._legacy_internal_status_subscriber,
+                        "get_status_messages",
                     ) as mock_get_messages:
                         from manman.repository.rabbitmq.abstract_legacy import (
                             StatusMessage,
@@ -167,7 +168,7 @@ class TestStatusProcessor:
                 mock_session = Mock()
                 mock_session_ctx.return_value.__enter__.return_value = mock_session
 
-                processor._db_repository.write_status_to_database(status_info)
+                processor._db_repository.write_external_status_to_database(status_info)
 
                 # Get the StatusInfo object that was passed to session.add
                 mock_session.add.assert_called_once()

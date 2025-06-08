@@ -10,7 +10,7 @@ from unittest.mock import Mock, call, patch
 
 from manman.models import ExternalStatusInfo, StatusType
 from manman.repository.rabbitmq.abstract_legacy import StatusMessage
-from manman.repository.rabbitmq.subscriber import RabbitStatusSubscriber
+from manman.repository.rabbitmq.subscriber import LegacyRabbitStatusSubscriber
 
 
 class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
@@ -34,7 +34,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         routing_key = "worker.*"
 
         # Act
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchange=exchange,
             routing_key=routing_key,
@@ -56,7 +56,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         exchanges_config = {"worker-status": "worker.*", "server-status": "server.*"}
 
         # Act
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchanges_config=exchanges_config,
             queue_name="test-queue",
@@ -86,7 +86,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         }
 
         # Act
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchanges_config=exchanges_config,
             queue_name="test-queue",
@@ -136,7 +136,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         }
 
         # Act
-        RabbitStatusSubscriber(
+        LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchanges_config=exchanges_config,
             queue_name="test-queue",
@@ -172,7 +172,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         exchanges_config = {"new-exchange": "new.routing.key"}
 
         # Act
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchange="old-exchange",  # This should be ignored
             routing_key="old.key",  # This should be ignored
@@ -195,7 +195,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         """Test that missing both exchange and exchanges_config raises ValueError."""
         # Act & Assert
         with self.assertRaises(ValueError) as context:
-            RabbitStatusSubscriber(
+            LegacyRabbitStatusSubscriber(
                 connection=self.mock_connection, queue_name="test-queue"
             )
 
@@ -215,7 +215,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         }
 
         # Act
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchanges_config=exchanges_config,
             queue_name="test-queue",
@@ -231,7 +231,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
     def test_message_handling_with_routing_key(self, mock_thread):
         """Test that messages are handled correctly and routing keys are captured."""
         # Arrange
-        subscriber = RabbitStatusSubscriber(
+        subscriber = LegacyRabbitStatusSubscriber(
             connection=self.mock_connection,
             exchanges_config={"test-exchange": "test.*"},
             queue_name="test-queue",

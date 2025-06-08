@@ -7,7 +7,11 @@ from amqpstorm import Channel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, desc, select
 
-from manman.host.api.shared.injectors import inject_rmq_channel
+from manman.host.api.shared.injectors import rmq_chan
+
+# TODO - make use of these
+# from manman.repository.message.pub import CommandPubService
+# from manman.repository.rabbitmq.publisher import RabbitPublisher
 from manman.host.api.shared.models import (
     CurrentInstanceResponse,  # TODO - move this
     StdinCommandRequest,
@@ -97,10 +101,10 @@ async def get_game_servers() -> list[GameServerConfig]:
         return results
 
 
-@router.post("/gameserver/{id}/start", dependencies=[Depends(inject_rmq_channel)])
+@router.post("/gameserver/{id}/start", dependencies=[Depends(rmq_chan)])
 async def start_game_server(
     id: int,
-    channel: Annotated[Channel, Depends(inject_rmq_channel)],
+    channel: Annotated[Channel, Depends(rmq_chan)],
 ):
     """
     Given the game server config ID, start a game server instance
@@ -139,10 +143,10 @@ async def start_game_server(
         }
 
 
-@router.post("/gameserver/{id}/stop", dependencies=[Depends(inject_rmq_channel)])
+@router.post("/gameserver/{id}/stop", dependencies=[Depends(rmq_chan)])
 async def stop_game_server(
     id: int,
-    channel: Annotated[Channel, Depends(inject_rmq_channel)],
+    channel: Annotated[Channel, Depends(rmq_chan)],
 ):
     """
     Given the game server config ID, stop a game server instance
@@ -184,10 +188,10 @@ async def stop_game_server(
         }
 
 
-@router.post("/gameserver/{id}/stdin", dependencies=[Depends(inject_rmq_channel)])
+@router.post("/gameserver/{id}/stdin", dependencies=[Depends(rmq_chan)])
 async def stdin_game_server(
     id: int,
-    channel: Annotated[Channel, Depends(inject_rmq_channel)],
+    channel: Annotated[Channel, Depends(rmq_chan)],
     body: StdinCommandRequest,
 ):
     """
@@ -245,12 +249,10 @@ async def get_active_game_server_instances(
         return CurrentInstanceResponse.from_instances(instances)
 
 
-@router.post(
-    "/gameserver/instance/{id}/stdin", dependencies=[Depends(inject_rmq_channel)]
-)
+@router.post("/gameserver/instance/{id}/stdin", dependencies=[Depends(rmq_chan)])
 async def stdin_game_server_instance(
     id: int,
-    channel: Annotated[Channel, Depends(inject_rmq_channel)],
+    channel: Annotated[Channel, Depends(rmq_chan)],
     body: StdinCommandRequest,
 ):
     """

@@ -7,13 +7,13 @@ from amqpstorm import Connection
 
 from manman.models import Command, InternalStatusInfo, StatusType
 from manman.repository.message.pub import (
-    StatusInfoPubService,
+    InternalStatusInfoPubService,
 )
 from manman.repository.message.sub import CommandSubService
 from manman.repository.rabbitmq.config import (
     BindingConfig,
-    EntityRegistrar,
-    ExchangeRegistrar,
+    EntityRegistry,
+    ExchangeRegistry,
     MessageTypeRegistry,
     QueueConfig,
     RoutingKeyConfig,
@@ -29,7 +29,7 @@ class ManManService(ABC):
     Abstract base class services with lifecycle and command consumption capabilities.
     """
 
-    RMQ_EXCHANGE: ExchangeRegistrar = ExchangeRegistrar.INTERNAL_SERVICE_EVENT
+    RMQ_EXCHANGE: ExchangeRegistry = ExchangeRegistry.INTERNAL_SERVICE_EVENT
 
     # this is surely too short, but it is just a heartbeat
     HEARTBEAT_INTERVAL: timedelta = timedelta(seconds=2)
@@ -37,7 +37,7 @@ class ManManService(ABC):
 
     @property
     @abstractmethod
-    def service_entity_type(self) -> EntityRegistrar:
+    def service_entity_type(self) -> EntityRegistry:
         """
         Get the entity type for the service.
         """
@@ -99,7 +99,7 @@ class ManManService(ABC):
     def _legacy_extra_command_routing_key(self) -> list[str]:
         return []
 
-    def __build_status_publisher(self) -> StatusInfoPubService:
+    def __build_status_publisher(self) -> InternalStatusInfoPubService:
         status_binding = BindingConfig(
             exchange=self.RMQ_EXCHANGE,
             routing_keys=[
@@ -111,7 +111,7 @@ class ManManService(ABC):
             connection=self._rabbitmq_connection,
             binding_configs=status_binding,
         )
-        return StatusInfoPubService(publisher=rabbit_publisher)
+        return InternalStatusInfoPubService(publisher=rabbit_publisher)
 
     def __build_command_consumer(self) -> CommandSubService:
         command_binding = BindingConfig(
@@ -244,10 +244,9 @@ class ManManService(ABC):
             logger.exception(
                 "Error during shutdown of service %s: %s", self.__class__.__name__, e
             )
-        finally:
-            self._status_pub_service.publish_status(
-                internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
-            )
+        self._status_pub_service.publish_status(
+            internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
+        )
 
     @abstractmethod
     def _send_heartbeat(self):

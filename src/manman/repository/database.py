@@ -135,13 +135,17 @@ class DatabaseRepository:
             )
             return session.exec(stmt).all()
 
-    def write_status_to_database(self, status_info: ExternalStatusInfo) -> None:
+    def write_external_status_to_database(
+        self, status_info: ExternalStatusInfo
+    ) -> None:
         """
         Write a status message to the database.
 
         Args:
             status_info: The StatusInfo object to write to the database
         """
+        if status_info.status_info_id is not None and status_info.status_info_id < 0:
+            status_info.status_info_id = None  # Ensure ID is None for new records
         with self._get_session_context() as session:
             session.add(status_info)
             session.commit()

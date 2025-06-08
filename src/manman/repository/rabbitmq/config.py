@@ -1,57 +1,53 @@
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
+from typing import Optional, Union
 
 
-class ExchangeRegistrar(Enum):
+class ExchangeRegistry(StrEnum):
     # NOTE: for now, all durable topic exchanges
     INTERNAL_SERVICE_EVENT = "internal_service_events"
     EXTERNAL_SERVICE_EVENT = "external_service_events"
 
 
-class EntityRegistrar(Enum):
+class EntityRegistry(StrEnum):
     WORKER = "worker"
     GAME_SERVER_INSTANCE = "game_server_instance"
 
 
-class MessageTypeRegistry(Enum):
+class MessageTypeRegistry(StrEnum):
     STATUS = "status"
     COMMAND = "command"
 
 
-class TopicWildcard(Enum):
+class TopicWildcard(StrEnum):
     ALL = "#"
     ANY = "*"
 
 
 @dataclass
 class RoutingKeyConfig:
-    entity: EntityRegistrar
-    identifier: str
-    type: MessageTypeRegistry
-    subtype: Optional[str] = None
+    entity: Union[EntityRegistry, TopicWildcard]
+    identifier: Union[str, TopicWildcard]
+    type: Union[MessageTypeRegistry, TopicWildcard]
+    subtype: Union[str, TopicWildcard, None] = None
 
-    def build_key(
-        self,
-        entity_wildcard: Optional[TopicWildcard] = None,
-        identifier_wildcard: Optional[TopicWildcard] = None,
-        type_wildcard: Optional[TopicWildcard] = None,
-        subtype_wildcard: Optional[TopicWildcard] = None,
-    ) -> str:
-        entity_str = entity_wildcard.value if entity_wildcard else self.entity.value
-        identifier_str = (
-            identifier_wildcard.value if identifier_wildcard else self.identifier
-        )
-        type_str = type_wildcard.value if type_wildcard else self.type.value
+    def build_key(self) -> str:
+        entity_str = str(self.entity)
+        identifier_str = str(self.identifier)
+        type_str = str(self.type)
 
-        if subtype_wildcard:
-            subtype_str = f".{subtype_wildcard}"
-        elif self.subtype:
-            subtype_str = f".{self.subtype}"
-        else:
+        if self.subtype is None:
             subtype_str = ""
+        else:
+            subtype_str = f".{self.subtype}"
 
         return f"{entity_str}.{identifier_str}.{type_str}{subtype_str}"
+
+    def __str__(self) -> str:
+        return self.build_key()
+
+    # @classmethod
+    # def from_string(cls, key: str) -> "RoutingKeyConfig":
 
 
 @dataclass
@@ -71,5 +67,5 @@ class QueueConfig:
 
 @dataclass
 class BindingConfig:
-    exchange: ExchangeRegistrar
+    exchange: ExchangeRegistry
     routing_keys: list[RoutingKeyConfig]

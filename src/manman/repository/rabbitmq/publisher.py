@@ -50,13 +50,23 @@ class RabbitPublisher(MessagePublisherInterface):
                 self._channel.basic.publish(
                     body=message,
                     exchange=binding_config.exchange.value,
-                    routing_key=routing_key,
+                    routing_key=str(routing_key),
                 )
                 logger.debug(
                     "Message published to exchange %s with routing key %s",
                     binding_config.exchange.value,
                     routing_key,
                 )
+
+    def __del__(self) -> None:
+        """
+        Destructor to ensure the channel is closed when the object is deleted.
+        """
+        try:
+            self.shutdown()
+        except Exception:
+            # Suppress exceptions during cleanup to avoid issues during interpreter shutdown
+            pass
 
     # TODO - move this to common base rabbit connection wrapper class or something
     def shutdown(self) -> None:

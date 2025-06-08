@@ -13,7 +13,7 @@ import alembic
 import alembic.command
 import alembic.config
 from manman.logging_config import get_uvicorn_log_config, setup_logging
-from manman.repository.rabbitmq.config import ExchangeRegistrar
+from manman.repository.rabbitmq.config import ExchangeRegistry
 from manman.util import (
     create_rabbitmq_vhost,
     get_rabbitmq_ssl_options,
@@ -73,7 +73,7 @@ def _init_common_services(
     rmq_connection = get_rabbitmq_connection()
 
     exchanges = [Server.RMQ_EXCHANGE]
-    for exchange in ExchangeRegistrar:
+    for exchange in ExchangeRegistry:
         exchanges.append(exchange.value)
     for exchange in exchanges:
         rmq_connection.channel().exchange.declare(

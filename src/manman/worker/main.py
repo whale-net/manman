@@ -41,13 +41,13 @@ def start(
 
 @app.command()
 def dev():
-    from manman.repository.rabbitmq.config import EntityRegistrar
+    from manman.repository.rabbitmq.config import EntityRegistry
     from manman.worker.abstract_service import ManManService
 
     class DevService(ManManService):
         @property
         def service_entity_type(self):
-            return EntityRegistrar.WORKER
+            return EntityRegistry.WORKER
 
         @property
         def identifier(self):

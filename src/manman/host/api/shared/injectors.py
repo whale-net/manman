@@ -1,5 +1,6 @@
 from typing import Annotated
 
+from amqpstorm import Channel, Connection
 from fastapi import Depends, Header, HTTPException
 
 from manman.repository.api_client import AccessToken
@@ -32,5 +33,12 @@ async def has_basic_worker_authz(
         raise HTTPException(status_code=401, detail="access token missing proper role")
 
 
-async def inject_rmq_channel():
-    return get_rabbitmq_connection().channel()
+async def rmq_conn() -> Connection:
+    """
+    Dependency to inject a RabbitMQ connection.
+    """
+    return get_rabbitmq_connection()
+
+
+async def rmq_chan(connection: Annotated[Connection, Depends(rmq_conn)]) -> Channel:
+    return connection.channel()
