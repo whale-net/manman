@@ -1,20 +1,27 @@
 """
-Test RabbitStatusSubscriber multiple exchanges functionality.
+Test RabbitSubscriber multiple exchanges functionality.
 
-This module tests the enhanced RabbitStatusSubscriber that supports
+This module tests the RabbitSubscriber that supports
 consuming from multiple exchanges with different routing keys.
 """
 
 import unittest
 from unittest.mock import Mock, call, patch
 
-from manman.models import ExternalStatusInfo, StatusType
-from manman.repository.rabbitmq.abstract_legacy import StatusMessage
-from manman.repository.rabbitmq.subscriber import LegacyRabbitStatusSubscriber
+from manman.repository.rabbitmq.config import (
+    BindingConfig,
+    EntityRegistry,
+    ExchangeRegistry,
+    MessageTypeRegistry,
+    QueueConfig,
+    RoutingKeyConfig,
+    TopicWildcard,
+)
+from manman.repository.rabbitmq.subscriber import RabbitSubscriber
 
 
-class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
-    """Test cases for RabbitStatusSubscriber with multiple exchanges."""
+class TestRabbitSubscriberMultipleExchanges(unittest.TestCase):
+    """Test cases for RabbitSubscriber with multiple exchanges."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -27,239 +34,193 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         self.mock_channel.basic.consume.return_value = "consumer-tag-123"
 
     @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_single_exchange_legacy_compatibility(self, mock_thread):
-        """Test that single exchange parameters still work (backward compatibility)."""
+    def test_single_binding_config(self, mock_thread):
+        """Test RabbitSubscriber with single binding configuration."""
         # Arrange
-        exchange = "worker-status"
-        routing_key = "worker.*"
+        routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.WORKER,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
+        )
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+            routing_keys=[routing_key],
+        )
+        queue_config = QueueConfig(
+            name="test-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
 
         # Act
-        subscriber = LegacyRabbitStatusSubscriber(
+        subscriber = RabbitSubscriber(
             connection=self.mock_connection,
-            exchange=exchange,
-            routing_key=routing_key,
-            queue_name="test-queue",
+            binding_configs=binding_config,
+            queue_config=queue_config,
         )
 
         # Assert
-        self.assertEqual(subscriber._exchanges_config, {exchange: routing_key})
+        self.assertEqual(len(subscriber._binding_configs), 1)
+        self.assertEqual(subscriber._binding_configs[0], binding_config)
 
         # Verify queue binding was called correctly
         self.mock_channel.queue.bind.assert_called_once_with(
-            exchange=exchange, queue="test-queue-123", routing_key=routing_key
-        )
-
-    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_multiple_exchanges_with_single_routing_keys(self, mock_thread):
-        """Test multiple exchanges each with a single routing key."""
-        # Arrange
-        exchanges_config = {"worker-status": "worker.*", "server-status": "server.*"}
-
-        # Act
-        subscriber = LegacyRabbitStatusSubscriber(
-            connection=self.mock_connection,
-            exchanges_config=exchanges_config,
-            queue_name="test-queue",
-        )
-
-        # Assert
-        self.assertEqual(subscriber._exchanges_config, exchanges_config)
-
-        # Verify queue binding was called for each exchange
-        expected_calls = [
-            call(
-                exchange="worker-status", queue="test-queue-123", routing_key="worker.*"
-            ),
-            call(
-                exchange="server-status", queue="test-queue-123", routing_key="server.*"
-            ),
-        ]
-        self.mock_channel.queue.bind.assert_has_calls(expected_calls, any_order=True)
-
-    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_multiple_exchanges_with_multiple_routing_keys(self, mock_thread):
-        """Test multiple exchanges with multiple routing keys each."""
-        # Arrange
-        exchanges_config = {
-            "worker-status": ["worker.created", "worker.running", "worker.complete"],
-            "server-status": ["server.initializing", "server.running"],
-        }
-
-        # Act
-        subscriber = LegacyRabbitStatusSubscriber(
-            connection=self.mock_connection,
-            exchanges_config=exchanges_config,
-            queue_name="test-queue",
-        )
-
-        # Assert
-        self.assertEqual(subscriber._exchanges_config, exchanges_config)
-
-        # Verify queue binding was called for each exchange/routing_key combination
-        expected_calls = [
-            call(
-                exchange="worker-status",
-                queue="test-queue-123",
-                routing_key="worker.created",
-            ),
-            call(
-                exchange="worker-status",
-                queue="test-queue-123",
-                routing_key="worker.running",
-            ),
-            call(
-                exchange="worker-status",
-                queue="test-queue-123",
-                routing_key="worker.complete",
-            ),
-            call(
-                exchange="server-status",
-                queue="test-queue-123",
-                routing_key="server.initializing",
-            ),
-            call(
-                exchange="server-status",
-                queue="test-queue-123",
-                routing_key="server.running",
-            ),
-        ]
-        self.mock_channel.queue.bind.assert_has_calls(expected_calls, any_order=True)
-
-    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_mixed_routing_key_types(self, mock_thread):
-        """Test exchanges with mix of single strings and lists of routing keys."""
-        # Arrange
-        exchanges_config = {
-            "worker-status": "worker.*",  # Single string
-            "server-status": ["server.initializing", "server.running"],  # List
-            "game-status": "game.complete",  # Single string
-        }
-
-        # Act
-        LegacyRabbitStatusSubscriber(
-            connection=self.mock_connection,
-            exchanges_config=exchanges_config,
-            queue_name="test-queue",
-        )
-
-        # Assert
-        expected_calls = [
-            call(
-                exchange="worker-status", queue="test-queue-123", routing_key="worker.*"
-            ),
-            call(
-                exchange="server-status",
-                queue="test-queue-123",
-                routing_key="server.initializing",
-            ),
-            call(
-                exchange="server-status",
-                queue="test-queue-123",
-                routing_key="server.running",
-            ),
-            call(
-                exchange="game-status",
-                queue="test-queue-123",
-                routing_key="game.complete",
-            ),
-        ]
-        self.mock_channel.queue.bind.assert_has_calls(expected_calls, any_order=True)
-
-    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_exchanges_config_takes_precedence(self, mock_thread):
-        """Test that exchanges_config parameter takes precedence over legacy parameters."""
-        # Arrange
-        exchanges_config = {"new-exchange": "new.routing.key"}
-
-        # Act
-        subscriber = LegacyRabbitStatusSubscriber(
-            connection=self.mock_connection,
-            exchange="old-exchange",  # This should be ignored
-            routing_key="old.key",  # This should be ignored
-            exchanges_config=exchanges_config,
-            queue_name="test-queue",
-        )
-
-        # Assert
-        self.assertEqual(subscriber._exchanges_config, exchanges_config)
-
-        # Verify only the new exchange was bound
-        self.mock_channel.queue.bind.assert_called_once_with(
-            exchange="new-exchange",
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
             queue="test-queue-123",
-            routing_key="new.routing.key",
+            routing_key=str(routing_key),
         )
 
     @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_no_exchange_configuration_raises_error(self, mock_thread):
-        """Test that missing both exchange and exchanges_config raises ValueError."""
-        # Act & Assert
-        with self.assertRaises(ValueError) as context:
-            LegacyRabbitStatusSubscriber(
-                connection=self.mock_connection, queue_name="test-queue"
-            )
-
-        self.assertIn(
-            "Either 'exchange' or 'exchanges_config' must be provided",
-            str(context.exception),
-        )
-
-    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_subscriber_name_includes_all_exchanges(self, mock_thread):
-        """Test that subscriber name includes all exchange names."""
+    def test_multiple_binding_configs(self, mock_thread):
+        """Test RabbitSubscriber with multiple binding configurations."""
         # Arrange
-        exchanges_config = {
-            "worker-status": "worker.*",
-            "server-status": "server.*",
-            "game-status": "game.*",
-        }
+        worker_routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.WORKER,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
+        )
+        gsi_routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.GAME_SERVER_INSTANCE,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
+        )
+
+        binding_configs = [
+            BindingConfig(
+                exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+                routing_keys=[worker_routing_key],
+            ),
+            BindingConfig(
+                exchange=ExchangeRegistry.EXTERNAL_SERVICE_EVENT,
+                routing_keys=[gsi_routing_key],
+            ),
+        ]
+
+        queue_config = QueueConfig(
+            name="test-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
 
         # Act
-        subscriber = LegacyRabbitStatusSubscriber(
+        subscriber = RabbitSubscriber(
             connection=self.mock_connection,
-            exchanges_config=exchanges_config,
-            queue_name="test-queue",
+            binding_configs=binding_configs,
+            queue_config=queue_config,
         )
 
         # Assert
-        expected_name = (
-            "rmq-status-worker-status-server-status-game-status-test-queue-123"
-        )
-        self.assertEqual(subscriber._name, expected_name)
+        self.assertEqual(len(subscriber._binding_configs), 2)
+        self.assertEqual(subscriber._binding_configs, binding_configs)
+
+        # Verify queue binding was called for each binding config
+        expected_calls = [
+            call(
+                exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+                queue="test-queue-123",
+                routing_key=str(worker_routing_key),
+            ),
+            call(
+                exchange=ExchangeRegistry.EXTERNAL_SERVICE_EVENT,
+                queue="test-queue-123",
+                routing_key=str(gsi_routing_key),
+            ),
+        ]
+        self.mock_channel.queue.bind.assert_has_calls(expected_calls, any_order=True)
 
     @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
-    def test_message_handling_with_routing_key(self, mock_thread):
-        """Test that messages are handled correctly and routing keys are captured."""
+    def test_multiple_routing_keys_per_exchange(self, mock_thread):
+        """Test RabbitSubscriber with multiple routing keys per exchange."""
         # Arrange
-        subscriber = LegacyRabbitStatusSubscriber(
-            connection=self.mock_connection,
-            exchanges_config={"test-exchange": "test.*"},
-            queue_name="test-queue",
+        worker_routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.WORKER,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
+        )
+        gsi_routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.GAME_SERVER_INSTANCE,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
         )
 
-        # Create a test status message
-        status_info = ExternalStatusInfo.create(
-            "TestClass", StatusType.RUNNING, game_server_instance_id=123
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+            routing_keys=[worker_routing_key, gsi_routing_key],
         )
 
-        # Mock message
-        mock_message = Mock()
-        mock_message.body = status_info.model_dump_json()
-        mock_message.method = {"routing_key": "test.running"}
+        queue_config = QueueConfig(
+            name="test-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
 
         # Act
-        subscriber._message_handler(mock_message)
+        subscriber = RabbitSubscriber(
+            connection=self.mock_connection,
+            binding_configs=binding_config,
+            queue_config=queue_config,
+        )
 
         # Assert
-        status_messages = subscriber.get_status_messages()
-        self.assertEqual(len(status_messages), 1)
+        self.assertEqual(len(subscriber._binding_configs), 1)
+        self.assertEqual(len(subscriber._binding_configs[0].routing_keys), 2)
 
-        status_message = status_messages[0]
-        self.assertIsInstance(status_message, StatusMessage)
-        self.assertEqual(status_message.status_info.game_server_instance_id, 123)
-        self.assertEqual(status_message.status_info.class_name, "TestClass")
-        self.assertEqual(status_message.status_info.status_type, StatusType.RUNNING)
-        self.assertEqual(status_message.routing_key, "test.running")
+        # Verify queue binding was called for each routing key
+        expected_calls = [
+            call(
+                exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+                queue="test-queue-123",
+                routing_key=str(worker_routing_key),
+            ),
+            call(
+                exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+                queue="test-queue-123",
+                routing_key=str(gsi_routing_key),
+            ),
+        ]
+        self.mock_channel.queue.bind.assert_has_calls(expected_calls, any_order=True)
+
+    @patch("manman.repository.rabbitmq.subscriber.threading.Thread")
+    def test_message_consumption(self, mock_thread):
+        """Test that messages can be consumed correctly."""
+        # Arrange
+        routing_key = RoutingKeyConfig(
+            entity=EntityRegistry.WORKER,
+            identifier=TopicWildcard.ANY,
+            type=MessageTypeRegistry.STATUS,
+        )
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+            routing_keys=[routing_key],
+        )
+        queue_config = QueueConfig(
+            name="test-queue",
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+        )
+
+        subscriber = RabbitSubscriber(
+            connection=self.mock_connection,
+            binding_configs=binding_config,
+            queue_config=queue_config,
+        )
+
+        # Create test message
+        test_message_body = '{"test": "message"}'
+
+        # Simulate message in internal queue
+        subscriber._internal_message_queue.put(test_message_body)
+
+        # Act
+        messages = subscriber.consume()
+
+        # Assert
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0], test_message_body)
 
 
 if __name__ == "__main__":

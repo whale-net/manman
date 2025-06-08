@@ -177,7 +177,7 @@ OBSERVED_STATUS_TYPES = {
 # TODO can there be a common message base?
 class InternalStatusInfo(ManManBase, table=False):
     def __init__(self, **data):
-        # TODO improve this 6/7/25
+        # TODO improve this 6/8/25
 
         if "entity_type" in data:
             entity_type = data["entity_type"]

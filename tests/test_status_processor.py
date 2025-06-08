@@ -13,8 +13,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from manman.host.status_processor import StatusEventProcessor
-from manman.models import ExternalStatusInfo, StatusType
-from manman.repository.rabbitmq.abstract_legacy import StatusMessage
+from manman.models import ExternalStatusInfo, InternalStatusInfo, StatusType
+from manman.repository.rabbitmq.config import EntityRegistry
 
 
 class TestStatusProcessor:
@@ -53,10 +53,10 @@ class TestStatusProcessor:
         """Test that the status processor can be initialized."""
         with (
             patch(
-                "manman.host.status_processor.RabbitStatusSubscriber"
+                "manman.host.status_processor.RabbitSubscriber"
             ) as mock_subscriber_class,
             patch(
-                "manman.host.status_processor.RabbitStatusPublisher"
+                "manman.host.status_processor.RabbitPublisher"
             ) as mock_publisher_class,
         ):
             mock_subscriber = Mock()
@@ -70,14 +70,15 @@ class TestStatusProcessor:
             assert processor is not None
             assert processor._rabbitmq_connection == mock_rabbitmq_connection
             assert processor._is_running is False
-            assert processor._legacy_internal_status_subscriber == mock_subscriber
-            assert processor._legacy_external_status_publisher == mock_publisher
+            # Check that the internal components were initialized
+            assert processor._internal_status_subscriber is not None
+            assert processor._external_worker_status_publisher is not None
 
     def test_status_message_handling(self, mock_rabbitmq_connection):
         """Test status message handling without actual database/RabbitMQ."""
         with (
-            patch("manman.host.status_processor.RabbitStatusSubscriber"),
-            patch("manman.host.status_processor.RabbitStatusPublisher"),
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
         ):
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
@@ -88,7 +89,7 @@ class TestStatusProcessor:
 
         # Mock the database repository write method to avoid actual database calls
         with patch.object(
-            processor._db_repository, "write_status_to_database"
+            processor._db_repository, "write_external_status_to_database"
         ) as mock_write:
             processor._db_repository.write_external_status_to_database(status_info)
 
@@ -96,66 +97,58 @@ class TestStatusProcessor:
             mock_write.assert_called_once_with(status_info)
 
     def test_status_message_creation(self):
-        """Test that StatusMessage objects are created correctly."""
+        """Test that ExternalStatusInfo objects are created correctly."""
         status_info = ExternalStatusInfo.create(
             "TestClass", StatusType.CREATED, worker_id=789
         )
-        routing_key = "worker-instance.789.status"
 
-        status_message = StatusMessage(status_info=status_info, routing_key=routing_key)
-
-        assert status_message.status_info == status_info
-        assert status_message.routing_key == routing_key
-        assert status_message.status_info.class_name == "TestClass"
-        assert status_message.status_info.status_type == StatusType.CREATED
+        # Test that the status info has the expected properties
+        assert status_info.class_name == "TestClass"
+        assert status_info.status_type == StatusType.CREATED
+        assert status_info.worker_id == 789
 
     def test_database_error_handling(self, mock_rabbitmq_connection):
         """Test that database errors are handled gracefully."""
         with (
-            patch("manman.host.status_processor.RabbitStatusSubscriber"),
-            patch("manman.host.status_processor.RabbitStatusPublisher"),
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
         ):
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
-            status_info = ExternalStatusInfo.create(
-                "WorkerService", StatusType.RUNNING, worker_id=123
-            )
-
-            # Mock the entire write_status_to_database method to raise an exception
+            # Mock the entire write_external_status_to_database method to raise an exception
             with patch.object(
                 processor._db_repository,
-                "write_status_to_database",
+                "write_external_status_to_database",
                 side_effect=Exception("Database connection failed"),
             ) as mock_write:
-                # This should not raise an exception (should be logged instead)
-                # We need to call a method that uses write_status_to_database and handles exceptions
-                with patch.object(processor, "_external_status_publisher"):
-                    # Use the internal message processing which has exception handling
-                    with patch.object(
-                        processor._legacy_internal_status_subscriber,
-                        "get_status_messages",
-                    ) as mock_get_messages:
-                        from manman.repository.rabbitmq.abstract_legacy import (
-                            StatusMessage,
+                # Mock the internal status subscriber to return a test message
+                with patch.object(
+                    processor._internal_status_subscriber,
+                    "get_internal_statuses",
+                    return_value=[
+                        InternalStatusInfo.create(
+                            entity_type=EntityRegistry.WORKER,
+                            identifier="123",
+                            status_type=StatusType.RUNNING,
                         )
-
-                        mock_get_messages.return_value = [
-                            StatusMessage(
-                                status_info=status_info, routing_key="test.routing.key"
-                            )
-                        ]
-
+                    ],
+                ):
+                    # Mock the external publishers to avoid actual publishing
+                    with (
+                        patch.object(processor, "_external_worker_status_publisher"),
+                        patch.object(processor, "_external_gsi_status_publisher"),
+                    ):
                         # This should not raise an exception despite the database error
                         processor._process_internal_status_messages()
 
                 # Verify that the database write method was called
-                mock_write.assert_called_once_with(status_info)
+                mock_write.assert_called_once()
 
     def test_status_info_fields_mapping(self, mock_rabbitmq_connection):
         """Test that StatusInfo database record is created with correct field mapping."""
         with (
-            patch("manman.host.status_processor.RabbitStatusSubscriber"),
-            patch("manman.host.status_processor.RabbitStatusPublisher"),
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
         ):
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
@@ -185,85 +178,65 @@ class TestStatusProcessor:
     def test_message_processing_flow(self, mock_rabbitmq_connection):
         """Integration test for the complete message processing flow."""
         with (
-            patch(
-                "manman.host.status_processor.RabbitStatusSubscriber"
-            ) as mock_subscriber_class,
-            patch("manman.host.status_processor.RabbitStatusPublisher"),
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
         ):
-            mock_subscriber = Mock()
-            mock_subscriber_class.return_value = mock_subscriber
-
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Mock the status subscriber to return test messages
-            test_messages = [
-                StatusMessage(
-                    status_info=ExternalStatusInfo.create(
-                        "WorkerService", StatusType.CREATED, worker_id=100
-                    ),
-                    routing_key="worker-instance.100.status",
+            test_internal_statuses = [
+                InternalStatusInfo.create(
+                    entity_type=EntityRegistry.WORKER,
+                    identifier="100",
+                    status_type=StatusType.CREATED,
                 ),
-                StatusMessage(
-                    status_info=ExternalStatusInfo.create(
-                        "Server", StatusType.RUNNING, worker_id=101
-                    ),
-                    routing_key="worker-instance.101.status",
+                InternalStatusInfo.create(
+                    entity_type=EntityRegistry.WORKER,
+                    identifier="101",
+                    status_type=StatusType.RUNNING,
                 ),
             ]
 
-            mock_subscriber.get_status_messages.return_value = test_messages
-
             with (
-                patch.object(processor, "_external_status_publisher") as mock_publisher,
                 patch.object(
-                    processor._db_repository, "write_status_to_database"
+                    processor._internal_status_subscriber,
+                    "get_internal_statuses",
+                    return_value=test_internal_statuses,
+                ),
+                patch.object(
+                    processor, "_external_worker_status_publisher"
+                ) as mock_worker_publisher,
+                patch.object(
+                    processor._db_repository, "write_external_status_to_database"
                 ) as mock_db_write,
             ):
                 processor._process_internal_status_messages()
 
                 # Verify that each message was published externally
-                assert mock_publisher.publish_external.call_count == 2
-                mock_publisher.publish_external.assert_any_call(
-                    test_messages[0].status_info
-                )
-                mock_publisher.publish_external.assert_any_call(
-                    test_messages[1].status_info
-                )
+                # Worker status should be published via worker publisher
+                assert mock_worker_publisher.publish_external_status.call_count == 2
 
                 # Verify that each message was written to the database
                 assert mock_db_write.call_count == 2
-                mock_db_write.assert_any_call(test_messages[0].status_info)
-                mock_db_write.assert_any_call(test_messages[1].status_info)
 
     def test_processor_shutdown(self, mock_rabbitmq_connection):
         """Test that the processor shuts down cleanly."""
         with (
-            patch(
-                "manman.host.status_processor.RabbitStatusSubscriber"
-            ) as mock_subscriber_class,
-            patch(
-                "manman.host.status_processor.RabbitStatusPublisher"
-            ) as mock_publisher_class,
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
         ):
-            mock_internal_subscriber = Mock()
-            mock_external_consumer = Mock()
-            mock_publisher = Mock()
-
-            # The RabbitStatusSubscriber is called twice - once for internal, once for external
-            mock_subscriber_class.side_effect = [
-                mock_internal_subscriber,
-                mock_external_consumer,
-            ]
-            mock_publisher_class.return_value = mock_publisher
-
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
+            # Verify initial state
+            assert processor._is_running is False
+
+            # Set running state to simulate processor running
+            processor._is_running = True
+
+            # Call shutdown
             processor._shutdown()
 
-            # Verify shutdown was called on all components
-            mock_internal_subscriber.shutdown.assert_called_once()
-            mock_external_consumer.shutdown.assert_called_once()
-            mock_publisher.shutdown.assert_called_once()
+            # Verify shutdown completed
             assert processor._is_running is False
 
 

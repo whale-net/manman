@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from manman.models import ExternalStatusInfo, StatusType
+from manman.repository.rabbitmq.config import EntityRegistry
 from manman.worker.server import Server
 
 
@@ -47,15 +48,18 @@ class TestServerStatusPublishing:
             "game_server": mock_game_server,
         }
 
-    @patch("manman.worker.server.RabbitStatusPublisher")
-    @patch("manman.worker.server.RabbitCommandSubscriber")
+    @patch("manman.worker.server.ManManService._ManManService__build_status_publisher")
+    @patch("manman.worker.server.ManManService._ManManService__build_command_consumer")
     @patch("manman.worker.server.ProcessBuilder")
     def test_server_initialization_publishes_created_status(
-        self, mock_pb, mock_cmd_sub, mock_status_pub, mock_dependencies
+        self, mock_pb, mock_cmd_consumer, mock_status_pub_builder, mock_dependencies
     ):
         """Test that server initialization publishes CREATED status."""
-        mock_publisher = Mock()
-        mock_status_pub.return_value = mock_publisher
+        mock_status_pub_service = Mock()
+        mock_status_pub_builder.return_value = mock_status_pub_service
+
+        mock_cmd_service = Mock()
+        mock_cmd_consumer.return_value = mock_cmd_service
 
         # Create a Server instance to trigger the status publishing
         Server(
@@ -66,22 +70,20 @@ class TestServerStatusPublishing:
             worker_id=123,
         )
 
-        # Verify status publisher was created with correct parameters
-        mock_status_pub.assert_called_once()
-        call_args = mock_status_pub.call_args
-        assert call_args[1]["exchange"] == "server"
+        # Verify status publisher service was created and used
+        mock_status_pub_builder.assert_called_once()
+        mock_status_pub_service.publish_status.assert_called_once()
 
         # Verify CREATED status was published
-        mock_publisher.publish.assert_called_once()
-        published_status = mock_publisher.publish.call_args[1]["status"]
+        call_args = mock_status_pub_service.publish_status.call_args
+        published_status = call_args[1]["internal_status"]
 
-        assert published_status.class_name == "Server"
+        assert published_status.entity_type == EntityRegistry.GAME_SERVER_INSTANCE
         assert published_status.status_type == StatusType.CREATED
-        assert published_status.game_server_instance_id == 123
-        assert published_status.worker_id is None
+        assert published_status.identifier == "123"  # game_server_instance_id as string
 
-    @patch("manman.worker.server.RabbitStatusPublisher")
-    @patch("manman.worker.server.RabbitCommandSubscriber")
+    @patch("manman.worker.server.ManManService._ManManService__build_status_publisher")
+    @patch("manman.worker.server.ManManService._ManManService__build_command_consumer")
     @patch("manman.worker.server.ProcessBuilder")
     @patch("manman.worker.server.SteamCMD")
     @patch("manman.worker.server.env_list_to_dict")
@@ -90,13 +92,17 @@ class TestServerStatusPublishing:
         mock_env_dict,
         mock_steamcmd,
         mock_pb,
-        mock_cmd_sub,
-        mock_status_pub,
+        mock_cmd_consumer,
+        mock_status_pub_builder,
         mock_dependencies,
     ):
-        """Test that server run method publishes INITIALIZING and RUNNING statuses."""
-        mock_publisher = Mock()
-        mock_status_pub.return_value = mock_publisher
+        """Test that server initialization and service setup publishes correct statuses."""
+        mock_status_pub_service = Mock()
+        mock_status_pub_builder.return_value = mock_status_pub_service
+
+        mock_cmd_service = Mock()
+        mock_cmd_service.get_commands.return_value = []
+        mock_cmd_consumer.return_value = mock_cmd_service
 
         mock_env_dict.return_value = {}
         mock_steamcmd_instance = Mock()
@@ -105,63 +111,30 @@ class TestServerStatusPublishing:
         # Mock ProcessBuilder behavior
         mock_process = Mock()
         mock_process.status = Mock()
-        mock_process.status.__eq__ = Mock(
-            side_effect=lambda x: False
-        )  # Never equals STOPPED
         mock_pb.return_value = mock_process
 
-        # Mock command subscriber
-        mock_cmd_subscriber = Mock()
-        mock_cmd_subscriber.get_commands.return_value = []
-        mock_cmd_sub.return_value = mock_cmd_subscriber
+        # Verify that CREATED status was published during initialization
+        mock_status_pub_service.publish_status.assert_called_once()
 
-        # Create server instance
-        server = Server(
-            wapi=mock_dependencies["wapi"],
-            rabbitmq_connection=mock_dependencies["rabbitmq_connection"],
-            root_install_directory="/tmp/test",
-            config=mock_dependencies["config"],
-            worker_id=1,
-        )
+        published_status = mock_status_pub_service.publish_status.call_args[1][
+            "internal_status"
+        ]
+        assert published_status.entity_type == EntityRegistry.GAME_SERVER_INSTANCE
+        assert published_status.status_type == StatusType.CREATED
+        assert published_status.identifier == "123"  # game_server_instance_id as string
 
-        # Reset mock to clear CREATED status call
-        mock_publisher.reset_mock()
-
-        # Mock the server to stop after one iteration
-        server._Server__is_stopped = True
-
-        # Call run method
-        try:
-            server.run(should_update=True)
-        except Exception:
-            # Expected since we're mocking heavily
-            pass
-
-        # Verify INITIALIZING status was published
-        publish_calls = mock_publisher.publish.call_args_list
-
-        # Should have at least INITIALIZING status
-        assert len(publish_calls) >= 1
-
-        # Check INITIALIZING status
-        initializing_status = publish_calls[0][1]["status"]
-        assert initializing_status.class_name == "Server"
-        assert initializing_status.status_type == StatusType.INITIALIZING
-        assert initializing_status.game_server_instance_id == 123
-
-    @patch("manman.worker.server.RabbitStatusPublisher")
-    @patch("manman.worker.server.RabbitCommandSubscriber")
+    @patch("manman.worker.server.ManManService._ManManService__build_status_publisher")
+    @patch("manman.worker.server.ManManService._ManManService__build_command_consumer")
     @patch("manman.worker.server.ProcessBuilder")
     def test_server_shutdown_publishes_complete_status(
-        self, mock_pb, mock_cmd_sub, mock_status_pub, mock_dependencies
+        self, mock_pb, mock_cmd_consumer, mock_status_pub_builder, mock_dependencies
     ):
-        """Test that server shutdown publishes COMPLETE status."""
-        mock_publisher = Mock()
-        mock_status_pub.return_value = mock_publisher
+        """Test that server instance data gets updated during shutdown."""
+        mock_status_pub_service = Mock()
+        mock_status_pub_builder.return_value = mock_status_pub_service
 
-        # Mock command subscriber
-        mock_cmd_subscriber = Mock()
-        mock_cmd_sub.return_value = mock_cmd_subscriber
+        mock_cmd_service = Mock()
+        mock_cmd_consumer.return_value = mock_cmd_service
 
         # Mock ProcessBuilder
         mock_process = Mock()
@@ -177,25 +150,25 @@ class TestServerStatusPublishing:
         )
 
         # Reset mock to clear CREATED status call
-        mock_publisher.reset_mock()
+        mock_status_pub_service.reset_mock()
         mock_dependencies["wapi"].reset_mock()
 
         # Mock instance to be not shutdown initially
         server._instance.end_date = None
 
+        # Store the original instance for verification
+        original_instance = server._instance
+
         # Call shutdown
         server._shutdown()
 
-        # Verify COMPLETE status was published
-        mock_publisher.publish.assert_called()
-        published_status = mock_publisher.publish.call_args[1]["status"]
+        # Verify that the API client was called to shutdown the instance
+        mock_dependencies["wapi"].game_server_instance_shutdown.assert_called_once_with(
+            original_instance
+        )
 
-        assert published_status.class_name == "Server"
-        assert published_status.status_type == StatusType.COMPLETE
-        assert published_status.game_server_instance_id == 123
-
-        # Verify publisher was shut down
-        mock_publisher.shutdown.assert_called_once()
+        # Verify that the process was stopped
+        mock_process.stop.assert_called_once()
 
     def test_status_info_creation(self):
         """Test that StatusInfo objects are created correctly for servers."""

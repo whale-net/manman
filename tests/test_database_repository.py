@@ -91,7 +91,7 @@ class TestDatabaseRepository:
         )
 
         # Call the method
-        repository.write_status_to_database(status_info)
+        repository.write_external_status_to_database(status_info)
 
         # Verify session operations
         mock_get_session.assert_called_once()
