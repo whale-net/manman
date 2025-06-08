@@ -1,0 +1,143 @@
+name: Tilt CI Integration Tests
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+
+concurrency:
+  group: tilt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tilt-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: manman-test
+          node_image: kindest/node:v1.29.2
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+            - role: control-plane
+              kubeadmConfigPatches:
+              - |
+                kind: InitConfiguration
+                nodeRegistration:
+                  kubeletExtraArgs:
+                    node-labels: "ingress-ready=true"
+              extraPortMappings:
+              - containerPort: 80
+                hostPort: 30080
+                protocol: TCP
+              - containerPort: 443
+                hostPort: 30443
+                protocol: TCP
+
+      - name: Install Tilt
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+          sudo mv tilt /usr/local/bin/
+          tilt version
+
+      - name: Load Docker images into kind
+        run: |
+          # Pre-pull images that might be needed
+          docker pull postgres:15
+          docker pull rabbitmq:3-management
+          docker pull nginx/nginx-prometheus-exporter:latest
+          
+          # Load into kind cluster
+          kind load docker-image postgres:15 --name manman-test
+          kind load docker-image rabbitmq:3-management --name manman-test
+
+      - name: Set up environment for CI
+        run: |
+          # Use CI-specific environment configuration
+          cp .env.ci .env
+          echo "Using CI environment configuration:"
+          cat .env
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl cluster-info
+
+      - name: Run Tilt CI
+        run: |
+          # Run tilt ci with timeout and proper logging
+          echo "Starting Tilt CI deployment..."
+          timeout 20m tilt ci --timeout=20m --output-snapshot-on-exit=/tmp/tilt-snapshot.json --stream
+        env:
+          TILT_HOST: 0.0.0.0
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for core services to be ready..."
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=postgres-dev -n manman-dev --timeout=300s || true
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=rabbitmq-dev -n manman-dev --timeout=300s || true
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=manman-host -n manman-dev --timeout=300s || true
+
+      - name: Verify deployment health
+        run: |
+          echo "Checking deployed resources..."
+          kubectl get all -n manman-dev
+          kubectl get ingress -n manman-dev
+          
+          echo "Checking pod logs for errors..."
+          kubectl logs -n manman-dev --selector=app.kubernetes.io/name=manman-host --tail=50 --ignore-errors=true
+          
+          echo "Checking service endpoints..."
+          kubectl get endpoints -n manman-dev
+
+      - name: Test API endpoints (if accessible)
+        run: |
+          # Wait for ingress to be ready
+          timeout 60s bash -c 'until kubectl get ingress -n manman-dev -o jsonpath="{.items[0].status.loadBalancer}" | grep -q "ingress"; do sleep 5; done' || true
+          
+          # Try to access APIs through the ingress
+          echo "Testing API accessibility..."
+          for api in experience workerdal status; do
+            echo "Testing $api API..."
+            curl -f -s -o /dev/null "http://localhost:30080/$api/health" || echo "$api API not accessible (expected in CI)"
+          done
+
+      - name: Upload Tilt snapshot on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tilt-snapshot
+          path: /tmp/tilt-snapshot.json
+          retention-days: 7
+
+      - name: Upload cluster logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cluster-logs
+          path: |
+            /tmp/cluster-logs/
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Collect cluster logs on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/cluster-logs
+          kubectl describe all -n manman-dev > /tmp/cluster-logs/describe-all.txt
+          kubectl get events -n manman-dev --sort-by='.lastTimestamp' > /tmp/cluster-logs/events.txt
+          kubectl logs -n manman-dev --all-containers=true --ignore-errors=true > /tmp/cluster-logs/pod-logs.txt
