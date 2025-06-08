@@ -3,9 +3,6 @@ import os
 
 from amqpstorm import Connection
 
-# import sqlalchemy
-# from sqlalchemy.orm import Session
-# from pydantic import BaseModel
 from manman.models import (
     Command,
     CommandType,
@@ -23,7 +20,6 @@ from manman.worker.steamcmd import SteamCMD
 logger = logging.getLogger(__name__)
 
 
-# TODO logging
 class Server(ManManService):
     @property
     def service_entity_type(self) -> EntityRegistry:
@@ -45,6 +41,10 @@ class Server(ManManService):
     @property
     def instance(self) -> GameServerInstance:
         return self._instance
+
+    @property
+    def is_shutdown(self) -> bool:
+        return self._instance.end_date is not None
 
     def __init__(
         self,
@@ -121,7 +121,6 @@ class Server(ManManService):
 
     def _do_work(self, log_still_running: bool):
         """Main work loop - read process output and check status."""
-
         # Read process output
         if hasattr(self, "_proc"):
             self._proc.read_output()
@@ -130,6 +129,7 @@ class Server(ManManService):
             status = self._proc.status
             if status in (ProcessBuilderStatus.STOPPED, ProcessBuilderStatus.FAILED):
                 logger.info("Process has stopped, initiating shutdown")
+                self._trigger_internal_shutdown()
 
     def _handle_commands(self, commands: list[Command]):
         """Handle incoming commands."""
@@ -170,10 +170,6 @@ class Server(ManManService):
                 "shutdown complete for instance %s",
                 instance_id,
             )
-
-    @property
-    def is_shutdown(self) -> bool:
-        return self._instance.end_date is not None
 
     def __handle_stop_command(self) -> None:
         logger.info(
