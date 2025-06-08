@@ -94,18 +94,11 @@ class ManManService(ABC):
             auto_delete=True,
         )
 
-    def _legacy_extra_status_routing_key(self) -> list[str]:
-        return []
-
-    def _legacy_extra_command_routing_key(self) -> list[str]:
-        return []
-
     def __build_status_publisher(self) -> InternalStatusInfoPubService:
         status_binding = BindingConfig(
             exchange=self.RMQ_EXCHANGE,
             routing_keys=[
                 self.status_routing_key.build_key(),
-                *self._legacy_extra_status_routing_key(),
             ],
         )
         rabbit_publisher = RabbitPublisher(
@@ -119,7 +112,6 @@ class ManManService(ABC):
             exchange=self.RMQ_EXCHANGE,
             routing_keys=[
                 self.command_routing_key.build_key(),
-                *self._legacy_extra_command_routing_key(),
             ],
         )
         rabbit_subscriber = RabbitSubscriber(

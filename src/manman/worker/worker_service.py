@@ -13,7 +13,6 @@ from manman.models import (
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
 from manman.repository.rabbitmq.config import EntityRegistry
-from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.abstract_service import ManManService
 from manman.worker.server import Server
@@ -77,38 +76,6 @@ class WorkerService(ManManService):
         self._servers: list[Server] = []
 
         self._futures = []
-
-    @staticmethod
-    def _generate_common_queue_name(worker_id: int) -> str:
-        return f"worker-instance.{worker_id}"
-
-    @staticmethod
-    def generate_command_queue_name(worker_id: int) -> str:
-        return add_routing_key_prefix(
-            WorkerService._generate_common_queue_name(worker_id), "cmd"
-        )
-
-    @property
-    def legacy_command_routing_key(self) -> str:
-        return self.generate_command_queue_name(self._worker_instance.worker_id)
-
-    # TODO - deprecate these legacy methods
-    def _legacy_extra_command_routing_key(self) -> list[str]:
-        return [self.legacy_command_routing_key]
-
-    @staticmethod
-    def generate_status_queue_name(worker_id: int) -> str:
-        return add_routing_key_prefix(
-            WorkerService._generate_common_queue_name(worker_id), "status"
-        )
-
-    @property
-    def legacy_status_routing_key(self) -> str:
-        return self.generate_status_queue_name(self._worker_instance.worker_id)
-
-    # TODO - deprecate these legacy methods
-    def _legacy_extra_status_routing_key(self) -> list[str]:
-        return [self.legacy_status_routing_key]
 
     def _send_heartbeat(self):
         self._wapi.worker_heartbeat(self._worker_instance)

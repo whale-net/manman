@@ -367,6 +367,18 @@ class WorkerRepository(DatabaseRepository):
             session.commit()
             return lost_workers
 
+    # TODO - this whole thing needs rethnking ,but just going to hack it together for now
+    def get_current_worker(self) -> Worker:
+        with self._get_session_context() as session:
+            stmt = (
+                select(Worker)
+                .where(Worker.end_date.is_(None))
+                .order_by(desc(Worker.created_date))
+                .limit(1)
+            )
+            worker = session.exec(stmt).one_or_none()
+            return worker
+
 
 class GameServerRepository(DatabaseRepository):
     """Repository class for game server-related database operations."""
@@ -404,6 +416,29 @@ class GameServerRepository(DatabaseRepository):
             if config:
                 session.expunge(config)
             return config
+
+
+class GameServerConfigRepository(DatabaseRepository):
+    """Repository class for game server configuration-related database operations."""
+
+    def get_game_server_configs(self) -> List[GameServerConfig]:
+        """
+        Get all game server configurations.
+
+        Returns:
+            List of GameServerConfig instances
+        """
+        # TODO - is_visible parameter
+        with self._get_session_context() as session:
+            stmt = (
+                select(GameServerConfig)
+                .where(GameServerConfig.is_visible.is_(True))
+                .order_by(GameServerConfig.name)
+            )
+            results = session.exec(stmt).all()
+            for config in results:
+                session.expunge(config)
+            return results
 
 
 class GameServerInstanceRepository(DatabaseRepository):
@@ -507,3 +542,19 @@ class GameServerInstanceRepository(DatabaseRepository):
             session.expunge(instance)
             session.commit()
             return instance
+
+    def get_current_instances(
+        self, worker_id: int, session: Optional[Session] = None
+    ) -> list[GameServerInstance]:
+        # TODO - don't re-use a session in the context manager if one is provided
+        #        doing so will cause the session to be closed when the context manager exits
+        #        #35
+        # TODO - addres if above todo is stil lrelevant - copy patsed from somewhere else in the project
+        with self._get_session_context() as session:
+            stmt = (
+                select(GameServerInstance)
+                .where(GameServerInstance.worker_id == worker_id)
+                .where(GameServerInstance.end_date.is_(None))
+            )
+            results = session.exec(stmt).all()
+            return results
