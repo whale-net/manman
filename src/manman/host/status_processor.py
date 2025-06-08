@@ -47,17 +47,21 @@ class StatusEventProcessor:
     and external consumers should be able to subscribe to status.
     """
 
+    __WORKER_KEY: RoutingKeyConfig = RoutingKeyConfig(
+        entity=EntityRegistry.WORKER,
+        identifier=TopicWildcard.ANY,
+        type=MessageTypeRegistry.STATUS,
+    )
+
+    __GAME_SERVER_INSTANCE_KEY: RoutingKeyConfig = RoutingKeyConfig(
+        entity=EntityRegistry.GAME_SERVER_INSTANCE,
+        identifier=TopicWildcard.ANY,
+        type=MessageTypeRegistry.STATUS,
+    )
+
     __SUPPORTED_ROUTING_KEYS: list[RoutingKeyConfig] = [
-        RoutingKeyConfig(
-            entity=EntityRegistry.WORKER,
-            identifier=TopicWildcard.ANY,
-            type=MessageTypeRegistry.STATUS,
-        ),
-        RoutingKeyConfig(
-            entity=EntityRegistry.GAME_SERVER_INSTANCE,
-            identifier=TopicWildcard.ANY,
-            type=MessageTypeRegistry.STATUS,
-        ),
+        __GAME_SERVER_INSTANCE_KEY,
+        __GAME_SERVER_INSTANCE_KEY,
     ]
 
     def __build_internal_status_subscriber(self) -> InternalStatusSubService:
@@ -75,10 +79,12 @@ class StatusEventProcessor:
         rmq = RabbitSubscriber(self._rabbitmq_connection, binding_config, queue_config)
         return InternalStatusSubService(rmq)
 
-    def __build_external_status_publisher(self) -> ExternalStatusInfoPubService:
+    def __build_external_status_publisher(
+        self, key: RoutingKeyConfig
+    ) -> ExternalStatusInfoPubService:
         binding_config = BindingConfig(
             exchange=ExchangeRegistry.EXTERNAL_SERVICE_EVENT,
-            routing_keys=StatusEventProcessor.__SUPPORTED_ROUTING_KEYS,
+            routing_keys=[key],
         )
 
         rmq = RabbitPublisher(self._rabbitmq_connection, binding_config)
@@ -107,7 +113,12 @@ class StatusEventProcessor:
         self._db_repository = DatabaseRepository()
 
         self._internal_status_subscriber = self.__build_internal_status_subscriber()
-        self._external_status_publisher = self.__build_external_status_publisher()
+        self._external_worker_status_publisher = self.__build_external_status_publisher(
+            StatusEventProcessor.__WORKER_KEY
+        )
+        self._external_gsi_status_publisher = self.__build_external_status_publisher(
+            StatusEventProcessor.__GAME_SERVER_INSTANCE_KEY
+        )
         self._external_status_subscriber = self.__build_external_status_subscriber()
 
         # "status-processor-external-queue"
@@ -185,6 +196,18 @@ class StatusEventProcessor:
         except Exception as e:
             logger.exception("Error checking worker heartbeats: %s", e)
 
+    def _send_external_status(self, external_status_info: ExternalStatusInfo):
+        if external_status_info.game_server_instance_id is not None:
+            # Publish to game server instance exchange
+            self._external_gsi_status_publisher.publish_external_status(
+                external_status_info
+            )
+        if external_status_info.worker_id is not None:
+            # Publish to worker exchange
+            self._external_worker_status_publisher.publish_external_status(
+                external_status_info
+            )
+
     def _send_worker_lost_notification(self, worker_id: int):
         """Send a worker lost notification to external queue"""
         try:
@@ -196,7 +219,7 @@ class StatusEventProcessor:
                 worker_id=worker_id,
             )
 
-            self._external_status_publisher.publish_external_status(lost_status)
+            self._send_external_status(lost_status)
             self._db_repository.write_external_status_to_database(lost_status)
             logger.info("Worker lost notification sent for worker %s", worker_id)
 
@@ -216,7 +239,7 @@ class StatusEventProcessor:
                 game_server_instance_id=game_server_instance_id,
             )
 
-            self._external_status_publisher.publish_external_status(lost_status)
+            self._send_external_status(lost_status)
             self._db_repository.write_external_status_to_database(lost_status)
             logger.info(
                 "Game server lost notification sent for instance %s",
@@ -243,7 +266,7 @@ class StatusEventProcessor:
             )
             for internal_status_info in internal_status_infos:
                 logger.info(
-                    "Status update received: type=%s id=%s, status=%s, timestamp=%s",
+                    "Internal status update received: type=%s id=%s, status=%s, timestamp=%s",
                     internal_status_info.entity_type,
                     internal_status_info.identifier,
                     internal_status_info.status_type,
@@ -252,9 +275,7 @@ class StatusEventProcessor:
                 external_status_info = ExternalStatusInfo.create_from_internal(
                     internal_status_info
                 )
-                self._external_status_publisher.publish_external_status(
-                    external_status_info
-                )
+                self._send_external_status(external_status_info)
                 self._db_repository.write_external_status_to_database(
                     external_status_info
                 )
@@ -270,7 +291,8 @@ class StatusEventProcessor:
             for external_status_info in external_status_infos:
                 # do not write to database here, just consume it as an example
                 logger.info(
-                    "processing external status message %s", external_status_info
+                    "this is a sample processor for external status message %s",
+                    external_status_info,
                 )
         except Exception as e:
             logger.exception("Error processing external status messages: %s", e)

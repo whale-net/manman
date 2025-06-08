@@ -169,6 +169,49 @@ class ManManService(ABC):
             internal_status=self.__create_internal_status_info(StatusType.CREATED),
         )
 
+    @abstractmethod
+    def _send_heartbeat(self):
+        """
+        Send a heartbeat message to indicate the service is running.
+        """
+        pass
+
+    @abstractmethod
+    def _initialize_service(self):
+        """
+        Initialize the service.
+
+        Do extra non-init setup here, such as installing service runtime dependencies.
+        Things that may be blocking that you didn't want to do in the constructor.
+        """
+        pass
+
+    @abstractmethod
+    def _do_work(self, log_still_running: bool):
+        """
+        Service unit of work
+        """
+        pass
+
+    @abstractmethod
+    def _handle_commands(self, commands: list[Command]):
+        """
+        Handle commands received from the command queue.
+
+        This is not generic service stuff, and could be put in the do_work method,
+        but this is used for everything so far, so it is abstracted here.
+        Potentially makes it possible to have this be done in a separate thread
+        or process if needed too.
+        """
+        pass
+
+    @abstractmethod
+    def _shutdown(self):
+        """
+        Shutdown the service gracefully.
+        """
+        pass
+
     def run(self):
         """
         Run the service.
@@ -177,14 +220,13 @@ class ManManService(ABC):
         It initializes the service, starts it, and handles any necessary setup.
         """
 
-        # TODO improve error handling
-
-        logger.info("Initializing service: %s", self.__class__.__name__)
-        self._status_pub_service.publish_status(
-            internal_status=self.__create_internal_status_info(StatusType.INITIALIZING),
-        )
-
         try:
+            logger.info("Initializing service: %s", self.__class__.__name__)
+            self._status_pub_service.publish_status(
+                internal_status=self.__create_internal_status_info(
+                    StatusType.INITIALIZING
+                ),
+            )
             self._initialize_service()
         except Exception as e:
             logger.exception(
@@ -196,12 +238,33 @@ class ManManService(ABC):
                 f"Failed to initialize service {self.__class__.__name__}: {e}"
             ) from e
 
-        # TODO - this gives no time for the service to start running
-        # this will be problematic for game servers that take a while to start
-        self._status_pub_service.publish_status(
-            internal_status=self.__create_internal_status_info(StatusType.RUNNING),
-        )
+        try:
+            # TODO - this gives no time for the service to start running
+            # this will be problematic for game servers that take a while to start
+            self._status_pub_service.publish_status(
+                internal_status=self.__create_internal_status_info(StatusType.RUNNING),
+            )
+            self._run()
+            # TODO - prevent double shutdown
+            # once run is complete, start shutdown
+            logger.info("Shutting down service: %s", self.__class__.__name__)
+            self._shutdown()
+        except Exception as e:
+            logger.exception(
+                "Error during execution of service %s: %s", self.__class__.__name__, e
+            )
+            raise RuntimeError(
+                f"Failed to completely execute service {self.__class__.__name__}: {e}"
+            ) from e
+        finally:
+            self._status_pub_service.publish_status(
+                internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
+            )
 
+    def _run(self):
+        """
+        Contain main run loop logic for the service.
+        """
         loop_log_time = datetime.now(timezone.utc)
         loop_heartbeat_time = datetime.now(timezone.utc)
         while not self.__is_stopped:
@@ -232,55 +295,3 @@ class ManManService(ABC):
             ).total_seconds()
             if remaining_loop_time > 0:
                 time.sleep(remaining_loop_time)
-
-        # TODO - prevent double shutdown
-        try:
-            logger.info("Shutting down service: %s", self.__class__.__name__)
-            self._shutdown()
-            # TODO - shutdown these
-            # self._command_sub_service
-            # self._status_pub_service
-        except Exception as e:
-            logger.exception(
-                "Error during shutdown of service %s: %s", self.__class__.__name__, e
-            )
-        self._status_pub_service.publish_status(
-            internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
-        )
-
-    @abstractmethod
-    def _send_heartbeat(self):
-        """
-        Send a heartbeat message to indicate the service is running.
-        """
-        pass
-
-    @abstractmethod
-    def _initialize_service(self):
-        """
-        Initialize the service.
-
-        Do extra non-init setup here, such as installing service runtime dependencies
-        """
-        pass
-
-    @abstractmethod
-    def _do_work(self, log_still_running: bool):
-        """
-        Do work in a loop
-        """
-        pass
-
-    @abstractmethod
-    def _handle_commands(self, commands: list[Command]):
-        """
-        Handle commands received from the command queue.
-        """
-        pass
-
-    @abstractmethod
-    def _shutdown(self):
-        """
-        Shutdown the service gracefully.
-        """
-        pass
