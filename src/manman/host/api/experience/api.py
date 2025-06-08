@@ -1,3 +1,5 @@
+import logging
+
 # The application logic layer
 from typing import Annotated, Optional
 
@@ -21,6 +23,8 @@ from manman.util import get_sqlalchemy_session
 from manman.worker.worker_service import WorkerService
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 # TODO - this whole thing needs rethnking ,but just going to hack it together for now
@@ -112,13 +116,9 @@ async def start_game_server(
         command = Command(command_type=CommandType.START, command_args=[str(id)])
 
         # Set exchange and queue name using the worker's ID
-        exchange = WorkerService.RMQ_EXCHANGE
+        exchange = WorkerService.RMQ_EXCHANGE.value
+        # TODO - refactor this to use a command publisher
         queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
-
-        # Ensure the queue exists and is bound to the exchange
-        channel.queue.declare(queue=queue_name, auto_delete=True)
-        channel.queue.bind(exchange=exchange, queue=queue_name, routing_key=queue_name)
-
         # Serialize the command to JSON
         message = command.model_dump_json()
 
@@ -165,12 +165,9 @@ async def stop_game_server(
         command = Command(command_type=CommandType.STOP, command_args=[str(id)])
 
         # Set exchange and queue name using the worker's ID
-        exchange = WorkerService.RMQ_EXCHANGE
+        exchange = WorkerService.RMQ_EXCHANGE.value
+        # TODO - refactor this to use a command publisher
         queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
-
-        # Ensure the queue exists and is bound to the exchange
-        channel.queue.declare(queue=queue_name, auto_delete=True)
-        channel.queue.bind(exchange=exchange, queue=queue_name, routing_key=queue_name)
 
         # Serialize the command to JSON
         message = command.model_dump_json()
@@ -215,12 +212,11 @@ async def stdin_game_server(
         )
 
         # Set exchange and queue name using the worker's ID
-        exchange = WorkerService.RMQ_EXCHANGE
+        exchange = WorkerService.RMQ_EXCHANGE.value
+        print(exchange)
+        logger.info(exchange)
+        # TODO - refactor this to use a command publisher
         queue_name = WorkerService.generate_command_queue_name(worker.worker_id)
-
-        # Ensure the queue exists and is bound to the exchange
-        channel.queue.declare(queue=queue_name, auto_delete=True)
-        channel.queue.bind(exchange=exchange, queue=queue_name, routing_key=queue_name)
 
         # Serialize the command to JSON
         message = command.model_dump_json()

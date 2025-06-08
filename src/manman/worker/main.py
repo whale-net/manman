@@ -30,11 +30,11 @@ def start(
     install_directory = os.path.abspath(install_directory)
     # todo - re-add authcz
     service = WorkerService(
-        install_directory,
-        host_url,
-        None,
-        None,
         rabbitmq_connection=get_rabbitmq_connection(),
+        install_directory=install_directory,
+        host_url=host_url,
+        sa_client_id=None,
+        sa_client_secret=None,
     )
     service.run()
 
@@ -65,7 +65,7 @@ def dev():
         def _stop_service(self):
             logger.info("DevService stopped")
 
-        def _handle_commmands(self, commands):
+        def _handle_commands(self, commands):
             for command in commands:
                 logger.info(f"DevService received command: {command}")
 

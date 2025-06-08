@@ -108,7 +108,7 @@ class ManManService(ABC):
             ],
         )
         rabbit_publisher = RabbitPublisher(
-            connection=self._rmq_conn,
+            connection=self._rabbitmq_connection,
             binding_configs=status_binding,
         )
         return StatusInfoPubService(publisher=rabbit_publisher)
@@ -122,7 +122,7 @@ class ManManService(ABC):
             ],
         )
         rabbit_subscriber = RabbitSubscriber(
-            connection=self._rmq_conn,
+            connection=self._rabbitmq_connection,
             binding_configs=command_binding,
             queue_config=self.command_queue_config,
         )
@@ -161,7 +161,7 @@ class ManManService(ABC):
         logger.info("Creating service: %s", self.__class__.__name__)
         self.__is_stopped = False
 
-        self._rmq_conn = rabbitmq_connection
+        self._rabbitmq_connection = rabbitmq_connection
         self._status_pub_service = self.__build_status_publisher()
         self._command_sub_service = self.__build_command_consumer()
 
@@ -176,12 +176,25 @@ class ManManService(ABC):
         This is the main entry point for the service lifecycle.
         It initializes the service, starts it, and handles any necessary setup.
         """
+
+        # TODO improve error handling
+
         logger.info("Initializing service: %s", self.__class__.__name__)
         self._status_pub_service.publish_status(
             internal_status=self.__create_internal_status_info(StatusType.INITIALIZING),
         )
 
-        self._initialize_service()
+        try:
+            self._initialize_service()
+        except Exception as e:
+            logger.exception(
+                "Error during initialization of service %s: %s",
+                self.__class__.__name__,
+                e,
+            )
+            raise RuntimeError(
+                f"Failed to initialize service {self.__class__.__name__}: {e}"
+            ) from e
 
         # TODO - this gives no time for the service to start running
         # this will be problematic for game servers that take a while to start
@@ -194,7 +207,10 @@ class ManManService(ABC):
         while not self.__is_stopped:
             # timing
             run_loop_start_time = datetime.now(timezone.utc)
-            if (run_loop_start_time - loop_log_time) > timedelta(seconds=30):
+            log_still_running = (run_loop_start_time - loop_log_time) > timedelta(
+                seconds=30
+            )
+            if log_still_running:
                 logger.info("Service %s is running", self.__class__.__name__)
                 loop_log_time = run_loop_start_time
             if (run_loop_start_time - loop_heartbeat_time) > self.HEARTBEAT_INTERVAL:
@@ -202,11 +218,11 @@ class ManManService(ABC):
                 loop_heartbeat_time = run_loop_start_time
 
             # Perform the main work of the service
-            self._do_work()
+            self._do_work(log_still_running=log_still_running)
 
             # Handle any commands received from the command queue
             commands = self._command_sub_service.get_commands()
-            self._handle_commmands(commands)
+            self._handle_commands(commands)
 
             # Sleep to avoid busy waiting
             run_loop_end_time = datetime.now(timezone.utc)
@@ -217,9 +233,21 @@ class ManManService(ABC):
             if remaining_loop_time > 0:
                 time.sleep(remaining_loop_time)
 
-        self._status_pub_service.publish_status(
-            internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
-        )
+        # TODO - prevent double shutdown
+        try:
+            logger.info("Shutting down service: %s", self.__class__.__name__)
+            self._shutdown()
+            # TODO - shutdown these
+            # self._command_sub_service
+            # self._status_pub_service
+        except Exception as e:
+            logger.exception(
+                "Error during shutdown of service %s: %s", self.__class__.__name__, e
+            )
+        finally:
+            self._status_pub_service.publish_status(
+                internal_status=self.__create_internal_status_info(StatusType.COMPLETE),
+            )
 
     @abstractmethod
     def _send_heartbeat(self):
@@ -238,15 +266,22 @@ class ManManService(ABC):
         pass
 
     @abstractmethod
-    def _do_work(self):
+    def _do_work(self, log_still_running: bool):
         """
         Do work in a loop
         """
         pass
 
     @abstractmethod
-    def _handle_commmands(self, commands: list[Command]):
+    def _handle_commands(self, commands: list[Command]):
         """
         Handle commands received from the command queue.
+        """
+        pass
+
+    @abstractmethod
+    def _shutdown(self):
+        """
+        Shutdown the service gracefully.
         """
         pass
