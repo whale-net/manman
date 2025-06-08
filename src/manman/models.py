@@ -16,6 +16,8 @@ from sqlalchemy.sql.functions import current_timestamp
 # from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, MetaData, Relationship, SQLModel
 
+from manman.repository.rabbitmq.config import EntityRegistrar
+
 # SQLModel.metadata = MetaData(schema="manman")
 
 
@@ -172,10 +174,60 @@ OBSERVED_STATUS_TYPES = {
 }
 
 
+# TODO can there be a common message base?
+class InternalStatusInfo(ManManBase, table=False):
+    def __init__(self, **data):
+        # TODO improve this 6/7/25
+
+        if "entity_type" in data:
+            entity_type = data["entity_type"]
+            if isinstance(entity_type, str):
+                try:
+                    data["entity_type"] = EntityRegistrar(entity_type)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid entity type: {entity_type}. Must be a valid EntityRegistrar."
+                    )
+            elif not isinstance(entity_type, EntityRegistrar):
+                raise ValueError(f"Invalid entity type: {entity_type}")
+        if "status_type" in data:
+            status_type = data["status_type"]
+            if isinstance(status_type, str):
+                try:
+                    data["status_type"] = StatusType(status_type)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid status type: {status_type}. Must be a valid StatusType."
+                    )
+            elif not isinstance(status_type, StatusType):
+                raise ValueError(f"Invalid status type: {status_type}")
+        super().__init__(**data)
+
+    entity_type: EntityRegistrar = Field()
+    identifier: str = Field()
+    as_of: datetime.datetime = Field(default=current_timestamp())
+    status_type: StatusType = Field()
+
+    @classmethod
+    def create(
+        cls,
+        entity_type: EntityRegistrar,
+        identifier: str,
+        status_type: StatusType,
+    ) -> "InternalStatusInfo":
+        as_of = datetime.datetime.now(datetime.timezone.utc)
+        return cls(
+            entity_type=entity_type,
+            identifier=identifier,
+            status_type=status_type,
+            as_of=as_of,
+        )
+
+
 ### BACK TO TABLES
 
 
-class StatusInfo(ManManBase, table=True):
+class ExternalStatusInfo(ManManBase, table=True):
     __tablename__ = "status_info"
 
     def __init__(self, **data):
@@ -245,7 +297,9 @@ class StatusInfo(ManManBase, table=True):
     )
 
     @staticmethod
-    def _validate_target_exclusivity(info: "StatusInfo") -> "StatusInfo":
+    def _validate_target_exclusivity(
+        info: "ExternalStatusInfo",
+    ) -> "ExternalStatusInfo":
         """Ensure exactly one of worker_id or game_server_instance_id is set."""
         worker_set = info.worker_id is not None
         instance_set = info.game_server_instance_id is not None
@@ -265,7 +319,7 @@ class StatusInfo(ManManBase, table=True):
         status_type: StatusType,
         worker_id: Optional[int] = None,
         game_server_instance_id: Optional[int] = None,
-    ) -> "StatusInfo":
+    ) -> "ExternalStatusInfo":
         as_of = datetime.datetime.now(datetime.timezone.utc)
         if isinstance(status_type, str):
             raise ValueError(

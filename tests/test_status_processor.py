@@ -13,8 +13,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from manman.host.status_processor import StatusEventProcessor
-from manman.models import StatusInfo, StatusType
-from manman.repository.rabbitmq import StatusMessage
+from manman.models import ExternalStatusInfo, StatusType
+from manman.repository.rabbitmq.abstract_legacy import StatusMessage
 
 
 class TestStatusProcessor:
@@ -82,7 +82,7 @@ class TestStatusProcessor:
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
         # Create a test status message
-        status_info = StatusInfo.create(
+        status_info = ExternalStatusInfo.create(
             "WorkerService", StatusType.RUNNING, worker_id=123
         )
 
@@ -97,7 +97,9 @@ class TestStatusProcessor:
 
     def test_status_message_creation(self):
         """Test that StatusMessage objects are created correctly."""
-        status_info = StatusInfo.create("TestClass", StatusType.CREATED, worker_id=789)
+        status_info = ExternalStatusInfo.create(
+            "TestClass", StatusType.CREATED, worker_id=789
+        )
         routing_key = "worker-instance.789.status"
 
         status_message = StatusMessage(status_info=status_info, routing_key=routing_key)
@@ -115,7 +117,7 @@ class TestStatusProcessor:
         ):
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
-            status_info = StatusInfo.create(
+            status_info = ExternalStatusInfo.create(
                 "WorkerService", StatusType.RUNNING, worker_id=123
             )
 
@@ -132,7 +134,9 @@ class TestStatusProcessor:
                     with patch.object(
                         processor._internal_status_subscriber, "get_status_messages"
                     ) as mock_get_messages:
-                        from manman.repository.rabbitmq import StatusMessage
+                        from manman.repository.rabbitmq.abstract_legacy import (
+                            StatusMessage,
+                        )
 
                         mock_get_messages.return_value = [
                             StatusMessage(
@@ -155,7 +159,7 @@ class TestStatusProcessor:
             processor = StatusEventProcessor(mock_rabbitmq_connection)
 
             # Create test status info with specific values
-            status_info = StatusInfo.create(
+            status_info = ExternalStatusInfo.create(
                 "TestWorker", StatusType.COMPLETE, worker_id=999
             )
 
@@ -193,13 +197,13 @@ class TestStatusProcessor:
             # Mock the status subscriber to return test messages
             test_messages = [
                 StatusMessage(
-                    status_info=StatusInfo.create(
+                    status_info=ExternalStatusInfo.create(
                         "WorkerService", StatusType.CREATED, worker_id=100
                     ),
                     routing_key="worker-instance.100.status",
                 ),
                 StatusMessage(
-                    status_info=StatusInfo.create(
+                    status_info=ExternalStatusInfo.create(
                         "Server", StatusType.RUNNING, worker_id=101
                     ),
                     routing_key="worker-instance.101.status",

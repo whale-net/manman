@@ -39,6 +39,42 @@ def start(
     service.run()
 
 
+@app.command()
+def dev():
+    from manman.repository.rabbitmq.config import EntityRegistrar
+    from manman.worker.abstract_service import ManManService
+
+    class DevService(ManManService):
+        @property
+        def service_entity_type(self):
+            return EntityRegistrar.WORKER
+
+        @property
+        def identifier(self):
+            return "dev_service"
+
+        def __init__(self, connection: amqpstorm.Connection):
+            super().__init__(connection)
+
+        def _initialize_service(self):
+            logger.info("DevService setup called")
+
+        def _do_work(self):
+            logger.info("DevService started")
+
+        def _stop_service(self):
+            logger.info("DevService stopped")
+
+        def _handle_commmands(self, commands):
+            for command in commands:
+                logger.info(f"DevService received command: {command}")
+
+        def _send_heartbeat(self):
+            logger.info("heartbeat sent from DevService")
+
+    DevService(get_rabbitmq_connection()).run()
+
+
 @app.callback()
 def callback(
     # auth_url: Annotated[str, typer.Option(envvar="MANMAN_AUTH_URL")],

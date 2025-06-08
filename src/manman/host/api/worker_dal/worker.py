@@ -3,9 +3,9 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from manman.exceptions import WorkerAlreadyClosedException
-from manman.models import StatusInfo, StatusType, Worker
+from manman.models import ExternalStatusInfo, StatusType, Worker
 from manman.repository.database import WorkerRepository
-from manman.repository.rabbitmq import LegacyRabbitStatusPublisher
+from manman.repository.rabbitmq.publisher import LegacyRabbitStatusPublisher
 from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ async def worker_shutdown_other(instance: Worker):
                 },
             )
             worker_publisher.publish(
-                StatusInfo.create(
+                ExternalStatusInfo.create(
                     class_name="WorkerDal",
                     status_type=StatusType.COMPLETE,
                     worker_id=worker.worker_id,

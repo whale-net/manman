@@ -8,8 +8,8 @@ consuming from multiple exchanges with different routing keys.
 import unittest
 from unittest.mock import Mock, call, patch
 
-from manman.models import StatusInfo, StatusType
-from manman.repository.rabbitmq.base import StatusMessage
+from manman.models import ExternalStatusInfo, StatusType
+from manman.repository.rabbitmq.abstract_legacy import StatusMessage
 from manman.repository.rabbitmq.subscriber import RabbitStatusSubscriber
 
 
@@ -238,7 +238,7 @@ class TestRabbitStatusSubscriberMultipleExchanges(unittest.TestCase):
         )
 
         # Create a test status message
-        status_info = StatusInfo.create(
+        status_info = ExternalStatusInfo.create(
             "TestClass", StatusType.RUNNING, game_server_instance_id=123
         )
 

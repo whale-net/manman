@@ -1,11 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 
 class ExchangeRegistrar(Enum):
     # NOTE: for now, all durable topic exchanges
-    MANMAN_SERVICE_EVENT = "service_events"
+    INTERNAL_SERVICE_EVENT = "internal_service_events"
+    EXTERNAL_SERVICE_EVENT = "external_service_events"
 
 
 class EntityRegistrar(Enum):
@@ -53,8 +54,19 @@ class RoutingKeyConfig:
         return f"{entity_str}.{identifier_str}.{type_str}{subtype_str}"
 
 
-# TODO - queue config
-# consuming_app.producing_app.whatever?
+@dataclass
+class QueueConfig:
+    # TODO - more customization options for queue name
+    name: str
+
+    durable: bool
+    exclusive: bool
+    auto_delete: bool
+
+    actual_queue_name: Optional[str] = field(default=None, init=False)
+
+    def build_name(self):
+        return self.name
 
 
 @dataclass

@@ -10,13 +10,66 @@ from typing import Dict, List, Optional, Union
 
 from amqpstorm import Channel, Connection
 
-from manman.models import StatusInfo
+from manman.models import ExternalStatusInfo
 from manman.repository.rabbitmq.config import BindingConfig
 
-from .base import LegacyMessagePublisher, MessagePublisherInterface
+from ..message.abstract_interface import MessagePublisherInterface
+from .abstract_legacy import LegacyMessagePublisher
 from .util import add_routing_key_suffix
 
 logger = logging.getLogger(__name__)
+
+
+class RabbitPublisher(MessagePublisherInterface):
+    """
+    Base class for RabbitMQ publishers.
+    This class provides common functionality for publishing messages to RabbitMQ exchanges.
+    """
+
+    def __init__(
+        self,
+        connection: Connection,
+        binding_configs: Union[BindingConfig, list[BindingConfig]],
+    ) -> None:
+        self._channel: Channel = connection.channel()
+
+        if isinstance(binding_configs, BindingConfig):
+            binding_configs = [binding_configs]
+        self._binding_configs: list[BindingConfig] = binding_configs
+
+        logger.info("RabbitPublisher initialized with channel %s", self._channel)
+
+    def publish(self, message: str) -> None:
+        """
+        Publish a message to all configured exchanges with their routing keys.
+
+        :param message: The message to be published.
+        """
+        for binding_config in self._binding_configs:
+            for routing_key in binding_config.routing_keys:
+                self._channel.basic.publish(
+                    body=message,
+                    exchange=binding_config.exchange.value,
+                    routing_key=routing_key,
+                )
+                logger.debug(
+                    "Message published to exchange %s with routing key %s",
+                    binding_config.exchange.value,
+                    routing_key,
+                )
+
+    # TODO - move this to common base rabbit connection wrapper class or something
+    def shutdown(self) -> None:
+        """
+        Shutdown the publisher by closing the channel.
+        """
+        logger.info("Shutting down RabbitPublisher...")
+        try:
+            if self._channel.is_open:
+                self._channel.close()
+                logger.info("Channel closed.")
+        except Exception as e:
+            logger.exception("Error closing channel: %s", e)
 
 
 class LegacyRabbitStatusPublisher(LegacyMessagePublisher):
@@ -86,7 +139,7 @@ class LegacyRabbitStatusPublisher(LegacyMessagePublisher):
         )
 
     # TODO- make publish external its own class
-    def publish_external(self, status: StatusInfo) -> None:
+    def publish_external(self, status: ExternalStatusInfo) -> None:
         is_worker = status.worker_id is not None
         is_server = status.game_server_instance_id is not None
 
@@ -104,7 +157,7 @@ class LegacyRabbitStatusPublisher(LegacyMessagePublisher):
         self.publish(status, routing_key_suffix=suffix)
 
     def publish(
-        self, status: StatusInfo, routing_key_suffix: Optional[str] = None
+        self, status: ExternalStatusInfo, routing_key_suffix: Optional[str] = None
     ) -> None:
         """
         Publish a status message to all configured exchanges with their routing keys.
@@ -140,41 +193,3 @@ class LegacyRabbitStatusPublisher(LegacyMessagePublisher):
                 logger.info("Channel closed.")
         except Exception as e:
             logger.exception("Error closing channel: %s", e)
-
-
-class RabbitStatusPublisher(MessagePublisherInterface):
-    """
-    A message publisher that sends status messages to RabbitMQ exchanges.
-
-    This class sets up a connection to RabbitMQ, declares exchanges and
-    provides methods to publish messages to one or more exchanges with
-    different routing keys.
-    """
-
-    def __init__(
-        self,
-        rabbitmq_connection: Connection,
-        binding_configs: Union[BindingConfig, list[BindingConfig]],
-    ) -> None:
-        """
-        Initialize the RabbitStatusPublisher with a RabbitMQ connection.
-
-        :param connection: An AMQPStorm connection to the RabbitMQ server.
-        """
-        if isinstance(binding_configs, BindingConfig):
-            binding_configs = [binding_configs]
-        self._binding_configs: list[BindingConfig] = binding_configs
-
-        self._channel: Channel = rabbitmq_connection.channel()
-        logger.info("RabbitStatusPublisher initialized with channel %s", self._channel)
-
-    def publish(self, status: StatusInfo) -> None:
-        message = status.model_dump_json()
-        for binding_config in self._binding_configs:
-            for routing_key in binding_config.routing_keys:
-                # Publish the message
-                self._channel.basic.publish(
-                    body=message,
-                    exchange=binding_config.exchange.value,
-                    routing_key=routing_key,
-                )

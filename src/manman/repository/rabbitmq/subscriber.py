@@ -10,13 +10,135 @@ import queue
 import threading
 from typing import Dict, List, Optional, Union
 
-from amqpstorm import Connection, Message
+from amqpstorm import Channel, Connection, Message
 
-from manman.models import Command, StatusInfo
+from manman.models import Command, ExternalStatusInfo
+from manman.repository.message.abstract_interface import MessageSubscriberInterface
+from manman.repository.rabbitmq.config import BindingConfig, QueueConfig
 
-from .base import LegacyMessageSubscriber, StatusMessage
+from .abstract_legacy import LegacyMessageSubscriber, StatusMessage
 
 logger = logging.getLogger(__name__)
+
+# TODO - reduce duplication with RabbitCommandPublisher
+
+
+class RabbitSubscriber(MessageSubscriberInterface):
+    """
+    Base class for RabbitMQ subscribers
+    This class provides common functionality for subscribing to RabbitMQ exchanges.
+    """
+
+    def __init__(
+        self,
+        connection: Connection,
+        binding_configs: Union[BindingConfig, list[BindingConfig]],
+        queue_config: QueueConfig,
+    ) -> None:
+        self._channel: Channel = connection.channel()
+
+        if isinstance(binding_configs, BindingConfig):
+            binding_configs = [binding_configs]
+        self._binding_configs: list[BindingConfig] = binding_configs
+
+        # exchange already declared
+
+        # Declare queue
+        logger.info("declaring queue with config: %s", queue_config)
+        result = self._channel.queue.declare(
+            queue=queue_config.name or "",
+            durable=queue_config.durable,
+            exclusive=queue_config.exclusive,
+            auto_delete=queue_config.auto_delete,
+        )
+        # mutate config to store actual name. kind of a hack, but want to keep name stored
+        queue_config.actual_queue_name = result.get("queue", queue_config.name)
+        logger.info("Queue declared %s", queue_config.actual_queue_name)
+
+        for binding_config in self._binding_configs:
+            for routing_key in binding_config.routing_keys:
+                self._channel.queue.bind(
+                    exchange=binding_config.exchange.value,
+                    queue=queue_config.actual_queue_name,
+                    routing_key=routing_key,
+                )
+                logger.info(
+                    "Queue %s bound to exchange %s with routing key '%s'",
+                    queue_config.actual_queue_name,
+                    binding_config.exchange.value,
+                    routing_key,
+                )
+
+        self._internal_message_queue = queue.Queue()
+        self._consumer_tag = self._channel.basic.consume(
+            callback=self._message_handler,
+            queue=queue_config.actual_queue_name,
+        )
+
+        self._consumer_thread = threading.Thread(
+            target=self._channel.start_consuming,
+            name=f"rmq-subscriber-{queue_config.actual_queue_name}",
+            daemon=True,
+        )
+        self._consumer_thread.start()
+
+        logger.info("RabbitSubscriber initialized with channel %s", self._channel)
+
+    def _message_handler(self, message: Message):
+        """
+        Write messages to internal queue for retrieval in `consume` method.
+        """
+        self._internal_message_queue.put(message.body)
+        message.ack()
+
+    def consume(self) -> List[str]:
+        """
+        Consume messages from the internal queue.
+        This method retrieves all available messages and is non-blocking.
+
+        :return: List of message bodies as strings.
+        """
+        messages = []
+        while not self._internal_message_queue.empty():
+            try:
+                # don't block - will return immediately if no messages are available
+                message_body = self._internal_message_queue.get(block=False)
+                messages.append(message_body)
+            except queue.Empty:
+                break
+        return messages
+
+    # TODO - move this to common base rabbit connection wrapper class or something
+    # feels bad having pub and sub
+    # when eventually probably will have a pubsub
+    def shutdown(self) -> None:
+        """
+        Shutdown the publisher by closing the channel.
+        """
+        logger.info("Shutting down RabbitPublisher...")
+
+        try:
+            # Cancel the consumer
+            if self._consumer_tag and self._channel.is_open:
+                self._channel.basic.cancel(self._consumer_tag)
+                logger.info("Consumer cancelled.")
+        except Exception as e:
+            logger.exception("Error cancelling consumer: %s", e)
+
+        try:
+            # Stop consuming
+            if self._channel.is_open:
+                self._channel.stop_consuming()
+                logger.info("Stopped consuming.")
+        except Exception as e:
+            logger.exception("Error stopping consuming: %s", e)
+
+        try:
+            if self._channel.is_open:
+                self._channel.close()
+                logger.info("Channel closed.")
+        except Exception as e:
+            logger.exception("Error closing channel: %s", e)
 
 
 class LegacyRabbitCommandSubscriber(LegacyMessageSubscriber):
@@ -245,7 +367,7 @@ class RabbitStatusSubscriber:
 
     def _message_handler(self, message: Message):
         try:
-            status_info = StatusInfo.model_validate_json(message.body)
+            status_info = ExternalStatusInfo.model_validate_json(message.body)
 
             # Capture routing key from the message
             routing_key = message.method.get("routing_key", "")

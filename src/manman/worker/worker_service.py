@@ -9,17 +9,15 @@ from requests import ConnectionError
 from manman.models import (
     Command,
     CommandType,
+    ExternalStatusInfo,
     GameServerConfig,
-    StatusInfo,
     StatusType,
 )
 
 # from sqlalchemy.orm import Session
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import (
-    LegacyRabbitCommandSubscriber,
-    LegacyRabbitStatusPublisher,
-)
+from manman.repository.rabbitmq.publisher import LegacyRabbitStatusPublisher
+from manman.repository.rabbitmq.subscriber import LegacyRabbitCommandSubscriber
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import NamedThreadPool, get_auth_api_client
 from manman.worker.server import Server
@@ -87,7 +85,7 @@ class WorkerService:
 
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfo.create(
+            status=ExternalStatusInfo.create(
                 self.__class__.__name__,
                 StatusType.CREATED,
                 worker_id=self._worker_instance.worker_id,
@@ -125,7 +123,7 @@ class WorkerService:
             logger.info("worker service starting")
             # TODO - https://github.com/whale-net/manman/issues/44
             self._status_publisher.publish(
-                status=StatusInfo.create(
+                status=ExternalStatusInfo.create(
                     self.__class__.__name__,
                     StatusType.RUNNING,
                     worker_id=self._worker_instance.worker_id,
@@ -167,7 +165,7 @@ class WorkerService:
         self._wapi.worker_shutdown(self._worker_instance)
         # TODO - https://github.com/whale-net/manman/issues/44
         self._status_publisher.publish(
-            status=StatusInfo.create(
+            status=ExternalStatusInfo.create(
                 self.__class__.__name__,
                 StatusType.COMPLETE,
                 worker_id=self._worker_instance.worker_id,

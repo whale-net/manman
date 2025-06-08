@@ -16,9 +16,11 @@ def test_imports():
     sys.path.insert(0, str(project_root / "src"))
 
     # Test imports
-    from manman.models import StatusInfo, StatusType
+    from manman.models import ExternalStatusInfo, StatusType
 
     # Basic functionality test
-    status_info = StatusInfo.create("TestClass", StatusType.CREATED, worker_id=-1)
+    status_info = ExternalStatusInfo.create(
+        "TestClass", StatusType.CREATED, worker_id=-1
+    )
     assert status_info.class_name == "TestClass"
     assert status_info.status_type == StatusType.CREATED

@@ -10,17 +10,15 @@ from amqpstorm import Connection
 from manman.models import (
     Command,
     CommandType,
+    ExternalStatusInfo,
     GameServerConfig,
     GameServerInstance,
     ServerType,
-    StatusInfo,
     StatusType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq import (
-    LegacyRabbitCommandSubscriber,
-    LegacyRabbitStatusPublisher,
-)
+from manman.repository.rabbitmq.publisher import LegacyRabbitStatusPublisher
+from manman.repository.rabbitmq.subscriber import LegacyRabbitCommandSubscriber
 from manman.repository.rabbitmq.util import add_routing_key_prefix
 from manman.util import env_list_to_dict
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
@@ -84,7 +82,7 @@ class Server:
 
         # Publish CREATED status
         self._status_publisher.publish(
-            status=StatusInfo.create(
+            status=ExternalStatusInfo.create(
                 self.__class__.__name__,
                 StatusType.CREATED,
                 game_server_instance_id=self._instance.game_server_instance_id,
@@ -188,7 +186,7 @@ class Server:
 
             # Publish COMPLETE status
             self._status_publisher.publish(
-                status=StatusInfo.create(
+                status=ExternalStatusInfo.create(
                     self.__class__.__name__,
                     StatusType.COMPLETE,
                     game_server_instance_id=instance_id,
@@ -228,7 +226,7 @@ class Server:
 
         # Publish INITIALIZING status
         self._status_publisher.publish(
-            status=StatusInfo.create(
+            status=ExternalStatusInfo.create(
                 self.__class__.__name__,
                 StatusType.INITIALIZING,
                 game_server_instance_id=self._instance.game_server_instance_id,
@@ -247,7 +245,7 @@ class Server:
 
             # Publish RUNNING status once process is started
             self._status_publisher.publish(
-                status=StatusInfo.create(
+                status=ExternalStatusInfo.create(
                     self.__class__.__name__,
                     StatusType.RUNNING,
                     game_server_instance_id=self._instance.game_server_instance_id,

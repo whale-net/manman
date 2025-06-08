@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from manman.host.api.status.api import router
-from manman.models import StatusInfo, StatusType
+from manman.models import ExternalStatusInfo, StatusType
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ class TestWorkerStatusEndpoint:
     def test_returns_worker_status_when_found(self, client, mock_status_repository):
         """Test: Pass in worker ID, get back worker status."""
         # Arrange
-        expected_status = StatusInfo.create(
+        expected_status = ExternalStatusInfo.create(
             class_name="WorkerService", status_type=StatusType.RUNNING, worker_id=123
         )
         mock_status_repository.get_latest_worker_status.return_value = expected_status
@@ -83,7 +83,7 @@ class TestInstanceStatusEndpoint:
     def test_returns_instance_status_when_found(self, client, mock_status_repository):
         """Test: Pass in instance ID, get back instance status."""
         # Arrange
-        expected_status = StatusInfo.create(
+        expected_status = ExternalStatusInfo.create(
             class_name="Server",
             status_type=StatusType.RUNNING,
             game_server_instance_id=456,

@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from manman.models import StatusInfo, StatusType
+from manman.models import ExternalStatusInfo, StatusType
 from manman.worker.server import Server
 
 
@@ -199,7 +199,7 @@ class TestServerStatusPublishing:
 
     def test_status_info_creation(self):
         """Test that StatusInfo objects are created correctly for servers."""
-        status = StatusInfo.create(
+        status = ExternalStatusInfo.create(
             "Server", StatusType.RUNNING, game_server_instance_id=456
         )
 

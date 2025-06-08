@@ -5,14 +5,12 @@ from datetime import datetime, timedelta, timezone
 from amqpstorm import Connection
 
 from manman.models import (
-    StatusInfo,
+    ExternalStatusInfo,
     StatusType,
 )
 from manman.repository.database import DatabaseRepository
-from manman.repository.rabbitmq import (
-    LegacyRabbitStatusPublisher,
-    RabbitStatusSubscriber,
-)
+from manman.repository.rabbitmq.publisher import LegacyRabbitStatusPublisher
+from manman.repository.rabbitmq.subscriber import RabbitStatusSubscriber
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +141,7 @@ class StatusEventProcessor:
         """Send a worker lost notification to external queue"""
         try:
             # Create a status message indicating the worker is lost
-            lost_status = StatusInfo(
+            lost_status = ExternalStatusInfo(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
                 as_of=datetime.now(timezone.utc),
@@ -163,7 +161,7 @@ class StatusEventProcessor:
         """Send a game server lost notification to external queue"""
         try:
             # Create a status message indicating the game server instance is lost
-            lost_status = StatusInfo(
+            lost_status = ExternalStatusInfo(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
                 as_of=datetime.now(timezone.utc),

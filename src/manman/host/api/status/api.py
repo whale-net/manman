@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from manman.models import StatusInfo
+from manman.models import ExternalStatusInfo
 from manman.repository.database import StatusRepository
 
 router = APIRouter(prefix="/status")
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/status")
 )
 async def get_worker_status(
     worker_id: int,
-) -> StatusInfo:
+) -> ExternalStatusInfo:
     repository = StatusRepository()
     status = repository.get_latest_worker_status(worker_id)
     if not status:
@@ -28,7 +28,7 @@ async def get_worker_status(
 )
 async def get_game_server_instance(
     game_server_instance_id: int,
-) -> StatusInfo:
+) -> ExternalStatusInfo:
     repository = StatusRepository()
     status = repository.get_latest_instance_status(game_server_instance_id)
     if status is None:

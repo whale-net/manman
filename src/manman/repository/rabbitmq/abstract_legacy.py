@@ -6,34 +6,16 @@ along with common data structures used across the RabbitMQ implementation.
 """
 
 import abc
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
-from manman.models import Command, StatusInfo
+from manman.models import Command, ExternalStatusInfo
 
 
 class StatusMessage(NamedTuple):
     """Container for status message with routing information."""
 
-    status_info: StatusInfo
+    status_info: ExternalStatusInfo
     routing_key: str
-
-
-class MessagePublisherInterface(abc.ABC):
-    @abc.abstractmethod
-    def publish(self, **kwargs) -> None:
-        pass
-
-
-class MessageSubscriberInterface(abc.ABC):
-    @abc.abstractmethod
-    def get_messages(self) -> list[Any]:
-        """
-        Retrieve a list of messages from the message provider.
-
-        Non-blocking
-        """
-        # TODO - return base class with common message util stuff
-        pass
 
 
 class LegacyMessagePublisher(abc.ABC):
@@ -43,7 +25,7 @@ class LegacyMessagePublisher(abc.ABC):
     """
 
     @abc.abstractmethod
-    def publish(self, status: StatusInfo, **kwargs) -> None:
+    def publish(self, status: ExternalStatusInfo, **kwargs) -> None:
         """
         Publish a status message to the message provider.
 

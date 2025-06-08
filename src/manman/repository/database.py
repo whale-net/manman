@@ -18,10 +18,10 @@ from manman.exceptions import (
 )
 from manman.models import (
     ACTIVE_STATUS_TYPES,
+    ExternalStatusInfo,
     GameServer,
     GameServerConfig,
     GameServerInstance,
-    StatusInfo,
     StatusType,
     Worker,
 )
@@ -69,15 +69,15 @@ class DatabaseRepository:
     @staticmethod
     def get_worker_current_status_subquery():
         # Subquery to get the latest status for each worker
-        inner = select(StatusInfo).alias("si2")
+        inner = select(ExternalStatusInfo).alias("si2")
         last_status = (
-            select(StatusInfo).where(
-                not_(StatusInfo.worker_id.is_(None)),
+            select(ExternalStatusInfo).where(
+                not_(ExternalStatusInfo.worker_id.is_(None)),
                 not_(
                     select(inner)
                     .where(
-                        inner.c.worker_id == StatusInfo.worker_id,
-                        inner.c.as_of > StatusInfo.as_of,
+                        inner.c.worker_id == ExternalStatusInfo.worker_id,
+                        inner.c.as_of > ExternalStatusInfo.as_of,
                     )
                     .exists()
                 ),
@@ -135,7 +135,7 @@ class DatabaseRepository:
             )
             return session.exec(stmt).all()
 
-    def write_status_to_database(self, status_info: StatusInfo) -> None:
+    def write_status_to_database(self, status_info: ExternalStatusInfo) -> None:
         """
         Write a status message to the database.
 
@@ -177,7 +177,7 @@ class DatabaseRepository:
 class StatusRepository(DatabaseRepository):
     """Repository class for status-related database operations."""
 
-    def get_latest_worker_status(self, worker_id: int) -> Optional[StatusInfo]:
+    def get_latest_worker_status(self, worker_id: int) -> Optional[ExternalStatusInfo]:
         """
         Get the latest status for a specific worker.
 
@@ -189,16 +189,16 @@ class StatusRepository(DatabaseRepository):
         """
         with self._get_session_context() as session:
             stmt = (
-                select(StatusInfo)
-                .where(StatusInfo.worker_id == worker_id)
-                .order_by(desc(StatusInfo.as_of))
+                select(ExternalStatusInfo)
+                .where(ExternalStatusInfo.worker_id == worker_id)
+                .order_by(desc(ExternalStatusInfo.as_of))
                 .limit(1)
             )
             return session.exec(stmt).first()
 
     def get_latest_instance_status(
         self, game_server_instance_id: int
-    ) -> Optional[StatusInfo]:
+    ) -> Optional[ExternalStatusInfo]:
         """
         Get the latest status for a specific game server instance.
 
@@ -210,9 +210,12 @@ class StatusRepository(DatabaseRepository):
         """
         with self._get_session_context() as session:
             stmt = (
-                select(StatusInfo)
-                .where(StatusInfo.game_server_instance_id == game_server_instance_id)
-                .order_by(desc(StatusInfo.as_of))
+                select(ExternalStatusInfo)
+                .where(
+                    ExternalStatusInfo.game_server_instance_id
+                    == game_server_instance_id
+                )
+                .order_by(desc(ExternalStatusInfo.as_of))
                 .limit(1)
             )
             return session.exec(stmt).first()

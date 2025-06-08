@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from manman.models import StatusInfo, StatusType
+from manman.models import ExternalStatusInfo, StatusType
 from manman.repository.database import DatabaseRepository
 
 
@@ -83,7 +83,7 @@ class TestDatabaseRepository:
         mock_get_session.return_value.__enter__.return_value = mock_session
 
         # Create a test status info
-        status_info = StatusInfo(
+        status_info = ExternalStatusInfo(
             class_name="TestClass",
             status_type=StatusType.RUNNING,
             as_of=datetime.now(timezone.utc),
