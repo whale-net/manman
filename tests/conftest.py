@@ -2,6 +2,145 @@
 Shared pytest fixtures and utilities for testing.
 
 This module provides reusable testing utilities that can be used across different test modules.
+
+## Mock Message Infrastructure
+
+This module provides a comprehensive mock infrastructure for testing message-based systems
+without requiring actual RabbitMQ connections. The mock implementations follow the same
+interfaces as the real RabbitMQ classes but provide additional testing capabilities.
+
+### Core Mock Classes
+
+- `MockMessagePublisher`: Mock implementation of `MessagePublisherInterface`
+  - Tracks all published messages for inspection
+  - Provides methods to verify message content and call counts
+  - Can be cleared between tests for clean state
+
+- `MockMessageSubscriber`: Mock implementation of `MessageSubscriberInterface`
+  - Allows queuing test messages to be consumed
+  - Tracks consumption calls
+  - Provides queue management methods
+
+### Available Fixtures
+
+#### Basic Mocks
+- `mock_message_publisher`: Fresh MockMessagePublisher instance
+- `mock_message_subscriber`: Fresh MockMessageSubscriber instance
+
+#### Service Mocks (combine publishers/subscribers with service logic)
+- `mock_internal_status_pub_service`: InternalStatusInfoPubService with mock publisher
+- `mock_external_status_pub_service`: ExternalStatusInfoPubService with mock publisher  
+- `mock_command_pub_service`: CommandPubService with mock publisher
+- `mock_internal_status_sub_service`: InternalStatusSubService with mock subscriber
+- `mock_external_status_sub_service`: ExternalStatusSubService with mock subscriber
+- `mock_command_sub_service`: CommandSubService with mock subscriber
+
+#### Repository Mocks
+- `mock_status_repository`: Mock for status API endpoints
+- `mock_game_repository`: Mock for game API endpoints
+- `mock_worker_repository`: Mock for worker API endpoints
+
+### Usage Examples
+
+#### Basic Message Testing
+```python
+def test_basic_message_flow(mock_message_publisher, mock_message_subscriber):
+    # Publish a message
+    mock_message_publisher.publish("test message")
+    
+    # Verify publication
+    assert mock_message_publisher.publish_call_count == 1
+    assert mock_message_publisher.was_called_with("test message")
+    
+    # Simulate message reception
+    mock_message_subscriber.queue_message("test message")
+    messages = mock_message_subscriber.consume()
+    assert messages == ["test message"]
+```
+
+#### Service Testing
+```python
+def test_status_service(mock_internal_status_pub_service):
+    status = InternalStatusInfo.create(EntityRegistry.WORKER, "test", StatusType.RUNNING)
+    mock_internal_status_pub_service.publish_status(status)
+    
+    # Access underlying mock for verification
+    publisher_mock = mock_internal_status_pub_service._publisher
+    assert publisher_mock.publish_call_count == 1
+```
+
+#### Message Flow Testing
+```python
+def test_end_to_end_flow(mock_internal_status_pub_service, mock_internal_status_sub_service):
+    # Get underlying mocks
+    pub_mock = mock_internal_status_pub_service._publisher
+    sub_mock = mock_internal_status_sub_service._subscriber
+    
+    # Publish a status
+    status = InternalStatusInfo.create(EntityRegistry.WORKER, "worker-1", StatusType.RUNNING)
+    mock_internal_status_pub_service.publish_status(status)
+    
+    # Simulate message delivery
+    published_json = pub_mock.get_last_message()
+    sub_mock.queue_message(published_json)
+    
+    # Consume and verify
+    consumed = mock_internal_status_sub_service.get_internal_statuses()
+    assert len(consumed) == 1
+    assert consumed[0].identifier == "worker-1"
+```
+
+#### Testing Complex Systems
+```python 
+def test_status_processor_with_mocks():
+    # Create mock services
+    mock_subscriber = MockMessageSubscriber()
+    mock_publisher = MockMessagePublisher()
+    
+    # Queue test messages
+    status = InternalStatusInfo.create(EntityRegistry.WORKER, "100", StatusType.RUNNING)
+    mock_subscriber.queue_message(status.model_dump_json())
+    
+    # Create service instances
+    sub_service = InternalStatusSubService(mock_subscriber)
+    pub_service = ExternalStatusInfoPubService(mock_publisher)
+    
+    # Inject into system under test using patches
+    with patch.object(system, 'subscriber', sub_service), \\
+         patch.object(system, 'publisher', pub_service):
+        system.process_messages()
+        
+    # Verify behavior
+    assert mock_subscriber.consume_call_count == 1
+    assert mock_publisher.publish_call_count == 1
+```
+
+### Mock Inspection Methods
+
+#### Publisher Inspection
+- `publish_call_count`: Number of times publish() was called
+- `published_messages`: List of all published message strings
+- `get_last_message()`: Get the most recently published message
+- `was_called_with(message)`: Check if a specific message was published
+- `clear()`: Reset all tracking data
+
+#### Subscriber Inspection  
+- `consume_call_count`: Number of times consume() was called
+- `queue_message(msg)`: Add a message to be returned by next consume()
+- `queue_messages(msgs)`: Add multiple messages
+- `clear_queue()`: Remove all queued messages
+- `has_queued_messages()`: Check if messages are waiting
+
+### Best Practices
+
+1. **Use fixtures when possible**: The provided fixtures ensure clean state and proper setup
+2. **Clear state between tests**: Use `clear()` methods when reusing mocks across test cases
+3. **Verify both sides**: Check that messages are published AND consumed as expected
+4. **Test error conditions**: Use mocks to simulate failures and verify error handling
+5. **Inspect message content**: Parse JSON messages to verify structure and data
+6. **Use service-level mocks**: Prefer testing at the service level rather than raw publisher/subscriber level
+
+See `test_mock_infrastructure_examples.py` for comprehensive usage examples.
 """
 
 from typing import Generator, List
@@ -132,6 +271,48 @@ def mock_message_publisher():
 def mock_message_subscriber():
     """Create a mock MessageSubscriber for testing."""
     return MockMessageSubscriber()
+
+
+@pytest.fixture 
+def mock_internal_status_sub_service(mock_message_subscriber):
+    """Create a mock InternalStatusSubService for testing."""
+    from manman.repository.message.sub import InternalStatusSubService
+    return InternalStatusSubService(mock_message_subscriber)
+
+
+@pytest.fixture
+def mock_external_status_sub_service(mock_message_subscriber):
+    """Create a mock ExternalStatusSubService for testing."""
+    from manman.repository.message.sub import ExternalStatusSubService
+    return ExternalStatusSubService(mock_message_subscriber)
+
+
+@pytest.fixture
+def mock_command_sub_service(mock_message_subscriber):
+    """Create a mock CommandSubService for testing."""
+    from manman.repository.message.sub import CommandSubService
+    return CommandSubService(mock_message_subscriber)
+
+
+@pytest.fixture
+def mock_internal_status_pub_service(mock_message_publisher):
+    """Create a mock InternalStatusInfoPubService for testing."""
+    from manman.repository.message.pub import InternalStatusInfoPubService
+    return InternalStatusInfoPubService(mock_message_publisher)
+
+
+@pytest.fixture
+def mock_external_status_pub_service(mock_message_publisher):
+    """Create a mock ExternalStatusInfoPubService for testing."""
+    from manman.repository.message.pub import ExternalStatusInfoPubService
+    return ExternalStatusInfoPubService(mock_message_publisher)
+
+
+@pytest.fixture
+def mock_command_pub_service(mock_message_publisher):
+    """Create a mock CommandPubService for testing."""
+    from manman.repository.message.pub import CommandPubService
+    return CommandPubService(mock_message_publisher)
 
 
 @pytest.fixture
