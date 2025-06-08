@@ -54,16 +54,30 @@ jobs:
           sudo mv tilt /usr/local/bin/
           tilt version
 
+      - name: Pre-build Docker image
+        run: |
+          # Build the manman image that Tilt expects
+          echo "Building manman Docker image..."
+          docker build -t manman:dev --build-arg COMPILE_CORES=2 .
+          echo "Docker image built successfully"
+          docker images | grep manman
+          
       - name: Load Docker images into kind
         run: |
           # Pre-pull images that might be needed
+          echo "Pulling external images..."
           docker pull postgres:15
           docker pull rabbitmq:3-management
           docker pull nginx/nginx-prometheus-exporter:latest
           
-          # Load into kind cluster
+          echo "Loading images into kind cluster..."
+          # Load into kind cluster - including our custom image
+          kind load docker-image manman:dev --name manman-test
           kind load docker-image postgres:15 --name manman-test
           kind load docker-image rabbitmq:3-management --name manman-test
+          
+          echo "Verifying images in kind cluster..."
+          docker exec -t manman-test-control-plane crictl images | grep -E "(manman|postgres|rabbitmq)" || true
 
       - name: Set up environment for CI
         run: |
@@ -81,16 +95,41 @@ jobs:
         run: |
           # Run tilt ci with timeout and proper logging
           echo "Starting Tilt CI deployment..."
-          timeout 20m tilt ci --timeout=20m --output-snapshot-on-exit=/tmp/tilt-snapshot.json --stream
+          echo "Environment variables:"
+          env | grep -E "(APP_ENV|MANMAN_|TILT_)" || true
+          
+          # Run with extended timeout for CI environment
+          timeout 25m tilt ci --timeout=25m --output-snapshot-on-exit=/tmp/tilt-snapshot.json --stream || {
+            echo "Tilt CI failed, checking cluster state..."
+            kubectl get pods -A
+            kubectl get events -A --sort-by='.lastTimestamp' | tail -20
+            exit 1
+          }
         env:
           TILT_HOST: 0.0.0.0
 
       - name: Wait for services to be ready
         run: |
           echo "Waiting for core services to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=postgres-dev -n manman-dev --timeout=300s || true
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=rabbitmq-dev -n manman-dev --timeout=300s || true
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=manman-host -n manman-dev --timeout=300s || true
+          
+          # First wait for external dependencies (postgres, rabbitmq)
+          echo "Waiting for PostgreSQL..."
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=postgres-dev -n manman-dev --timeout=300s || true
+          
+          echo "Waiting for RabbitMQ..."
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=rabbitmq-dev -n manman-dev --timeout=300s || true
+          
+          echo "Waiting for NGINX Ingress Controller..."
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=ingress-nginx -n ingress-nginx --timeout=300s || true
+          
+          # Wait for our application pods (using CI environment labels)
+          echo "Waiting for manman application pods with CI labels..."
+          kubectl wait --for=condition=Ready pod -l app=manman-experience-ci -n manman-dev --timeout=300s || true
+          kubectl wait --for=condition=Ready pod -l app=manman-status-ci -n manman-dev --timeout=300s || true
+          kubectl wait --for=condition=Ready pod -l app=manman-worker-dal-ci -n manman-dev --timeout=300s || true
+          
+          echo "Checking what pods are actually running..."
+          kubectl get pods -n manman-dev --show-labels
 
       - name: Verify deployment health
         run: |

@@ -100,6 +100,7 @@ if build_rabbitmq_env == 'custom': # Updated condition
 helm_set_args = [
     'image.name=manman',
     'image.tag=dev',
+    'env.app_env={}'.format(app_env),
     'env.db.url={}'.format(db_url),
     'env.rabbitmq.createVhost=true',
     'env.rabbitmq.host={}'.format(rabbitmq_host),
