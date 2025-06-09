@@ -110,6 +110,8 @@ class WorkerService(ManManService):
                 self.__handle_stop_command(command)
             elif command.command_type == CommandType.STDIN:
                 self.__handle_stdin_command(command)
+            elif command.command_type == CommandType.SHUTDOWN:
+                self.__handle_shutdown_command(command)
             else:
                 logger.warning("unknown command for worker %s", command)
 
@@ -170,6 +172,21 @@ class WorkerService(ManManService):
                 server.execute_command(command)
                 break
         self._servers_lock.release()
+
+    def __handle_shutdown_command(self, command: Command):
+        """
+        Handle shutdown command to gracefully shut down the worker service.
+        
+        This command should have no arguments and will trigger the internal shutdown
+        mechanism of the worker service.
+        """
+        if len(command.command_args) != 0:
+            logger.warning(
+                "shutdown command should have no args, got %s",
+                command.command_args,
+            )
+        logger.info("shutdown command received, triggering worker shutdown")
+        self._trigger_internal_shutdown()
 
     def _shutdown(self):
         self._wapi.worker_shutdown(self._worker_instance)

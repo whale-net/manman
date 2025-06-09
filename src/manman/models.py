@@ -138,6 +138,7 @@ class CommandType(Enum):
     START = "START"
     STDIN = "STDIN"
     STOP = "STOP"
+    SHUTDOWN = "SHUTDOWN"
 
 
 # {"command_type":"START", "command_args": ["1"]}
