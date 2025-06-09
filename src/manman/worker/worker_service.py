@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from threading import Lock
 
 from amqpstorm import Connection
@@ -44,6 +45,7 @@ class WorkerService(ManManService):
         host_url: str,
         sa_client_id: str,
         sa_client_secret: str,
+        heartbeat_length: int = 2,
     ):
         # pre-init
         self._wapi = WorkerAPIClient(
@@ -65,6 +67,10 @@ class WorkerService(ManManService):
 
         # SHUT DOWN OTHER WORKERS to enfroce single worker for now
         self._wapi.close_other_workers(self._worker_instance)
+
+        # Store heartbeat length and override the HEARTBEAT_INTERVAL
+        self._heartbeat_length = heartbeat_length
+        self.HEARTBEAT_INTERVAL = timedelta(seconds=heartbeat_length)
 
         super().__init__(rabbitmq_connection)
 

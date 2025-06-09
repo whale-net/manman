@@ -23,6 +23,9 @@ def start(
     install_directory: Annotated[
         str, typer.Option(envvar="MANMAN_WORKER_INSTALL_DIRECTORY")
     ] = "./data",
+    heartbeat_length: Annotated[
+        int, typer.Option(help="Heartbeat interval in seconds (default: 2)")
+    ] = 2,
     # steamcmd_override: Annotated[
     #     Optional[str], typer.Option(envvar="MANMAN_STEAMCMD_OVERRIDE"), None
     # ] = None,
@@ -35,6 +38,7 @@ def start(
         host_url=host_url,
         sa_client_id=None,
         sa_client_secret=None,
+        heartbeat_length=heartbeat_length,
     )
     service.run()
 
