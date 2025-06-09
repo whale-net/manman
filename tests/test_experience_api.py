@@ -35,15 +35,20 @@ def mock_worker_command_pub_service():
 @pytest.fixture
 def app_with_overrides(mock_current_worker, mock_worker_command_pub_service):
     """Create a test FastAPI app with dependency overrides."""
-    from manman.host.api.shared.injectors import current_worker, worker_command_pub_service
-    
+    from manman.host.api.shared.injectors import (
+        current_worker,
+        worker_command_pub_service,
+    )
+
     app = FastAPI()
     app.include_router(router)
-    
+
     # Override dependencies
     app.dependency_overrides[current_worker] = lambda: mock_current_worker
-    app.dependency_overrides[worker_command_pub_service] = lambda: mock_worker_command_pub_service
-    
+    app.dependency_overrides[worker_command_pub_service] = (
+        lambda: mock_worker_command_pub_service
+    )
+
     return app
 
 
@@ -66,12 +71,14 @@ class TestWorkerShutdown:
         response_data = response.json()
         assert response_data["status"] == "success"
         assert "Shutdown command sent to worker 123" in response_data["message"]
-        
+
         # Verify the command was published
         mock_worker_command_pub_service.publish_command.assert_called_once()
-        
+
         # Verify the command is correct
-        published_command = mock_worker_command_pub_service.publish_command.call_args[0][0]
+        published_command = mock_worker_command_pub_service.publish_command.call_args[
+            0
+        ][0]
         assert isinstance(published_command, Command)
         assert published_command.command_type == CommandType.STOP
         assert published_command.command_args == []
@@ -82,20 +89,23 @@ class TestWorkerShutdownNoWorker:
 
     def test_worker_shutdown_no_current_worker(self):
         """Test worker shutdown when no current worker exists."""
-        from manman.host.api.shared.injectors import current_worker, worker_command_pub_service
-        
+        from manman.host.api.shared.injectors import (
+            current_worker,
+            worker_command_pub_service,
+        )
+
         app = FastAPI()
         app.include_router(router)
-        
+
         # Override current_worker to raise HTTPException
         def mock_current_worker_raises():
             raise HTTPException(status_code=404, detail="Worker not found")
-        
+
         app.dependency_overrides[current_worker] = mock_current_worker_raises
         app.dependency_overrides[worker_command_pub_service] = lambda: Mock()
-        
+
         client = TestClient(app)
-        
+
         # Act
         response = client.post("/worker/shutdown")
 

@@ -141,7 +141,9 @@ class WorkerService(ManManService):
     def __handle_stop_command(self, command: Command):
         if len(command.command_args) == 0:
             # No arguments means shutdown the entire worker
-            logger.info("stop command with no args received, triggering worker shutdown")
+            logger.info(
+                "stop command with no args received, triggering worker shutdown"
+            )
             self._trigger_internal_shutdown()
         elif len(command.command_args) == 1:
             # One argument means stop a specific game server instance
