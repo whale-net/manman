@@ -207,7 +207,9 @@ class StatusEventProcessor:
         """
         try:
             # Get workers that are currently LOST but have recent heartbeats
-            recoverable_workers = self._db_repository.get_lost_workers_with_recent_heartbeats()
+            recoverable_workers = (
+                self._db_repository.get_lost_workers_with_recent_heartbeats()
+            )
 
             for worker, lost_timestamp in recoverable_workers:
                 logger.info(
@@ -221,8 +223,10 @@ class StatusEventProcessor:
                 self._send_worker_recovery_notification(worker.worker_id)
 
                 # Get all lost game server instances for this worker that can be recovered
-                lost_instances = self._db_repository.get_lost_game_server_instances_for_worker(
-                    worker.worker_id
+                lost_instances = (
+                    self._db_repository.get_lost_game_server_instances_for_worker(
+                        worker.worker_id
+                    )
                 )
 
                 # Send recovery notifications for all recoverable game server instances
@@ -311,7 +315,9 @@ class StatusEventProcessor:
 
         except Exception as e:
             logger.exception(
-                "Error sending worker recovery notification for worker %s: %s", worker_id, e
+                "Error sending worker recovery notification for worker %s: %s",
+                worker_id,
+                e,
             )
 
     def _send_game_server_recovery_notification(self, game_server_instance_id: int):

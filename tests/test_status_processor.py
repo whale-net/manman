@@ -303,11 +303,11 @@ class TestStatusProcessor:
 
         # Mock the database repository methods
         from datetime import datetime, timezone
-        
+
         mock_worker = Mock()
         mock_worker.worker_id = 123
         mock_lost_timestamp = datetime.now(timezone.utc)
-        
+
         mock_instance = Mock()
         mock_instance.game_server_instance_id = 456
         mock_instance_lost_timestamp = datetime.now(timezone.utc)
@@ -323,8 +323,12 @@ class TestStatusProcessor:
                 "get_lost_game_server_instances_for_worker",
                 return_value=[(mock_instance, mock_instance_lost_timestamp)],
             ),
-            patch.object(processor, "_send_worker_recovery_notification") as mock_worker_recovery,
-            patch.object(processor, "_send_game_server_recovery_notification") as mock_instance_recovery,
+            patch.object(
+                processor, "_send_worker_recovery_notification"
+            ) as mock_worker_recovery,
+            patch.object(
+                processor, "_send_game_server_recovery_notification"
+            ) as mock_instance_recovery,
         ):
             processor._check_worker_recovery()
 

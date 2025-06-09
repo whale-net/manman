@@ -244,7 +244,8 @@ class DatabaseRepository:
                     not_(
                         select(inner)
                         .where(
-                            inner.c.game_server_instance_id == ExternalStatusInfo.game_server_instance_id,
+                            inner.c.game_server_instance_id
+                            == ExternalStatusInfo.game_server_instance_id,
                             inner.c.as_of > ExternalStatusInfo.as_of,
                         )
                         .exists()
@@ -260,8 +261,10 @@ class DatabaseRepository:
                 .where(
                     GameServerInstance.worker_id == worker_id,
                     GameServerInstance.end_date.is_(None),  # Instance not ended
-                    last_instance_status.c.status_type == StatusType.LOST,  # Currently lost
-                    last_instance_status.c.as_of >= lost_max_age,  # Lost within time limit
+                    last_instance_status.c.status_type
+                    == StatusType.LOST,  # Currently lost
+                    last_instance_status.c.as_of
+                    >= lost_max_age,  # Lost within time limit
                 )
             )
 
