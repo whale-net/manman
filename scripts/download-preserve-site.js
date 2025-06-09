@@ -2,14 +2,14 @@
 
 /**
  * Download and preserve GitHub Pages site content
- * 
+ *
  * Usage:
  *   node download-preserve-site.js <mode> <site-dir> <pages-url> [options]
- * 
+ *
  * Modes:
  *   release        - Preserve all content (main, versions, PR previews)
  *   pr-cleanup     - Preserve all content except specified PR
- * 
+ *
  * Examples:
  *   node download-preserve-site.js release site https://example.github.io/repo
  *   node download-preserve-site.js pr-cleanup site https://example.github.io/repo --exclude-pr 123
@@ -61,7 +61,7 @@ function downloadFile(url, outputPath, required = false) {
     } catch (error) {
         // Download failed
     }
-    
+
     if (required) {
         logWarning(`Failed to download required file: ${url}`);
     }
@@ -76,30 +76,30 @@ function ensureDirectory(dirPath) {
 
 function downloadApiFiles(baseUrl, targetDir) {
     ensureDirectory(targetDir);
-    
+
     const apiFiles = [
         'index.html',
         'experience-api.html',
         'status-api.html',
         'worker-dal-api.html'
     ];
-    
+
     let downloadedCount = 0;
     for (const file of apiFiles) {
         const url = `${baseUrl}/${file}`;
         const targetPath = path.join(targetDir, file);
-        
+
         if (downloadFile(url, targetPath)) {
             downloadedCount++;
         }
     }
-    
+
     return downloadedCount;
 }
 
 function preserveMainDocs(pagesUrl, siteDir) {
     logInfo("Checking for main documentation...");
-    
+
     if (checkUrlExists(`${pagesUrl}/main/`)) {
         logInfo("Main docs exist, preserving them...");
         const mainDir = path.join(siteDir, 'main');
@@ -114,12 +114,12 @@ function preserveMainDocs(pagesUrl, siteDir) {
 
 function preserveVersionDocs(pagesUrl, siteDir) {
     logInfo("Checking for existing version documentation...");
-    
+
     if (checkUrlExists(`${pagesUrl}/versions/`)) {
         logInfo("Version directory exists, discovering versions...");
         const versionsDir = path.join(siteDir, 'versions');
         ensureDirectory(versionsDir);
-        
+
         // Download the versions directory listing to discover versions
         try {
             const versionsHtml = execCommand(`curl -sSL "${pagesUrl}/versions/"`, true);
@@ -131,9 +131,9 @@ function preserveVersionDocs(pagesUrl, siteDir) {
                         .map(match => match.replace(/href="/g, '').replace(/\/$/g, ''))
                         .filter(version => version.startsWith('v'))
                         .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-                    
+
                     logInfo(`Found ${versions.length} versions: ${versions.join(', ')}`);
-                    
+
                     let preservedCount = 0;
                     for (const version of versions) {
                         if (version) {
@@ -145,7 +145,7 @@ function preserveVersionDocs(pagesUrl, siteDir) {
                             }
                         }
                     }
-                    
+
                     logSuccess(`Preserved ${preservedCount} version directories`);
                     return preservedCount;
                 }
@@ -156,17 +156,17 @@ function preserveVersionDocs(pagesUrl, siteDir) {
     } else {
         logInfo("No version documentation found");
     }
-    
+
     return 0;
 }
 
 function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
     logInfo("Discovering existing PR preview directories...");
-    
+
     // First, try to get the main index.html to extract PR directories
     const indexPath = path.join(siteDir, 'index.html');
     let prDirs = [];
-    
+
     if (fs.existsSync(indexPath)) {
         try {
             const indexContent = fs.readFileSync(indexPath, 'utf8');
@@ -186,7 +186,7 @@ function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
             logWarning("Failed to parse index.html for PR directories");
         }
     }
-    
+
     // Also try to discover PR directories from the main site
     try {
         const mainHtml = execCommand(`curl -sSL "${pagesUrl}"`, true);
@@ -196,7 +196,7 @@ function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
                 const discoveredPRs = prMatches
                     .map(match => match.replace(/href="/g, '').replace(/\/$/g, ''))
                     .filter(dir => dir.startsWith('pr-'));
-                
+
                 // Merge with existing PR dirs, remove duplicates
                 for (const prDir of discoveredPRs) {
                     if (!prDirs.includes(prDir)) {
@@ -208,20 +208,20 @@ function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
     } catch (error) {
         logWarning("Failed to discover PR directories from main site");
     }
-    
+
     if (prDirs.length > 0) {
         logInfo(`Found ${prDirs.length} PR preview directories: ${prDirs.join(', ')}`);
-        
+
         let preservedCount = 0;
         for (const prDir of prDirs) {
             const prNumber = prDir.replace('pr-', '');
-            
+
             // Skip the excluded PR if in cleanup mode
             if (mode === 'pr-cleanup' && excludePR && prNumber === excludePR.toString()) {
                 logInfo(`Skipping PR directory: ${prDir} (will be removed)`);
                 continue;
             }
-            
+
             logInfo(`Preserving existing PR preview: ${prDir}`);
             if (checkUrlExists(`${pagesUrl}/${prDir}/`)) {
                 const prDirPath = path.join(siteDir, prDir);
@@ -231,7 +231,7 @@ function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
                 }
             }
         }
-        
+
         logSuccess(`Preserved ${preservedCount} PR preview directories`);
         return preservedCount;
     } else {
@@ -244,10 +244,10 @@ function downloadAndPreserveSite(mode, siteDir, pagesUrl, options = {}) {
     logInfo(`Starting site preservation in ${mode} mode...`);
     logInfo(`Target directory: ${siteDir}`);
     logInfo(`Pages URL: ${pagesUrl}`);
-    
+
     // Create site directory
     ensureDirectory(siteDir);
-    
+
     // Check if the site exists
     if (!checkUrlExists(pagesUrl)) {
         logInfo("No existing GitHub Pages site found, creating new one");
@@ -258,23 +258,23 @@ function downloadAndPreserveSite(mode, siteDir, pagesUrl, options = {}) {
             prPreviewsPreserved: 0
         };
     }
-    
+
     logInfo("GitHub Pages site exists, downloading...");
-    
+
     // Download main index.html
     const indexPath = path.join(siteDir, 'index.html');
     const indexDownloaded = downloadFile(`${pagesUrl}/index.html`, indexPath);
     if (!indexDownloaded) {
         logWarning("Failed to download index.html, will create new one");
     }
-    
+
     // Preserve different types of content
     const mainPreserved = preserveMainDocs(pagesUrl, siteDir);
     const versionsPreserved = preserveVersionDocs(pagesUrl, siteDir);
     const prPreviewsPreserved = preservePRPreviews(pagesUrl, siteDir, mode, options.excludePR);
-    
+
     logSuccess(`Site preservation completed successfully`);
-    
+
     return {
         siteExists: true,
         mainPreserved,
@@ -286,7 +286,7 @@ function downloadAndPreserveSite(mode, siteDir, pagesUrl, options = {}) {
 
 function main() {
     const args = process.argv.slice(2);
-    
+
     if (args.length < 3) {
         console.error('Usage: node download-preserve-site.js <mode> <site-dir> <pages-url> [options]');
         console.error('');
@@ -298,10 +298,10 @@ function main() {
         console.error('  --exclude-pr <number>   - PR number to exclude (for pr-cleanup mode)');
         process.exit(1);
     }
-    
+
     const [mode, siteDir, pagesUrl] = args;
     const options = {};
-    
+
     // Parse additional options
     for (let i = 3; i < args.length; i++) {
         if (args[i] === '--exclude-pr' && i + 1 < args.length) {
@@ -309,20 +309,20 @@ function main() {
             i++; // Skip the next argument
         }
     }
-    
+
     if (!['release', 'pr-cleanup'].includes(mode)) {
         console.error(`Unknown mode: ${mode}`);
         process.exit(1);
     }
-    
+
     if (mode === 'pr-cleanup' && !options.excludePR) {
         console.error('pr-cleanup mode requires --exclude-pr option');
         process.exit(1);
     }
-    
+
     try {
         const result = downloadAndPreserveSite(mode, siteDir, pagesUrl, options);
-        
+
         // Output summary
         console.log('');
         console.log('📊 Preservation Summary:');
@@ -333,7 +333,7 @@ function main() {
             console.log(`   PR previews preserved: ${result.prPreviewsPreserved}`);
             console.log(`   Index downloaded: ${result.indexDownloaded ? 'Yes' : 'No'}`);
         }
-        
+
     } catch (error) {
         console.error(`Error: ${error.message}`);
         process.exit(1);

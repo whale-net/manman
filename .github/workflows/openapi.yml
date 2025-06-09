@@ -628,13 +628,13 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           echo "📦 Creating versioned documentation for release: $version"
-          
+
           # Create version directory
           mkdir -p "site/versions/$version"
-          
+
           # Copy documentation to version directory
           cp -r docs-preview/* "site/versions/$version/"
-          
+
           echo "✅ Created version documentation at site/versions/$version/"
           ls -la "site/versions/$version/"
 

@@ -2,10 +2,10 @@
 
 /**
  * Generate HTML documentation pages for ManMan API docs
- * 
+ *
  * Usage:
  *   node generate-docs-html.js <type> <output-file> [options]
- * 
+ *
  * Types:
  *   pr-index <pr-number> <pr-title> <branch> <sha>
  *   release-index <version> <sha>
@@ -1084,7 +1084,7 @@ function generateStaticMainHub(outputFile) {
 // Main function
 function main() {
     const args = process.argv.slice(2);
-    
+
     if (args.length < 2) {
         console.error('Usage: node generate-docs-html.js <type> <output-file> [options]');
         process.exit(1);
@@ -1118,7 +1118,7 @@ function main() {
             const prDirs = [];
             const versionDirs = [];
             let inVersions = false;
-            
+
             for (const option of options) {
                 if (option === '--versions') {
                     inVersions = true;
@@ -1130,7 +1130,7 @@ function main() {
                     prDirs.push(option);
                 }
             }
-            
+
             generateHubIndex(prDirs, versionDirs, outputFile);
             break;
 
