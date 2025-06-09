@@ -73,7 +73,7 @@ class TestWorkerShutdown:
         # Verify the command is correct
         published_command = mock_worker_command_pub_service.publish_command.call_args[0][0]
         assert isinstance(published_command, Command)
-        assert published_command.command_type == CommandType.SHUTDOWN
+        assert published_command.command_type == CommandType.STOP
         assert published_command.command_args == []
 
 

@@ -57,8 +57,8 @@ async def worker_shutdown(
     
     :return: success response with worker ID
     """
-    # Create a Command object with CommandType.SHUTDOWN and no arguments
-    command = Command(command_type=CommandType.SHUTDOWN, command_args=[])
+    # Create a Command object with CommandType.STOP and no arguments  
+    command = Command(command_type=CommandType.STOP, command_args=[])
     worker_command_pub_svc.publish_command(command)
     
     return {
