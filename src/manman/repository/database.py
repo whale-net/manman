@@ -177,6 +177,215 @@ class DatabaseRepository:
             heartbeat_threshold, heartbeat_max_lookback
         )
 
+    def get_lost_workers_with_recent_heartbeats(
+        self,
+        heartbeat_threshold_seconds: int = 5,
+        lost_max_age_hours: int = 24,
+    ) -> List[Tuple[Worker, datetime]]:
+        """
+        Get workers that are currently LOST but have recent heartbeats and became lost within the specified time period.
+
+        Args:
+            heartbeat_threshold_seconds: Seconds before now to consider heartbeat fresh (default: 5)
+            lost_max_age_hours: Maximum hours ago a worker could have been marked lost to be eligible for recovery (default: 24)
+
+        Returns:
+            List of tuples containing (Worker, lost_timestamp)
+        """
+        current_time = datetime.now(timezone.utc)
+        heartbeat_threshold = current_time - timedelta(
+            seconds=heartbeat_threshold_seconds
+        )
+        lost_max_age = current_time - timedelta(hours=lost_max_age_hours)
+
+        with self._get_session_context() as session:
+            last_status = DatabaseRepository.get_worker_current_status_subquery()
+
+            # Query for workers that are currently LOST but have recent heartbeats
+            # and were marked as lost within the specified time period
+            recoverable_workers = (
+                select(Worker, last_status.c.as_of)
+                .join(last_status)
+                .where(
+                    Worker.last_heartbeat >= heartbeat_threshold,  # Recent heartbeat
+                    Worker.end_date.is_(None),  # Worker not ended
+                    last_status.c.status_type == StatusType.LOST,  # Currently lost
+                    last_status.c.as_of >= lost_max_age,  # Lost within time limit
+                )
+            )
+
+            return session.exec(recoverable_workers).all()
+
+    def get_lost_game_server_instances_for_worker(
+        self,
+        worker_id: int,
+        lost_max_age_hours: int = 24,
+    ) -> List[Tuple[GameServerInstance, datetime]]:
+        """
+        Get game server instances for a specific worker that are currently LOST
+        and became lost within the specified time period.
+
+        Args:
+            worker_id: The ID of the worker
+            lost_max_age_hours: Maximum hours ago an instance could have been marked lost to be eligible for recovery (default: 24)
+
+        Returns:
+            List of tuples containing (GameServerInstance, lost_timestamp)
+        """
+        current_time = datetime.now(timezone.utc)
+        lost_max_age = current_time - timedelta(hours=lost_max_age_hours)
+
+        with self._get_session_context() as session:
+            # Subquery to get the latest status for each game server instance
+            inner = select(ExternalStatusInfo).alias("si2")
+            last_instance_status = (
+                select(ExternalStatusInfo).where(
+                    not_(ExternalStatusInfo.game_server_instance_id.is_(None)),
+                    not_(
+                        select(inner)
+                        .where(
+                            inner.c.game_server_instance_id
+                            == ExternalStatusInfo.game_server_instance_id,
+                            inner.c.as_of > ExternalStatusInfo.as_of,
+                        )
+                        .exists()
+                    ),
+                )
+            ).subquery()
+
+            # Query for game server instances that are currently LOST for the specific worker
+            # and were marked as lost within the specified time period
+            recoverable_instances = (
+                select(GameServerInstance, last_instance_status.c.as_of)
+                .join(last_instance_status)
+                .where(
+                    GameServerInstance.worker_id == worker_id,
+                    GameServerInstance.end_date.is_(None),  # Instance not ended
+                    last_instance_status.c.status_type
+                    == StatusType.LOST,  # Currently lost
+                    last_instance_status.c.as_of
+                    >= lost_max_age,  # Lost within time limit
+                )
+            )
+
+            return session.exec(recoverable_instances).all()
+
+    def get_worker_status_before_lost(self, worker_id: int) -> Optional[StatusType]:
+        """
+        Get the status of a worker immediately before it was marked as LOST.
+
+        Args:
+            worker_id: The ID of the worker
+
+        Returns:
+            The StatusType before LOST, or None if not found or if LOST is the first status
+        """
+        with self._get_session_context() as session:
+            # Get all statuses for this worker ordered by timestamp desc
+            stmt = (
+                select(ExternalStatusInfo)
+                .where(ExternalStatusInfo.worker_id == worker_id)
+                .order_by(desc(ExternalStatusInfo.as_of))
+            )
+            statuses = session.exec(stmt).all()
+
+            # Find the first (most recent) LOST status, then return the status before it
+            for i, status in enumerate(statuses):
+                if status.status_type == StatusType.LOST and i + 1 < len(statuses):
+                    # Return the status immediately before this LOST status
+                    return statuses[i + 1].status_type
+
+            return None
+
+    def get_game_server_instance_status_before_lost(self, game_server_instance_id: int) -> Optional[StatusType]:
+        """
+        Get the status of a game server instance immediately before it was marked as LOST.
+
+        Args:
+            game_server_instance_id: The ID of the game server instance
+
+        Returns:
+            The StatusType before LOST, or None if not found or if LOST is the first status
+        """
+        with self._get_session_context() as session:
+            # Get all statuses for this game server instance ordered by timestamp desc
+            stmt = (
+                select(ExternalStatusInfo)
+                .where(ExternalStatusInfo.game_server_instance_id == game_server_instance_id)
+                .order_by(desc(ExternalStatusInfo.as_of))
+            )
+            statuses = session.exec(stmt).all()
+
+            # Find the first (most recent) LOST status, then return the status before it
+            for i, status in enumerate(statuses):
+                if status.status_type == StatusType.LOST and i + 1 < len(statuses):
+                    # Return the status immediately before this LOST status
+                    return statuses[i + 1].status_type
+
+            return None
+
+    def get_lost_game_server_instances_with_recent_heartbeats(
+        self,
+        heartbeat_threshold_seconds: int = 5,
+        lost_max_age_hours: int = 24,
+    ) -> List[Tuple[GameServerInstance, datetime]]:
+        """
+        Get game server instances that are currently LOST but whose workers have recent heartbeats
+        and became lost within the specified time period. This is independent of worker recovery status.
+
+        Args:
+            heartbeat_threshold_seconds: Seconds before now to consider heartbeat fresh (default: 5)
+            lost_max_age_hours: Maximum hours ago an instance could have been marked lost to be eligible for recovery (default: 24)
+
+        Returns:
+            List of tuples containing (GameServerInstance, lost_timestamp)
+        """
+        current_time = datetime.now(timezone.utc)
+        heartbeat_threshold = current_time - timedelta(
+            seconds=heartbeat_threshold_seconds
+        )
+        lost_max_age = current_time - timedelta(hours=lost_max_age_hours)
+
+        with self._get_session_context() as session:
+            # Subquery to get the latest status for each game server instance
+            inner = select(ExternalStatusInfo).alias("si2")
+            last_instance_status = (
+                select(ExternalStatusInfo).where(
+                    not_(ExternalStatusInfo.game_server_instance_id.is_(None)),
+                    not_(
+                        select(inner)
+                        .where(
+                            inner.c.game_server_instance_id
+                            == ExternalStatusInfo.game_server_instance_id,
+                            inner.c.as_of > ExternalStatusInfo.as_of,
+                        )
+                        .exists()
+                    ),
+                )
+            ).subquery()
+
+            # Get the current worker status subquery
+            worker_status = DatabaseRepository.get_worker_current_status_subquery()
+
+            # Query for game server instances that are currently LOST but their workers have recent heartbeats
+            # and the worker is not currently LOST and were marked as lost within the specified time period
+            recoverable_instances = (
+                select(GameServerInstance, last_instance_status.c.as_of)
+                .join(last_instance_status)
+                .join(Worker, GameServerInstance.worker_id == Worker.worker_id)
+                .join(worker_status, Worker.worker_id == worker_status.c.worker_id)
+                .where(
+                    GameServerInstance.end_date.is_(None),  # Instance not ended
+                    Worker.end_date.is_(None),  # Worker not ended
+                    Worker.last_heartbeat >= heartbeat_threshold,  # Worker has recent heartbeat
+                    worker_status.c.status_type != StatusType.LOST,  # Worker is not currently lost
+                    last_instance_status.c.status_type == StatusType.LOST,  # Instance currently lost
+                    last_instance_status.c.as_of >= lost_max_age,  # Lost within time limit
+                )
+            )
+
+            return session.exec(recoverable_instances).all()
+
 
 class StatusRepository(DatabaseRepository):
     """Repository class for status-related database operations."""

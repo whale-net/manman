@@ -239,6 +239,125 @@ class TestStatusProcessor:
             # Verify shutdown completed
             assert processor._is_running is False
 
+    def test_worker_recovery_notification(self, mock_rabbitmq_connection):
+        """Test that worker recovery notifications are sent correctly."""
+        with (
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
+
+        # Mock the database repository write method
+        with patch.object(
+            processor._db_repository, "write_external_status_to_database"
+        ) as mock_write:
+            # Mock the external status publisher
+            with patch.object(processor, "_send_external_status") as mock_send:
+                worker_id = 123
+                processor._send_worker_recovery_notification(worker_id)
+
+                # Verify that a RUNNING status was sent
+                mock_send.assert_called_once()
+                mock_write.assert_called_once()
+
+                # Get the status object that was created
+                sent_status = mock_send.call_args[0][0]
+                assert sent_status.worker_id == worker_id
+                assert sent_status.status_type == StatusType.RUNNING
+                assert sent_status.class_name == "StatusEventProcessor"
+
+    def test_game_server_recovery_notification(self, mock_rabbitmq_connection):
+        """Test that game server recovery notifications are sent correctly."""
+        with (
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
+
+        # Mock the database repository write method
+        with patch.object(
+            processor._db_repository, "write_external_status_to_database"
+        ) as mock_write:
+            # Mock the external status publisher
+            with patch.object(processor, "_send_external_status") as mock_send:
+                instance_id = 456
+                processor._send_game_server_recovery_notification(instance_id)
+
+                # Verify that a RUNNING status was sent
+                mock_send.assert_called_once()
+                mock_write.assert_called_once()
+
+                # Get the status object that was created
+                sent_status = mock_send.call_args[0][0]
+                assert sent_status.game_server_instance_id == instance_id
+                assert sent_status.status_type == StatusType.RUNNING
+                assert sent_status.class_name == "StatusEventProcessor"
+
+    def test_check_worker_recovery(self, mock_rabbitmq_connection):
+        """Test the worker recovery checking logic."""
+        with (
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
+
+        # Mock the database repository methods
+        from datetime import datetime, timezone
+
+        mock_worker = Mock()
+        mock_worker.worker_id = 123
+        mock_lost_timestamp = datetime.now(timezone.utc)
+
+        mock_instance = Mock()
+        mock_instance.game_server_instance_id = 456
+        mock_instance_lost_timestamp = datetime.now(timezone.utc)
+
+        with (
+            patch.object(
+                processor._db_repository,
+                "get_lost_workers_with_recent_heartbeats",
+                return_value=[(mock_worker, mock_lost_timestamp)],
+            ),
+            patch.object(
+                processor._db_repository,
+                "get_lost_game_server_instances_for_worker",
+                return_value=[(mock_instance, mock_instance_lost_timestamp)],
+            ),
+            patch.object(
+                processor, "_send_worker_recovery_notification"
+            ) as mock_worker_recovery,
+            patch.object(
+                processor, "_send_game_server_recovery_notification"
+            ) as mock_instance_recovery,
+        ):
+            processor._check_worker_recovery()
+
+            # Verify recovery notifications were sent
+            mock_worker_recovery.assert_called_once_with(123)
+            mock_instance_recovery.assert_called_once_with(456)
+
+    def test_check_worker_heartbeats_includes_recovery(self, mock_rabbitmq_connection):
+        """Test that _check_worker_heartbeats includes recovery checking."""
+        with (
+            patch("manman.host.status_processor.RabbitSubscriber"),
+            patch("manman.host.status_processor.RabbitPublisher"),
+        ):
+            processor = StatusEventProcessor(mock_rabbitmq_connection)
+
+        # Mock the database repository methods to return empty results
+        with (
+            patch.object(
+                processor._db_repository,
+                "get_workers_with_stale_heartbeats",
+                return_value=[],
+            ),
+            patch.object(processor, "_check_worker_recovery") as mock_recovery_check,
+        ):
+            processor._check_worker_heartbeats()
+
+            # Verify that recovery check was called
+            mock_recovery_check.assert_called_once()
+
 
 class TestStatusProcessorRealConnections:
     """Tests that can run with real connections if services are available."""
