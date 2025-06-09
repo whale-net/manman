@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from amqpstorm import Connection
 
@@ -212,10 +212,9 @@ class StatusEventProcessor:
         """Send a worker lost notification to external queue"""
         try:
             # Create a status message indicating the worker is lost
-            lost_status = ExternalStatusInfo(
+            lost_status = ExternalStatusInfo.create(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
-                as_of=datetime.now(timezone.utc),
                 worker_id=worker_id,
             )
 
@@ -232,10 +231,9 @@ class StatusEventProcessor:
         """Send a game server lost notification to external queue"""
         try:
             # Create a status message indicating the game server instance is lost
-            lost_status = ExternalStatusInfo(
+            lost_status = ExternalStatusInfo.create(
                 class_name="StatusEventProcessor",
                 status_type=StatusType.LOST,
-                as_of=datetime.now(timezone.utc),
                 game_server_instance_id=game_server_instance_id,
             )
 
