@@ -177,6 +177,96 @@ class DatabaseRepository:
             heartbeat_threshold, heartbeat_max_lookback
         )
 
+    def get_lost_workers_with_recent_heartbeats(
+        self,
+        heartbeat_threshold_seconds: int = 5,
+        lost_max_age_hours: int = 24,
+    ) -> List[Tuple[Worker, datetime]]:
+        """
+        Get workers that are currently LOST but have recent heartbeats and became lost within the specified time period.
+
+        Args:
+            heartbeat_threshold_seconds: Seconds before now to consider heartbeat fresh (default: 5)
+            lost_max_age_hours: Maximum hours ago a worker could have been marked lost to be eligible for recovery (default: 24)
+
+        Returns:
+            List of tuples containing (Worker, lost_timestamp)
+        """
+        current_time = datetime.now(timezone.utc)
+        heartbeat_threshold = current_time - timedelta(
+            seconds=heartbeat_threshold_seconds
+        )
+        lost_max_age = current_time - timedelta(hours=lost_max_age_hours)
+
+        with self._get_session_context() as session:
+            last_status = DatabaseRepository.get_worker_current_status_subquery()
+
+            # Query for workers that are currently LOST but have recent heartbeats
+            # and were marked as lost within the specified time period
+            recoverable_workers = (
+                select(Worker, last_status.c.as_of)
+                .join(last_status)
+                .where(
+                    Worker.last_heartbeat >= heartbeat_threshold,  # Recent heartbeat
+                    Worker.end_date.is_(None),  # Worker not ended
+                    last_status.c.status_type == StatusType.LOST,  # Currently lost
+                    last_status.c.as_of >= lost_max_age,  # Lost within time limit
+                )
+            )
+
+            return session.exec(recoverable_workers).all()
+
+    def get_lost_game_server_instances_for_worker(
+        self,
+        worker_id: int,
+        lost_max_age_hours: int = 24,
+    ) -> List[Tuple[GameServerInstance, datetime]]:
+        """
+        Get game server instances for a specific worker that are currently LOST
+        and became lost within the specified time period.
+
+        Args:
+            worker_id: The ID of the worker
+            lost_max_age_hours: Maximum hours ago an instance could have been marked lost to be eligible for recovery (default: 24)
+
+        Returns:
+            List of tuples containing (GameServerInstance, lost_timestamp)
+        """
+        current_time = datetime.now(timezone.utc)
+        lost_max_age = current_time - timedelta(hours=lost_max_age_hours)
+
+        with self._get_session_context() as session:
+            # Subquery to get the latest status for each game server instance
+            inner = select(ExternalStatusInfo).alias("si2")
+            last_instance_status = (
+                select(ExternalStatusInfo).where(
+                    not_(ExternalStatusInfo.game_server_instance_id.is_(None)),
+                    not_(
+                        select(inner)
+                        .where(
+                            inner.c.game_server_instance_id == ExternalStatusInfo.game_server_instance_id,
+                            inner.c.as_of > ExternalStatusInfo.as_of,
+                        )
+                        .exists()
+                    ),
+                )
+            ).subquery()
+
+            # Query for game server instances that are currently LOST for the specific worker
+            # and were marked as lost within the specified time period
+            recoverable_instances = (
+                select(GameServerInstance, last_instance_status.c.as_of)
+                .join(last_instance_status)
+                .where(
+                    GameServerInstance.worker_id == worker_id,
+                    GameServerInstance.end_date.is_(None),  # Instance not ended
+                    last_instance_status.c.status_type == StatusType.LOST,  # Currently lost
+                    last_instance_status.c.as_of >= lost_max_age,  # Lost within time limit
+                )
+            )
+
+            return session.exec(recoverable_instances).all()
+
 
 class StatusRepository(DatabaseRepository):
     """Repository class for status-related database operations."""
