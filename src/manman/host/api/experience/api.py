@@ -3,7 +3,7 @@ import logging
 # The application logic layer
 from typing import Annotated
 
-from fastapi import APIRouter, Depends  # , HTTPException
+from fastapi import APIRouter, Depends
 
 from manman.host.api.shared.injectors import (
     current_game_server_instances,
@@ -39,6 +39,32 @@ async def worker_current(
     current_worker: Annotated[Worker, Depends(current_worker)],
 ) -> Worker:
     return current_worker
+
+
+@router.post("/worker/shutdown")
+async def worker_shutdown(
+    current_worker: Annotated[Worker, Depends(current_worker)],
+    worker_command_pub_svc: Annotated[
+        CommandPubService, Depends(worker_command_pub_service)
+    ],
+):
+    """
+    Shutdown the current worker.
+
+    This endpoint sends a shutdown command to the current worker's command queue.
+    The worker will gracefully shut down all running game server instances and
+    terminate the worker service.
+
+    :return: success response with worker ID
+    """
+    # Create a Command object with CommandType.STOP and no arguments
+    command = Command(command_type=CommandType.STOP, command_args=[])
+    worker_command_pub_svc.publish_command(command)
+
+    return {
+        "status": "success",
+        "message": f"Shutdown command sent to worker {current_worker.worker_id}",
+    }
 
 
 @router.get("/gameserver")
