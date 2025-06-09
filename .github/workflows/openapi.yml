@@ -615,69 +615,8 @@ jobs:
 
       - name: Download current GitHub Pages site (if exists)
         run: |
-          echo "📥 Downloading current GitHub Pages site to preserve existing content..."
-
-          # Create directory for site
-          mkdir -p site
-
-          # Try to download the current site (will fail silently if not exists)
           gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
-
-          echo "Attempting to download from: $gh_pages_url"
-
-          if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
-            echo "GitHub Pages site exists, downloading..."
-            curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
-
-            # Preserve main docs if they exist
-            if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
-              echo "Main docs exist, preserving them..."
-              mkdir -p site/main
-              curl -sSL "$gh_pages_url/main/index.html" -o site/main/index.html || true
-              curl -sSL "$gh_pages_url/main/experience-api.html" -o site/main/experience-api.html || true
-              curl -sSL "$gh_pages_url/main/status-api.html" -o site/main/status-api.html || true
-              curl -sSL "$gh_pages_url/main/worker-dal-api.html" -o site/main/worker-dal-api.html || true
-            fi
-
-            # Preserve existing version docs if they exist
-            echo "Checking for existing version documentation..."
-            if curl -sSL --head "$gh_pages_url/versions/" | grep -q "HTTP/2 200"; then
-              echo "Version directory exists, discovering versions..."
-              mkdir -p site/versions
-              
-              # Try to discover existing versions by looking for common patterns
-              for version in $(curl -sSL "$gh_pages_url/versions/" 2>/dev/null | grep -o 'href="v[^"]*/' | sed 's/href="//g' | sed 's/\/$//g' | sort -V); do
-                if [ ! -z "$version" ]; then
-                  echo "Found existing version: $version"
-                  mkdir -p "site/versions/$version"
-                  curl -sSL "$gh_pages_url/versions/$version/index.html" -o "site/versions/$version/index.html" || true
-                  curl -sSL "$gh_pages_url/versions/$version/experience-api.html" -o "site/versions/$version/experience-api.html" || true
-                  curl -sSL "$gh_pages_url/versions/$version/status-api.html" -o "site/versions/$version/status-api.html" || true
-                  curl -sSL "$gh_pages_url/versions/$version/worker-dal-api.html" -o "site/versions/$version/worker-dal-api.html" || true
-                fi
-              done
-            fi
-
-            # Preserve PR previews if they exist
-            echo "Discovering existing PR preview directories..."
-            if [ -f "site/index.html" ]; then
-              # Extract PR directory names from the index.html (look for pr-NUMBER patterns)
-              pr_dirs=$(grep -o 'href="pr-[0-9]*/' site/index.html | sed 's/href="//g' | sed 's/\/$//g' | sort -u)
-
-              for pr_dir in $pr_dirs; do
-                echo "Preserving existing PR preview: $pr_dir"
-                if curl -sSL --head "$gh_pages_url/$pr_dir/" | grep -q "HTTP/2 200"; then
-                  mkdir -p "site/$pr_dir"
-                  curl -sSL "$gh_pages_url/$pr_dir/index.html" -o "site/$pr_dir/index.html" || true
-                  curl -sSL "$gh_pages_url/$pr_dir/experience-api.html" -o "site/$pr_dir/experience-api.html" || true
-                  curl -sSL "$gh_pages_url/$pr_dir/status-api.html" -o "site/$pr_dir/status-api.html" || true
-                  curl -sSL "$gh_pages_url/$pr_dir/worker-dal-api.html" -o "site/$pr_dir/worker-dal-api.html" || true
-                fi
-              done
-            fi
-          else
-            echo "No existing GitHub Pages site found, creating new one"
-          fi
+          node scripts/download-preserve-site.js release site "$gh_pages_url"
 
       - name: Download OpenAPI documentation artifacts
         uses: actions/download-artifact@v4
@@ -764,60 +703,8 @@ jobs:
       # so we can remove just the closed PR's preview while keeping all other content
       - name: Download current GitHub Pages site (if exists)
         run: |
-          echo "📥 Downloading current GitHub Pages site (if it exists)..."
-
-          # Create directory for site
-          mkdir -p site
-
-          # Try to download the current site (will fail silently if not exists)
           gh_pages_url="${{ vars.GH_PAGES_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}"
-
-          echo "Attempting to download from: $gh_pages_url"
-
-          if curl -sSL --head "$gh_pages_url" | grep -q "HTTP/2 200"; then
-            echo "GitHub Pages site exists, downloading..."
-            curl -sSL "$gh_pages_url/index.html" -o site/index.html || echo "Failed to download index.html, will create new one"
-
-            # If main docs exist, preserve them
-            if curl -sSL --head "$gh_pages_url/main/" | grep -q "HTTP/2 200"; then
-              echo "Main docs exist, preserving them..."
-              mkdir -p site/main
-              curl -sSL "$gh_pages_url/main/index.html" -o site/main/index.html || true
-              curl -sSL "$gh_pages_url/main/experience-api.html" -o site/main/experience-api.html || true
-              curl -sSL "$gh_pages_url/main/status-api.html" -o site/main/status-api.html || true
-              curl -sSL "$gh_pages_url/main/worker-dal-api.html" -o site/main/worker-dal-api.html || true
-            fi
-
-            # If version docs exist, preserve them
-            if curl -sSL --head "$gh_pages_url/versions/" | grep -q "HTTP/2 200"; then
-              echo "Version docs exist, preserving them..."
-              mkdir -p site/versions
-              # This is a simplification - in real implementation you might want to download all version folders
-              curl -sSL "$gh_pages_url/versions/index.html" -o site/versions/index.html || true
-            fi
-
-            # Find and preserve other PR preview directories except the current one
-            current_pr="${{ github.event.pull_request.number }}"
-
-            # List directories from GitHub Pages root
-            echo "Looking for other PR directories to preserve..."
-            for dir in $(curl -sSL "$gh_pages_url" | grep -o 'href="pr-[0-9]*/' | sed 's/href="//g' | sed 's/\/$//g'); do
-              pr_num=$(echo "$dir" | sed 's/pr-//g')
-
-              if [ "$pr_num" != "$current_pr" ]; then
-                echo "Found other PR preview: $dir, preserving it"
-                mkdir -p "site/$dir"
-                curl -sSL "$gh_pages_url/$dir/index.html" -o "site/$dir/index.html" || true
-                curl -sSL "$gh_pages_url/$dir/experience-api.html" -o "site/$dir/experience-api.html" || true
-                curl -sSL "$gh_pages_url/$dir/status-api.html" -o "site/$dir/status-api.html" || true
-                curl -sSL "$gh_pages_url/$dir/worker-dal-api.html" -o "site/$dir/worker-dal-api.html" || true
-              else
-                echo "Skipping current PR directory: $dir (will be removed)"
-              fi
-            done
-          else
-            echo "No existing GitHub Pages site found, creating new one"
-          fi
+          node scripts/download-preserve-site.js pr-cleanup site "$gh_pages_url" --exclude-pr ${{ github.event.pull_request.number }}
 
       # ISSUE #73: Remove the closed PR's preview directory from GitHub Pages
       - name: Remove PR preview directory
