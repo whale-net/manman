@@ -14,6 +14,7 @@ from typing_extensions import Annotated
 
 from manman.logging_config import get_uvicorn_log_config, setup_logging
 from manman.repository.rabbitmq.config import ExchangeRegistry
+from manman.shared.config import APIServiceConfig
 from manman.util import (
     create_rabbitmq_vhost,
     get_rabbitmq_ssl_options,
@@ -130,7 +131,8 @@ def start_experience_api(
     from manman.host.api.experience import router as experience_router
     from manman.host.api.shared import add_health_check
 
-    experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
+    experience_config = APIServiceConfig.get_api_config(APIServiceConfig.EXPERIENCE_API)
+    experience_app = FastAPI(title=experience_config.title, root_path=experience_config.root_path)
     experience_app.include_router(experience_router)
     add_health_check(experience_app)
 
@@ -189,7 +191,8 @@ def start_status_api(
     from manman.host.api.shared import add_health_check
     from manman.host.api.status import router as status_router
 
-    status_app = FastAPI(title="ManMan Status API", root_path="/status")
+    status_config = APIServiceConfig.get_api_config(APIServiceConfig.STATUS_API)
+    status_app = FastAPI(title=status_config.title, root_path=status_config.root_path)
     status_app.include_router(status_router)
     add_health_check(status_app)
 
@@ -248,9 +251,10 @@ def start_worker_dal_api(
     from manman.host.api.shared import add_health_check
     from manman.host.api.worker_dal import server_router, worker_router
 
+    worker_dal_config = APIServiceConfig.get_api_config(APIServiceConfig.WORKER_DAL_API)
     worker_dal_app = FastAPI(
-        title="ManMan Worker DAL API",
-        root_path="/workerdal",  # Configure root path for reverse proxy
+        title=worker_dal_config.title,
+        root_path=worker_dal_config.root_path,  # Configure root path for reverse proxy
     )
     worker_dal_app.include_router(server_router)
     worker_dal_app.include_router(worker_router)

@@ -10,9 +10,9 @@ import typer
 from fastapi import FastAPI
 from typing_extensions import Annotated
 
-from manman.config import ManManConfig
 from manman.host.api.shared import add_health_check
 from manman.logging_config import setup_logging
+from manman.shared.config import APIServiceConfig
 
 app = typer.Typer()
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def main(
     api_name: Annotated[
         str,
         typer.Argument(
-            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
+            help=f"Name of the API to generate OpenAPI spec for. Options: {', '.join(APIServiceConfig.KNOWN_API_NAMES)}"
         ),
     ],
 ):
@@ -48,36 +48,34 @@ def main(
 
     # Validate API name
     try:
-        validated_api_name = ManManConfig.validate_api_name(api_name)
-        api_config = ManManConfig.get_api_config(validated_api_name)
+        APIServiceConfig.validate_api_name(api_name)
     except ValueError as e:
         raise typer.BadParameter(str(e))
 
+    # Get API configuration
+    api_config = APIServiceConfig.get_api_config(api_name)
+
     # Build FastAPI app based on API
     fastapi_app = FastAPI(title=api_config.title, root_path=api_config.root_path)
-    if validated_api_name == ManManConfig.EXPERIENCE_API:
+    
+    if api_name == "experience-api":
         from manman.host.api.experience import router as experience_router
 
         fastapi_app.include_router(experience_router)
         add_health_check(fastapi_app)
 
-    elif validated_api_name == ManManConfig.STATUS_API:
+    elif api_name == "status-api":
         from manman.host.api.status import router as status_router
 
         fastapi_app.include_router(status_router)
         add_health_check(fastapi_app)
 
-    elif validated_api_name == ManManConfig.WORKER_DAL_API:
+    elif api_name == "worker-dal-api":
         from manman.host.api.worker_dal import server_router, worker_router
 
         fastapi_app.include_router(server_router)
         fastapi_app.include_router(worker_router)
         add_health_check(fastapi_app)
-
-    else:
-        raise typer.BadParameter(
-            f"Unknown API name: {api_name}. Valid options are: {', '.join(ManManConfig.KNOWN_API_NAMES)}"
-        )
 
     # Generate and save the spec
     _generate_openapi_spec(fastapi_app, api_name)
