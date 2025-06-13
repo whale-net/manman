@@ -144,7 +144,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             patch("threading.Thread"),
             patch("manman.repository.rabbitmq.subscriber.queue.Queue"),
         ):
-            subscriber = RabbitSubscriber(
+            RabbitSubscriber(
                 connection=robust_conn.get_connection(),
                 binding_configs=binding_config,
                 queue_config=queue_config,

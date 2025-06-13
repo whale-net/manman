@@ -112,6 +112,7 @@ class RobustConnection:
                 logger.exception("Error in connection lost callback: %s", e)
 
         attempt = 0
+        current_delay = self._reconnect_delay
         while attempt < self._max_reconnect_attempts and not self._should_stop:
             attempt += 1
             logger.info(

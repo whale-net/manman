@@ -72,7 +72,7 @@ class TestRobustConnection(unittest.TestCase):
         )
 
         # Should perform health check
-        conn = robust_conn.get_connection()
+        robust_conn.get_connection()
         mock_connection.check_for_errors.assert_called_once()
 
         robust_conn.close()
