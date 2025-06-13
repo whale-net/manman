@@ -124,40 +124,12 @@ def init_rabbitmq(
     )
 
     with __GLOBALS_LOCK:
-        # Store parameters for potential reconnection with proper deep copy
-        rmq_params_copy = {}
-        for key, value in connection_params.items():
-            if key == "ssl_options" and isinstance(value, dict):
-                # Handle SSL options specially - copy dict but preserve context reference
-                ssl_options_copy = {}
-                for ssl_key, ssl_value in value.items():
-                    if ssl_key == "context" and isinstance(ssl_value, ssl.SSLContext):
-                        # Preserve SSL context reference - cannot be deep copied
-                        ssl_options_copy[ssl_key] = ssl_value
-                    else:
-                        # Copy other SSL option values
-                        ssl_options_copy[ssl_key] = ssl_value
-                rmq_params_copy[key] = ssl_options_copy
-            else:
-                # Copy other parameters
-                rmq_params_copy[key] = value
-
-        # Add additional parameters
-        rmq_params_copy["heartbeat_interval"] = heartbeat_interval
-        rmq_params_copy["max_reconnect_attempts"] = max_reconnect_attempts
-        rmq_params_copy["reconnect_delay"] = reconnect_delay
-
-        __GLOBALS["rmq_parameters"] = rmq_params_copy
+        # Store parameters for potential reconnection
+        __GLOBALS["rmq_parameters"] = connection_params.copy()
+        __GLOBALS["rmq_parameters"]["heartbeat_interval"] = heartbeat_interval
+        __GLOBALS["rmq_parameters"]["max_reconnect_attempts"] = max_reconnect_attempts
+        __GLOBALS["rmq_parameters"]["reconnect_delay"] = reconnect_delay
         __GLOBALS["rmq_robust_connection"] = robust_connection
-
-        # Log parameter storage for debugging
-        logger.debug(
-            "Stored RabbitMQ parameters with SSL=%s, hostname=%s",
-            rmq_params_copy.get("ssl", False),
-            rmq_params_copy.get("ssl_options", {}).get("server_hostname")
-            if rmq_params_copy.get("ssl_options")
-            else None,
-        )
 
     logger.info(
         "rmq robust connection established with heartbeat=%ds", heartbeat_interval

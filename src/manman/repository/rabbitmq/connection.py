@@ -5,7 +5,6 @@ This module provides a connection wrapper that handles connection drops
 and automatic reconnection to prevent services from becoming unreachable.
 """
 
-import copy
 import logging
 import ssl
 import threading
@@ -45,8 +44,7 @@ class RobustConnection:
         :param on_connection_restored: Optional callback when connection is restored
         :raises AMQPConnectionError: If initial connection fails
         """
-        # Deep copy connection parameters but handle SSL context specially
-        self._connection_params = self._deep_copy_connection_params(connection_params)
+        self._connection_params = connection_params.copy()
         self._connection_params["heartbeat"] = heartbeat_interval
         self._max_reconnect_attempts = max_reconnect_attempts
         self._reconnect_delay = reconnect_delay
@@ -62,109 +60,9 @@ class RobustConnection:
         # Registry for subscribers that need to be notified of reconnection
         self._subscriber_callbacks: List[Callable] = []
 
-        # Store original SSL hostname for reconnection
-        self._ssl_hostname = None
-        if (
-            self._connection_params.get("ssl")
-            and self._connection_params.get("ssl_options")
-            and isinstance(self._connection_params["ssl_options"], dict)
-        ):
-            self._ssl_hostname = self._connection_params["ssl_options"].get(
-                "server_hostname"
-            )
-            logger.debug("Stored SSL hostname for reconnection: %s", self._ssl_hostname)
-
         # Initial connection - should fail fast if connection cannot be established
         if not self._connect():
             raise AMQPConnectionError("Failed to establish initial RabbitMQ connection")
-
-    def _deep_copy_connection_params(self, connection_params: dict) -> dict:
-        """
-        Deep copy connection parameters, handling SSL context specially.
-
-        SSL contexts cannot be pickled/copied, so we preserve the reference
-        but copy all other parameters to prevent parameter corruption.
-
-        :param connection_params: Original connection parameters
-        :return: Deep copied parameters with preserved SSL context
-        """
-        copied_params = {}
-
-        for key, value in connection_params.items():
-            if key == "ssl_options" and isinstance(value, dict):
-                # Handle SSL options specially - copy dict but preserve context
-                ssl_options_copy = {}
-                for ssl_key, ssl_value in value.items():
-                    if ssl_key == "context" and isinstance(ssl_value, ssl.SSLContext):
-                        # Preserve SSL context reference - cannot be deep copied
-                        ssl_options_copy[ssl_key] = ssl_value
-                        logger.debug(
-                            "Preserved SSL context reference during parameter copy"
-                        )
-                    else:
-                        # Deep copy other SSL option values
-                        ssl_options_copy[ssl_key] = copy.deepcopy(ssl_value)
-                copied_params[key] = ssl_options_copy
-            else:
-                # Deep copy all other parameters
-                try:
-                    copied_params[key] = copy.deepcopy(value)
-                except (TypeError, ValueError) as e:
-                    # Fall back to shallow copy if deep copy fails
-                    logger.debug(
-                        "Could not deep copy parameter %s, using shallow copy: %s",
-                        key,
-                        e,
-                    )
-                    copied_params[key] = value
-
-        logger.debug(
-            "Connection parameters copied with SSL=%s, hostname=%s",
-            copied_params.get("ssl", False),
-            copied_params.get("ssl_options", {}).get("server_hostname")
-            if copied_params.get("ssl_options")
-            else None,
-        )
-
-        return copied_params
-
-    def _validate_ssl_parameters(self, connection_params: dict) -> bool:
-        """
-        Validate SSL parameters before connection attempt.
-
-        :param connection_params: Connection parameters to validate
-        :return: True if SSL parameters are valid, False otherwise
-        """
-        if not connection_params.get("ssl"):
-            return True
-
-        ssl_options = connection_params.get("ssl_options")
-        if not ssl_options:
-            logger.error("SSL enabled but no ssl_options provided")
-            return False
-
-        if not isinstance(ssl_options, dict):
-            logger.error("SSL options must be a dictionary")
-            return False
-
-        # Check for required SSL hostname
-        server_hostname = ssl_options.get("server_hostname")
-        if not server_hostname:
-            logger.error("SSL enabled but no server_hostname provided")
-            return False
-
-        # Check for SSL context
-        context = ssl_options.get("context")
-        if not context or not isinstance(context, ssl.SSLContext):
-            logger.error("SSL enabled but no valid SSL context provided")
-            return False
-
-        logger.debug(
-            "SSL parameters validated successfully: hostname=%s, context=%s",
-            server_hostname,
-            type(context).__name__,
-        )
-        return True
 
     def _connect(self) -> bool:
         """
@@ -178,15 +76,7 @@ class RobustConnection:
                     return True
 
                 # Prepare connection parameters with fresh SSL context if needed
-                connection_params = self._deep_copy_connection_params(
-                    self._connection_params
-                )
-
-                # Validate SSL parameters before connection
-                if connection_params.get("ssl"):
-                    if not self._validate_ssl_parameters(connection_params):
-                        logger.error("SSL parameter validation failed")
-                        return False
+                connection_params = self._connection_params.copy()
 
                 # Reset SSL context for each connection attempt to prevent SSL context reuse issues
                 if connection_params.get("ssl") and connection_params.get(
@@ -225,32 +115,16 @@ class RobustConnection:
                         # Copy SSL options with fresh context
                         fresh_ssl_options = ssl_options.copy()
                         fresh_ssl_options["context"] = fresh_context
-
-                        # Ensure SSL hostname is preserved during reconnection
-                        if (
-                            self._ssl_hostname
-                            and "server_hostname" not in fresh_ssl_options
-                        ):
-                            fresh_ssl_options["server_hostname"] = self._ssl_hostname
-                            logger.debug(
-                                "Restored SSL hostname during reconnection: %s",
-                                self._ssl_hostname,
-                            )
-
                         connection_params["ssl_options"] = fresh_ssl_options
 
                         logger.debug(
-                            "Created fresh SSL context with enhanced security for connection attempt to %s",
-                            fresh_ssl_options.get("server_hostname", "unknown"),
+                            "Created fresh SSL context with enhanced security for connection attempt"
                         )
 
                 logger.info(
-                    "Establishing RabbitMQ connection with heartbeat=%s SSL=%s hostname=%s",
+                    "Establishing RabbitMQ connection with heartbeat=%s SSL=%s",
                     connection_params.get("heartbeat", 60),
                     connection_params.get("ssl", False),
-                    connection_params.get("ssl_options", {}).get("server_hostname")
-                    if connection_params.get("ssl_options")
-                    else None,
                 )
                 self._connection = Connection(**connection_params)
 
