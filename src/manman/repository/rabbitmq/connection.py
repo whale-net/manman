@@ -91,7 +91,7 @@ class RobustConnection:
                         fresh_context.load_default_certs(
                             purpose=ssl.Purpose.SERVER_AUTH
                         )
-                        
+
                         # Apply enhanced security settings to prevent SSL errors
                         fresh_context.options |= ssl.OP_NO_SSLv2
                         fresh_context.options |= ssl.OP_NO_SSLv3
@@ -100,19 +100,26 @@ class RobustConnection:
                         fresh_context.minimum_version = ssl.TLSVersion.TLSv1_2
                         fresh_context.check_hostname = True
                         fresh_context.verify_mode = ssl.CERT_REQUIRED
-                        
+
                         # Set secure cipher suites to prevent MAC errors
                         try:
-                            fresh_context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS')
+                            fresh_context.set_ciphers(
+                                "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
+                            )
                         except ssl.SSLError as cipher_error:
-                            logger.warning("Could not set custom cipher suites, using defaults: %s", cipher_error)
+                            logger.warning(
+                                "Could not set custom cipher suites, using defaults: %s",
+                                cipher_error,
+                            )
 
                         # Copy SSL options with fresh context
                         fresh_ssl_options = ssl_options.copy()
                         fresh_ssl_options["context"] = fresh_context
                         connection_params["ssl_options"] = fresh_ssl_options
 
-                        logger.debug("Created fresh SSL context with enhanced security for connection attempt")
+                        logger.debug(
+                            "Created fresh SSL context with enhanced security for connection attempt"
+                        )
 
                 logger.info(
                     "Establishing RabbitMQ connection with heartbeat=%s SSL=%s",
@@ -133,8 +140,8 @@ class RobustConnection:
             error_msg = str(ssl_error).lower()
             if "bad record mac" in error_msg:
                 logger.warning(
-                    "SSL bad record MAC error detected - this usually indicates SSL context reuse issues: %s", 
-                    ssl_error
+                    "SSL bad record MAC error detected - this usually indicates SSL context reuse issues: %s",
+                    ssl_error,
                 )
             elif "certificate" in error_msg:
                 logger.error("SSL certificate error: %s", ssl_error)
@@ -142,7 +149,7 @@ class RobustConnection:
                 logger.warning("SSL handshake failed: %s", ssl_error)
             else:
                 logger.exception("SSL connection error: %s", ssl_error)
-            
+
             self._connection = None
             return False
         except Exception as e:
@@ -188,7 +195,7 @@ class RobustConnection:
         attempt = 0
         current_delay = self._reconnect_delay
         ssl_error_count = 0
-        
+
         while attempt < self._max_reconnect_attempts and not self._should_stop:
             attempt += 1
             logger.info(
@@ -217,26 +224,33 @@ class RobustConnection:
             except ssl.SSLError as ssl_error:
                 ssl_error_count += 1
                 error_msg = str(ssl_error).lower()
-                
+
                 if "bad record mac" in error_msg:
                     logger.warning(
-                        "SSL bad record MAC error on attempt %d (SSL errors: %d) - will retry with fresh context: %s", 
-                        attempt, ssl_error_count, ssl_error
+                        "SSL bad record MAC error on attempt %d (SSL errors: %d) - will retry with fresh context: %s",
+                        attempt,
+                        ssl_error_count,
+                        ssl_error,
                     )
                     # For bad record MAC errors, use shorter delay to retry quickly with fresh context
                     ssl_specific_delay = min(current_delay * 0.5, 5.0)
                 else:
-                    logger.exception("SSL error on reconnection attempt %d: %s", attempt, ssl_error)
+                    logger.exception(
+                        "SSL error on reconnection attempt %d: %s", attempt, ssl_error
+                    )
                     ssl_specific_delay = current_delay
-                    
+
                 # If we have multiple SSL errors in a row, increase delay more aggressively
                 if ssl_error_count >= 3:
                     ssl_specific_delay = min(ssl_specific_delay * 2, 30.0)
-                    logger.warning("Multiple SSL errors detected (%d), increasing delay to %0.1fs", 
-                                 ssl_error_count, ssl_specific_delay)
-                
+                    logger.warning(
+                        "Multiple SSL errors detected (%d), increasing delay to %0.1fs",
+                        ssl_error_count,
+                        ssl_specific_delay,
+                    )
+
                 current_delay = ssl_specific_delay
-                
+
             except Exception as e:
                 logger.exception("Reconnection attempt %d failed: %s", attempt, e)
                 # Reset SSL error count on non-SSL errors
@@ -248,8 +262,9 @@ class RobustConnection:
                 current_delay = min(current_delay * 1.5, 30.0)
 
         logger.error(
-            "Failed to reconnect after %d attempts (SSL errors: %d)", 
-            self._max_reconnect_attempts, ssl_error_count
+            "Failed to reconnect after %d attempts (SSL errors: %d)",
+            self._max_reconnect_attempts,
+            ssl_error_count,
         )
         with self._lock:
             self._is_reconnecting = False

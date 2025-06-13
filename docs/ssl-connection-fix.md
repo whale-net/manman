@@ -54,20 +54,20 @@ def get_rabbitmq_ssl_options(hostname: str) -> dict:
     # Create SSL context with enhanced security settings
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
-    
+
     # Disable insecure protocols
     context.options |= ssl.OP_NO_SSLv2
     context.options |= ssl.OP_NO_SSLv3
     context.options |= ssl.OP_NO_TLSv1
     context.options |= ssl.OP_NO_TLSv1_1
-    
+
     # Set minimum TLS version to 1.2
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    
+
     # Enable hostname checking and certificate verification
     context.check_hostname = True
     context.verify_mode = ssl.CERT_REQUIRED
-    
+
     # Restrict to secure cipher suites
     context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS')
 ```
