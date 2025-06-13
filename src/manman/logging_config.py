@@ -76,15 +76,15 @@ def setup_logging(
     logging.getLogger("manman").setLevel(level)
 
 
-def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
+def get_server_log_config(service_name: Optional[str] = None) -> dict:
     """
-    Get uvicorn-compatible log configuration that plays nicely with our setup.
+    Get unified log configuration for web servers (uvicorn/gunicorn).
 
     Args:
         service_name: Name of the service for log identification
 
     Returns:
-        Log configuration dict for uvicorn
+        Log configuration dict that works for both uvicorn and gunicorn
     """
     service_prefix = f"[{service_name}] " if service_name else ""
 
@@ -96,7 +96,7 @@ def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
                 "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
             },
             "access": {
-                "format": f"%(asctime)s - {service_prefix}uvicorn.access - %(levelname)s - %(message)s",
+                "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
             },
         },
         "handlers": {
@@ -123,76 +123,13 @@ def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
                 "level": "INFO",
                 "propagate": False,
             },
-        },
-        "root": {
-            "level": "INFO",
-            "handlers": ["default"],
-        },
-    }
-
-
-def get_gunicorn_log_config(service_name: Optional[str] = None) -> dict:
-    """
-    Get Gunicorn-compatible log configuration that integrates with our setup.
-
-    Args:
-        service_name: Name of the service for log identification
-
-    Returns:
-        Log configuration dict for Gunicorn
-    """
-    service_prefix = f"[{service_name}] " if service_name else ""
-
-    return {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
-            },
-            "gunicorn_access": {
-                "format": f"%(asctime)s - {service_prefix}gunicorn.access - %(levelname)s - %(message)s",
-            },
-            "gunicorn_error": {
-                "format": f"%(asctime)s - {service_prefix}gunicorn.error - %(levelname)s - %(message)s",
-            },
-        },
-        "handlers": {
-            "default": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-            "gunicorn_access": {
-                "formatter": "gunicorn_access",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-            "gunicorn_error": {
-                "formatter": "gunicorn_error",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
-            },
-        },
-        "loggers": {
             "gunicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
             "gunicorn.access": {
-                "handlers": ["gunicorn_access"],
+                "handlers": ["access"],
                 "level": "INFO",
                 "propagate": False,
             },
             "gunicorn.error": {
-                "handlers": ["gunicorn_error"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {
-                "handlers": ["default"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "uvicorn.access": {
                 "handlers": ["default"],
                 "level": "INFO",
                 "propagate": False,
@@ -203,6 +140,16 @@ def get_gunicorn_log_config(service_name: Optional[str] = None) -> dict:
             "handlers": ["default"],
         },
     }
+
+
+def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
+    """Get uvicorn-compatible log configuration."""
+    return get_server_log_config(service_name)
+
+
+def get_gunicorn_log_config(service_name: Optional[str] = None) -> dict:
+    """Get Gunicorn-compatible log configuration."""
+    return get_server_log_config(service_name)
 
 
 def _setup_otel_logging(

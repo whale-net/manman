@@ -15,7 +15,7 @@ import alembic.command
 import alembic.config
 from manman.logging_config import (
     get_gunicorn_log_config,
-    get_uvicorn_log_config,
+    get_server_log_config,
     setup_logging,
 )
 from manman.repository.rabbitmq.config import ExchangeRegistry
@@ -124,7 +124,7 @@ def get_gunicorn_config(
         port: Port to bind to
         workers: Number of worker processes
         worker_class: Gunicorn worker class to use
-        enable_otel: Whether OTEL logging is enabled
+        enable_otel: Whether OTEL logging is enabled (unused, kept for compatibility)
         preload_app: Whether to preload the application before forking workers
 
     Returns:
@@ -148,7 +148,7 @@ def get_gunicorn_config(
         "loglevel": "info",
         "capture_output": True,
         "enable_stdio_inheritance": True,
-        # Use our custom logging configuration
+        # Use our unified logging configuration
         "logconfig_dict": get_gunicorn_log_config(service_name),
     }
 
@@ -494,7 +494,7 @@ def start_status_processor(
             host="0.0.0.0",
             port=8000,
             # NOTE: this sets the name of the service in the logs
-            log_config=get_uvicorn_log_config("status-processor"),
+            log_config=get_server_log_config("status-processor"),
         )
 
     health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
