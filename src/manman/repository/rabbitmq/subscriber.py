@@ -130,7 +130,8 @@ class RabbitSubscriber(MessageSubscriberInterface):
                     )
                     self._consumer_thread.start()
                     logger.debug(
-                        "Consumer thread started for queue %s", self._queue_config.actual_queue_name
+                        "Consumer thread started for queue %s",
+                        self._queue_config.actual_queue_name,
                     )
 
                 logger.info(
