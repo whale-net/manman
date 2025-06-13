@@ -137,20 +137,45 @@ def init_rabbitmq(
 
 
 def get_rabbitmq_ssl_options(hostname: str) -> dict:
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+    """Create SSL options with enhanced security settings to prevent connection errors."""
     if hostname is None or len(hostname) == 0:
         raise RuntimeError(
             "SSL is enabled but no hostname provided. "
             "Please set MANMAN_RABBITMQ_SSL_HOSTNAME"
         )
+
+    # Create SSL context with enhanced security settings
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+
+    # Enhanced security settings to prevent SSL errors
+    # Disable insecure protocols to avoid bad record MAC errors
+    context.options |= ssl.OP_NO_SSLv2
+    context.options |= ssl.OP_NO_SSLv3
+    context.options |= ssl.OP_NO_TLSv1
+    context.options |= ssl.OP_NO_TLSv1_1
+
+    # Set minimum TLS version to 1.2 for better security
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+    # Enable hostname checking and certificate verification
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+
+    # Restrict to secure cipher suites to prevent MAC errors
+    # This removes weak ciphers that might cause bad record MAC errors
+    context.set_ciphers(
+        "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
+    )
+
     ssl_options = {
-        #'context': ssl.create_default_context(cafile='ca_certificate.pem'),
         "context": context,
         "server_hostname": hostname,
-        #'check_hostname': True,        # New 2.8.0, default is False
-        #'verify_mode': 'required',     # New 2.8.0, default is 'none'
     }
+
+    logger.debug(
+        "Created SSL context with enhanced security settings for hostname: %s", hostname
+    )
     return ssl_options
 
 

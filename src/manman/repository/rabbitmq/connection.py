@@ -6,6 +6,7 @@ and automatic reconnection to prevent services from becoming unreachable.
 """
 
 import logging
+import ssl
 import threading
 import time
 from typing import Callable, List, Optional
@@ -65,7 +66,7 @@ class RobustConnection:
 
     def _connect(self) -> bool:
         """
-        Establish the initial connection.
+        Establish the initial connection with enhanced SSL error handling.
 
         :return: True if connection was successful, False otherwise
         """
@@ -91,12 +92,34 @@ class RobustConnection:
                             purpose=ssl.Purpose.SERVER_AUTH
                         )
 
+                        # Apply enhanced security settings to prevent SSL errors
+                        fresh_context.options |= ssl.OP_NO_SSLv2
+                        fresh_context.options |= ssl.OP_NO_SSLv3
+                        fresh_context.options |= ssl.OP_NO_TLSv1
+                        fresh_context.options |= ssl.OP_NO_TLSv1_1
+                        fresh_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                        fresh_context.check_hostname = True
+                        fresh_context.verify_mode = ssl.CERT_REQUIRED
+
+                        # Set secure cipher suites to prevent MAC errors
+                        try:
+                            fresh_context.set_ciphers(
+                                "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
+                            )
+                        except ssl.SSLError as cipher_error:
+                            logger.warning(
+                                "Could not set custom cipher suites, using defaults: %s",
+                                cipher_error,
+                            )
+
                         # Copy SSL options with fresh context
                         fresh_ssl_options = ssl_options.copy()
                         fresh_ssl_options["context"] = fresh_context
                         connection_params["ssl_options"] = fresh_ssl_options
 
-                        logger.debug("Created fresh SSL context for connection attempt")
+                        logger.debug(
+                            "Created fresh SSL context with enhanced security for connection attempt"
+                        )
 
                 logger.info(
                     "Establishing RabbitMQ connection with heartbeat=%s SSL=%s",
@@ -112,6 +135,23 @@ class RobustConnection:
                     logger.error("Failed to establish RabbitMQ connection")
                     return False
 
+        except ssl.SSLError as ssl_error:
+            # Handle SSL-specific errors with more context
+            error_msg = str(ssl_error).lower()
+            if "bad record mac" in error_msg:
+                logger.warning(
+                    "SSL bad record MAC error detected - this usually indicates SSL context reuse issues: %s",
+                    ssl_error,
+                )
+            elif "certificate" in error_msg:
+                logger.error("SSL certificate error: %s", ssl_error)
+            elif "handshake" in error_msg:
+                logger.warning("SSL handshake failed: %s", ssl_error)
+            else:
+                logger.exception("SSL connection error: %s", ssl_error)
+
+            self._connection = None
+            return False
         except Exception as e:
             logger.exception("Error establishing RabbitMQ connection: %s", e)
             self._connection = None
@@ -143,7 +183,7 @@ class RobustConnection:
                 self._is_reconnecting = False
 
     def _reconnect_loop(self):
-        """Main reconnection loop."""
+        """Main reconnection loop with enhanced SSL error handling."""
         logger.warning("Connection lost, starting reconnection process")
 
         if self._on_connection_lost:
@@ -154,6 +194,8 @@ class RobustConnection:
 
         attempt = 0
         current_delay = self._reconnect_delay
+        ssl_error_count = 0
+
         while attempt < self._max_reconnect_attempts and not self._should_stop:
             attempt += 1
             logger.info(
@@ -179,16 +221,50 @@ class RobustConnection:
                         self._is_reconnecting = False
                     return
 
+            except ssl.SSLError as ssl_error:
+                ssl_error_count += 1
+                error_msg = str(ssl_error).lower()
+
+                if "bad record mac" in error_msg:
+                    logger.warning(
+                        "SSL bad record MAC error on attempt %d (SSL errors: %d) - will retry with fresh context: %s",
+                        attempt,
+                        ssl_error_count,
+                        ssl_error,
+                    )
+                    # For bad record MAC errors, use shorter delay to retry quickly with fresh context
+                    ssl_specific_delay = min(current_delay * 0.5, 5.0)
+                else:
+                    logger.exception(
+                        "SSL error on reconnection attempt %d: %s", attempt, ssl_error
+                    )
+                    ssl_specific_delay = current_delay
+
+                # If we have multiple SSL errors in a row, increase delay more aggressively
+                if ssl_error_count >= 3:
+                    ssl_specific_delay = min(ssl_specific_delay * 2, 30.0)
+                    logger.warning(
+                        "Multiple SSL errors detected (%d), increasing delay to %0.1fs",
+                        ssl_error_count,
+                        ssl_specific_delay,
+                    )
+
+                current_delay = ssl_specific_delay
+
             except Exception as e:
                 logger.exception("Reconnection attempt %d failed: %s", attempt, e)
+                # Reset SSL error count on non-SSL errors
+                ssl_error_count = 0
 
             if attempt < self._max_reconnect_attempts and not self._should_stop:
                 time.sleep(current_delay)
-                # Exponential backoff with jitter
+                # Exponential backoff with jitter, but cap at reasonable max
                 current_delay = min(current_delay * 1.5, 30.0)
 
         logger.error(
-            "Failed to reconnect after %d attempts", self._max_reconnect_attempts
+            "Failed to reconnect after %d attempts (SSL errors: %d)",
+            self._max_reconnect_attempts,
+            ssl_error_count,
         )
         with self._lock:
             self._is_reconnecting = False
