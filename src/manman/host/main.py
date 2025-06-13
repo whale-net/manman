@@ -304,7 +304,7 @@ def start_experience_api(
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
-    setup_logging(service_name="experience-api", enable_otel=log_otlp)
+    setup_logging(service_name="manman-experience-api", enable_otel=log_otlp)
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -322,7 +322,7 @@ def start_experience_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="experience-api",
+        service_name="manman-experience-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -368,7 +368,7 @@ def start_status_api(
 ):
     """Start the status API that provides status and monitoring functionality."""
     # Setup logging first
-    setup_logging(service_name="status-api", enable_otel=log_otlp)
+    setup_logging(service_name="manman-status-api", enable_otel=log_otlp)
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -386,7 +386,7 @@ def start_status_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="status-api",
+        service_name="manman-status-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -432,7 +432,7 @@ def start_worker_dal_api(
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     # Setup logging first
-    setup_logging(service_name="worker-dal-api", enable_otel=log_otlp)
+    setup_logging(service_name="manman-worker-dal-api", enable_otel=log_otlp)
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -450,7 +450,7 @@ def start_worker_dal_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="worker-dal-api",
+        service_name="manman-worker-dal-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -487,7 +487,7 @@ def start_status_processor(
     """Start the status event processor that handles status-related pub/sub messages."""
 
     # Setup logging first - this is a standalone service (no uvicorn)
-    setup_logging(service_name="status-processor", enable_otel=log_otlp)
+    setup_logging(service_name="manman-status-processor", enable_otel=log_otlp)
 
     logger.info("Starting status event processor...")
 
@@ -540,11 +540,13 @@ def start_status_processor(
 
 @app.command()
 def run_migration():
+    setup_logging()  # Basic logging for CLI operations
     _run_migration(get_sqlalchemy_engine())
 
 
 @app.command()
 def create_migration(migration_message: Optional[str] = None):
+    setup_logging()  # Basic logging for CLI operations
     # TODO - make use of this? or remove
     if os.environ.get("ENVIRONMENT", "DEV") == "PROD":
         raise RuntimeError("cannot create revisions in production")
@@ -553,6 +555,7 @@ def create_migration(migration_message: Optional[str] = None):
 
 @app.command()
 def run_downgrade(target: str):
+    setup_logging()  # Basic logging for CLI operations
     config = _get_alembic_config()
     engine = get_sqlalchemy_engine()
     with engine.begin() as conn:
@@ -564,8 +567,8 @@ def run_downgrade(target: str):
 def callback(
     db_connection_string: Annotated[str, typer.Option(envvar="MANMAN_POSTGRES_URL")],
 ):
-    # Setup basic logging as early as possible for CLI operations
-    setup_logging()
+    # Initialize database connection for CLI operations
+    # Note: Logging will be configured by individual commands as needed
     init_sql_alchemy_engine(db_connection_string)
 
 
