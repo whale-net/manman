@@ -3,13 +3,14 @@ import io
 import logging
 import ssl
 import threading
-from typing import Optional
+from typing import Optional, Union
 
 import amqpstorm
 import sqlalchemy
 from sqlmodel import Session
 
 from manman.repository.api_client import AuthAPIClient
+from manman.repository.rabbitmq.config import BindingConfig, QueueConfig
 from manman.repository.rabbitmq.connection import RobustConnection
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,64 @@ def get_rabbitmq_connection() -> amqpstorm.Connection:
 
     robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
     return robust_connection.get_connection()
+
+
+def get_rabbitmq_connection_provider():
+    """
+    Get a connection provider function for RabbitMQ subscribers.
+
+    :return: Function that returns current valid connection
+    """
+    def connection_provider() -> amqpstorm.Connection:
+        return get_rabbitmq_connection()
+
+    return connection_provider
+
+
+def register_subscriber_for_recovery(subscriber_callback):
+    """
+    Register a subscriber callback to be notified when connection is restored.
+
+    :param subscriber_callback: Function to call when connection is restored
+    """
+    if "rmq_robust_connection" not in __GLOBALS:
+        raise RuntimeError("rmq_robust_connection not defined - cannot register subscriber")
+
+    robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+    robust_connection.register_subscriber_callback(subscriber_callback)
+
+
+def unregister_subscriber_from_recovery(subscriber_callback):
+    """
+    Unregister a subscriber callback from connection recovery notifications.
+
+    :param subscriber_callback: Function to remove from callbacks
+    """
+    if "rmq_robust_connection" in __GLOBALS:
+        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+        robust_connection.unregister_subscriber_callback(subscriber_callback)
+
+
+def create_robust_subscriber(
+    binding_configs: Union[BindingConfig, list[BindingConfig]],
+    queue_config: QueueConfig,
+):
+    """
+    Create a RabbitSubscriber with automatic channel recovery support.
+
+    :param binding_configs: Binding configuration(s) for the subscriber
+    :param queue_config: Queue configuration for the subscriber
+    :return: RabbitSubscriber instance with recovery support
+    """
+    from manman.repository.rabbitmq.subscriber import RabbitSubscriber
+
+    return RabbitSubscriber(
+        connection_provider=get_rabbitmq_connection_provider(),
+        binding_configs=binding_configs,
+        queue_config=queue_config,
+        recovery_registry=register_subscriber_for_recovery,
+        recovery_unregistry=unregister_subscriber_from_recovery,
+    )
 
 
 def shutdown_rabbitmq():

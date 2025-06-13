@@ -8,7 +8,7 @@ and automatic reconnection to prevent services from becoming unreachable.
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from amqpstorm import AMQPConnectionError, Connection
 
@@ -55,6 +55,9 @@ class RobustConnection:
         self._reconnect_thread: Optional[threading.Thread] = None
         self._is_reconnecting = False
         self._should_stop = False
+
+        # Registry for subscribers that need to be notified of reconnection
+        self._subscriber_callbacks: List[Callable] = []
 
         # Initial connection - should fail fast if connection cannot be established
         if not self._connect():
@@ -131,6 +134,9 @@ class RobustConnection:
                                 "Error in connection restored callback: %s", e
                             )
 
+                    # Notify all registered subscribers to recover their channels
+                    self._notify_subscribers_of_recovery()
+
                     with self._lock:
                         self._is_reconnecting = False
                     return
@@ -148,6 +154,39 @@ class RobustConnection:
         )
         with self._lock:
             self._is_reconnecting = False
+
+    def register_subscriber_callback(self, callback: Callable) -> None:
+        """
+        Register a callback to be called when connection is restored.
+
+        :param callback: Function to call when connection is restored
+        """
+        with self._lock:
+            if callback not in self._subscriber_callbacks:
+                self._subscriber_callbacks.append(callback)
+                logger.debug("Registered subscriber callback")
+
+    def unregister_subscriber_callback(self, callback: Callable) -> None:
+        """
+        Unregister a subscriber callback.
+
+        :param callback: Function to remove from callbacks
+        """
+        with self._lock:
+            if callback in self._subscriber_callbacks:
+                self._subscriber_callbacks.remove(callback)
+                logger.debug("Unregistered subscriber callback")
+
+    def _notify_subscribers_of_recovery(self) -> None:
+        """Notify all registered subscribers that connection has been restored."""
+        with self._lock:
+            callbacks = self._subscriber_callbacks.copy()
+
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception as e:
+                logger.exception("Error notifying subscriber of recovery: %s", e)
 
     def get_connection(self) -> Connection:
         """

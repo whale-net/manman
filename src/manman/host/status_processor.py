@@ -26,9 +26,6 @@ from manman.repository.rabbitmq.config import (
 from manman.repository.rabbitmq.publisher import (
     RabbitPublisher,
 )
-from manman.repository.rabbitmq.subscriber import (
-    RabbitSubscriber,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +73,10 @@ class StatusEventProcessor:
             auto_delete=False,
         )
 
-        rmq = RabbitSubscriber(self._rabbitmq_connection, binding_config, queue_config)
+        # Use robust subscriber that can recover from connection drops
+        from manman.util import create_robust_subscriber
+
+        rmq = create_robust_subscriber(binding_config, queue_config)
         return InternalStatusSubService(rmq)
 
     def __build_external_status_publisher(
@@ -101,7 +101,11 @@ class StatusEventProcessor:
             exclusive=False,
             auto_delete=False,
         )
-        rmq = RabbitSubscriber(self._rabbitmq_connection, binding_config, queue_config)
+
+        # Use robust subscriber that can recover from connection drops
+        from manman.util import create_robust_subscriber
+
+        rmq = create_robust_subscriber(binding_config, queue_config)
         return ExternalStatusSubService(rmq)
 
     def __init__(self, rabbitmq_connection: Connection):
