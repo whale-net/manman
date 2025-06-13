@@ -134,9 +134,9 @@ class RobustConnection:
                 logger.exception("Reconnection attempt %d failed: %s", attempt, e)
             
             if attempt < self._max_reconnect_attempts and not self._should_stop:
-                time.sleep(self._reconnect_delay)
+                time.sleep(current_delay)
                 # Exponential backoff with jitter
-                self._reconnect_delay = min(self._reconnect_delay * 1.5, 30.0)
+                current_delay = min(current_delay * 1.5, 30.0)
         
         logger.error("Failed to reconnect after %d attempts", self._max_reconnect_attempts)
         with self._lock:
