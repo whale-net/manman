@@ -98,6 +98,8 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
 
     This function configures server-specific loggers without clobbering
     the root logger configuration, allowing OTEL and other handlers to coexist.
+    Uses Python objects directly instead of dictionary-based configuration
+    for better maintainability and error detection.
 
     Args:
         service_name: Name of the service for log identification
@@ -125,65 +127,6 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
         logger.addHandler(console_handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False  # Don't propagate to root to avoid duplicate logs
-
-
-def get_server_log_config(service_name: Optional[str] = None) -> dict:
-    """
-    Get minimal log configuration for web servers that preserves existing handlers.
-
-    This returns a configuration that only sets up server-specific loggers
-    without touching the root logger, preserving any OTEL or other handlers.
-
-    Args:
-        service_name: Name of the service for log identification
-
-    Returns:
-        Log configuration dict that works for both uvicorn and gunicorn
-    """
-    service_prefix = f"[{service_name}] " if service_name else ""
-
-    return {
-        "version": 1,
-        "disable_existing_loggers": False,  # Critical: preserve existing loggers
-        "formatters": {
-            "default": {
-                "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
-            },
-        },
-        "handlers": {
-            "console": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-        },
-        "loggers": {
-            # Only configure server-specific loggers, not root
-            "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {
-                "handlers": ["console"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "uvicorn.access": {
-                "handlers": ["console"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "gunicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
-            "gunicorn.access": {
-                "handlers": ["console"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "gunicorn.error": {
-                "handlers": ["console"],
-                "level": "INFO",
-                "propagate": False,
-            },
-        },
-        # Do NOT configure root logger here - let setup_logging() handle it
-    }
 
 
 def _setup_otel_logging(
@@ -257,13 +200,17 @@ def get_gunicorn_config(
     """
     Get Gunicorn configuration for ManMan services.
 
+    Note: Logging configuration is handled separately in app factory functions
+    to ensure proper initialization order using Python objects instead of
+    dictionary-based configuration.
+
     Args:
         service_name: Name of the service for identification
         port: Port to bind to
         workers: Number of worker processes
         worker_class: Gunicorn worker class to use
         preload_app: Whether to preload the application before forking workers
-        enable_otel: Whether OTEL logging is enabled
+        enable_otel: Whether OTEL logging is enabled (unused but kept for compatibility)
 
     Returns:
         Configuration dict for Gunicorn
@@ -289,13 +236,6 @@ def get_gunicorn_config(
         "enable_stdio_inheritance": True,
     }
 
-    # Add logging configuration based on OTEL settings
-    if enable_otel:
-        # When OTEL is enabled, don't use logconfig_dict to avoid clobbering handlers
-        # Logging will be configured manually via setup_logging() and setup_server_logging()
-        pass
-    else:
-        # Use traditional dictConfig approach for non-OTEL setups
-        config["logconfig_dict"] = get_server_log_config(service_name)
-
+    # Note: Logging configuration should be handled in the app factory functions
+    # rather than here, to ensure proper initialization order
     return config

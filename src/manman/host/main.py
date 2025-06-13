@@ -14,10 +14,7 @@ import alembic
 import alembic.command
 import alembic.config
 from manman.logging_config import (
-    get_gunicorn_config as get_gunicorn_logging_config,
-)
-from manman.logging_config import (
-    get_server_log_config,
+    get_gunicorn_config,
     setup_logging,
     setup_server_logging,
 )
@@ -174,10 +171,8 @@ def create_experience_app():
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    # Configure Gunicorn logging if OTEL is enabled
-    config = get_initialization_config()
-    if config.get("enable_otel", False):
-        setup_server_logging("experience-api")
+    # Configure server-specific logging using Python objects
+    setup_server_logging("experience-api")
 
     from manman.host.api.experience import create_app
 
@@ -189,10 +184,8 @@ def create_status_app():
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    # Configure Gunicorn logging if OTEL is enabled
-    config = get_initialization_config()
-    if config.get("enable_otel", False):
-        setup_server_logging("status-api")
+    # Configure server-specific logging using Python objects
+    setup_server_logging("status-api")
 
     from manman.host.api.status import create_app
 
@@ -204,10 +197,8 @@ def create_worker_dal_app():
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    # Configure Gunicorn logging if OTEL is enabled
-    config = get_initialization_config()
-    if config.get("enable_otel", False):
-        setup_server_logging("worker-dal-api")
+    # Configure server-specific logging using Python objects
+    setup_server_logging("worker-dal-api")
 
     from manman.host.api.worker_dal import create_app
 
@@ -267,7 +258,7 @@ def start_experience_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_logging_config(
+    options = get_gunicorn_config(
         service_name="experience-api",
         port=port,
         workers=workers,
@@ -331,7 +322,7 @@ def start_status_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_logging_config(
+    options = get_gunicorn_config(
         service_name="status-api",
         port=port,
         workers=workers,
@@ -395,7 +386,7 @@ def start_worker_dal_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_logging_config(
+    options = get_gunicorn_config(
         service_name="worker-dal-api",
         port=port,
         workers=workers,
@@ -467,12 +458,15 @@ def start_status_processor(
 
     def run_health_check_server():
         # Use our uvicorn config for the health check server too
+        # Configure server logging directly using Python objects
+        setup_server_logging("status-processor")
+
         uvicorn.run(
             health_check_app,
             host="0.0.0.0",
             port=8000,
-            # NOTE: this sets the name of the service in the logs
-            log_config=get_server_log_config("status-processor"),
+            # Disable uvicorn's log configuration since we handle it ourselves
+            log_config=None,
         )
 
     health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
