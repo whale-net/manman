@@ -159,10 +159,7 @@ def _setup_otel_logging(
     set_logger_provider(logger_provider)
 
     # Setup OTLP exporter
-    endpoint = (
-        otel_endpoint
-        or os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-    )
+    endpoint = otel_endpoint or os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
 
     otlp_exporter = OTLPLogExporter(
         endpoint=endpoint,
