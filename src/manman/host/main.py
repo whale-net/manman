@@ -211,56 +211,33 @@ def _init_common_services(
 
 
 def create_experience_app():
-    """Factory function to create the Experience API FastAPI application."""
+    """Factory function to create the Experience API FastAPI application with service initialization."""
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    from fastapi import FastAPI
+    from manman.host.api.experience import create_app
 
-    from manman.host.api.experience import router as experience_router
-    from manman.host.api.shared import add_health_check
-
-    experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
-    experience_app.include_router(experience_router)
-    add_health_check(experience_app)
-    return experience_app
+    return create_app()
 
 
 def create_status_app():
-    """Factory function to create the Status API FastAPI application."""
+    """Factory function to create the Status API FastAPI application with service initialization."""
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    from fastapi import FastAPI
+    from manman.host.api.status import create_app
 
-    from manman.host.api.shared import add_health_check
-    from manman.host.api.status import router as status_router
-
-    status_app = FastAPI(title="ManMan Status API", root_path="/status")
-    status_app.include_router(status_router)
-    add_health_check(status_app)
-    return status_app
+    return create_app()
 
 
 def create_worker_dal_app():
-    """Factory function to create the Worker DAL API FastAPI application."""
+    """Factory function to create the Worker DAL API FastAPI application with service initialization."""
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
-    from fastapi import FastAPI
+    from manman.host.api.worker_dal import create_app
 
-    from manman.host.api.shared import add_health_check
-    from manman.host.api.worker_dal import server_router, worker_router
-
-    worker_dal_app = FastAPI(
-        title="ManMan Worker DAL API",
-        root_path="/workerdal",  # Configure root path for reverse proxy
-    )
-    worker_dal_app.include_router(server_router)
-    worker_dal_app.include_router(worker_router)
-    # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
-    add_health_check(worker_dal_app)
-    return worker_dal_app
+    return create_app()
 
 
 @app.command()
