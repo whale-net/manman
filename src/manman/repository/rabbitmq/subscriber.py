@@ -120,7 +120,18 @@ class RabbitSubscriber(MessageSubscriberInterface):
                 )
 
                 # Start or restart consuming thread
-                self._start_consuming_thread()
+                if self._consumer_thread and self._consumer_thread.is_alive():
+                    logger.debug("Consumer thread already running, skipping start")
+                else:
+                    self._consumer_thread = threading.Thread(
+                        target=self._consuming_loop,
+                        name=f"rmq-subscriber-{self._queue_config.actual_queue_name}",
+                        daemon=True,
+                    )
+                    self._consumer_thread.start()
+                    logger.debug(
+                        "Consumer thread started for queue %s", self._queue_config.actual_queue_name
+                    )
 
                 logger.info(
                     "Channel initialized successfully for queue %s",
@@ -156,22 +167,6 @@ class RabbitSubscriber(MessageSubscriberInterface):
 
         self._channel = None
         self._consumer_tag = None
-
-    def _start_consuming_thread(self):
-        """Start the consuming thread with recovery support."""
-        if self._consumer_thread and self._consumer_thread.is_alive():
-            logger.debug("Consumer thread already running, skipping start")
-            return
-
-        self._consumer_thread = threading.Thread(
-            target=self._consuming_loop,
-            name=f"rmq-subscriber-{self._queue_config.actual_queue_name}",
-            daemon=True,
-        )
-        self._consumer_thread.start()
-        logger.debug(
-            "Consumer thread started for queue %s", self._queue_config.actual_queue_name
-        )
 
     def _consuming_loop(self):
         """Main consuming loop with automatic recovery."""
