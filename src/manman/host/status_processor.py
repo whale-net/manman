@@ -26,7 +26,7 @@ from manman.repository.rabbitmq.config import (
 from manman.repository.rabbitmq.publisher import (
     RabbitPublisher,
 )
-from manman.repository.rabbitmq.subscriber import RabbitSubscriber
+from manman.repository.rabbitmq.subscriber import RabbitSubscriber  # noqa: F401
 from manman.util import create_robust_subscriber
 
 logger = logging.getLogger(__name__)
