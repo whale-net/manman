@@ -141,20 +141,22 @@ def init_rabbitmq(
             else:
                 # Copy other parameters
                 rmq_params_copy[key] = value
-        
+
         # Add additional parameters
         rmq_params_copy["heartbeat_interval"] = heartbeat_interval
         rmq_params_copy["max_reconnect_attempts"] = max_reconnect_attempts
         rmq_params_copy["reconnect_delay"] = reconnect_delay
-        
+
         __GLOBALS["rmq_parameters"] = rmq_params_copy
         __GLOBALS["rmq_robust_connection"] = robust_connection
-        
+
         # Log parameter storage for debugging
         logger.debug(
             "Stored RabbitMQ parameters with SSL=%s, hostname=%s",
             rmq_params_copy.get("ssl", False),
-            rmq_params_copy.get("ssl_options", {}).get("server_hostname") if rmq_params_copy.get("ssl_options") else None,
+            rmq_params_copy.get("ssl_options", {}).get("server_hostname")
+            if rmq_params_copy.get("ssl_options")
+            else None,
         )
 
     logger.info(
