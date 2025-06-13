@@ -75,7 +75,13 @@ def setup_logging(
     # Reduce noise from common third-party libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("amqpstorm").setLevel(logging.WARNING)
+
+    # SQLAlchemy has multiple loggers - set them all to WARNING to reduce noise
+    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.orm").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
 
     # Ensure ManMan loggers are at the specified level
     logging.getLogger("manman").setLevel(level)
