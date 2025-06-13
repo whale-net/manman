@@ -74,11 +74,31 @@ class RobustConnection:
                 if self._connection and self._connection.is_open:
                     return True
 
+                # Prepare connection parameters with fresh SSL context if needed
+                connection_params = self._connection_params.copy()
+                
+                # Reset SSL context for each connection attempt to prevent SSL context reuse issues
+                if connection_params.get("ssl") and connection_params.get("ssl_options"):
+                    ssl_options = connection_params["ssl_options"]
+                    if isinstance(ssl_options, dict) and "context" in ssl_options:
+                        # Create a fresh SSL context to avoid "bad record mac" errors during reconnection
+                        import ssl
+                        fresh_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                        fresh_context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+                        
+                        # Copy SSL options with fresh context
+                        fresh_ssl_options = ssl_options.copy()
+                        fresh_ssl_options["context"] = fresh_context
+                        connection_params["ssl_options"] = fresh_ssl_options
+                        
+                        logger.debug("Created fresh SSL context for connection attempt")
+
                 logger.info(
-                    "Establishing RabbitMQ connection with heartbeat=%s",
-                    self._connection_params.get("heartbeat", 60),
+                    "Establishing RabbitMQ connection with heartbeat=%s SSL=%s",
+                    connection_params.get("heartbeat", 60),
+                    connection_params.get("ssl", False),
                 )
-                self._connection = Connection(**self._connection_params)
+                self._connection = Connection(**connection_params)
 
                 if self._connection.is_open:
                     logger.info("RabbitMQ connection established successfully")
