@@ -27,22 +27,22 @@ except ImportError:
 
 def setup_logging(
     level: int = logging.INFO,
-    service_name: Optional[str] = None,
     force_setup: bool = False,
     enable_otel: bool = False,
     enable_console: bool = True,
     otel_endpoint: Optional[str] = None,
+    component: Optional[str] = None,
 ) -> None:
     """
     Setup logging configuration for ManMan services with optional OTEL support.
 
     Args:
         level: Logging level (default: INFO)
-        service_name: Name of the service for log identification
         force_setup: Whether to force reconfiguration even if already setup
         enable_otel: Whether to enable OTEL logging (default: False)
         enable_console: Whether to enable console logging (default: True)
         otel_endpoint: OTEL collector endpoint (defaults to env var or localhost)
+        component: Component name for OTEL differentiation (e.g., 'experience-api', 'status-api', 'worker', 'processor')
     """
     # Check if logging has already been configured
     root_logger = logging.getLogger()
@@ -57,11 +57,11 @@ def setup_logging(
 
     # Setup OTEL logging if available and enabled
     if enable_otel and OTEL_AVAILABLE:
-        _setup_otel_logging(service_name, otel_endpoint)
+        _setup_otel_logging(otel_endpoint, component)
 
     # Setup console logging if enabled
     if enable_console:
-        _setup_console_logging(service_name)
+        _setup_console_logging(component)
 
     # Configure root logger
     root_logger.setLevel(level)
@@ -76,23 +76,23 @@ def setup_logging(
     logging.getLogger("manman").setLevel(level)
 
 
-def create_formatter(service_name: Optional[str] = None) -> logging.Formatter:
+def create_formatter(component_name: Optional[str] = None) -> logging.Formatter:
     """
     Create a standardized formatter for ManMan services.
 
     Args:
-        service_name: Name of the service for log identification
+        component_name: Name of the component for log identification (e.g., "experience-api", "worker")
 
     Returns:
         Configured logging formatter
     """
-    service_prefix = f"[{service_name}] " if service_name else ""
+    component_prefix = f"[{component_name}]" if component_name else "[manman]"
     return logging.Formatter(
-        f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s"
+        f"%(asctime)s - {component_prefix} %(name)s - %(levelname)s - %(message)s"
     )
 
 
-def setup_server_logging(service_name: Optional[str] = None) -> None:
+def setup_server_logging(component_name: Optional[str] = None) -> None:
     """
     Setup logging for web servers (uvicorn/gunicorn) that preserves existing handlers.
 
@@ -102,9 +102,9 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
     for better maintainability and error detection.
 
     Args:
-        service_name: Name of the service for log identification
+        component_name: Name of the component for log identification (e.g., "experience-api", "worker")
     """
-    formatter = create_formatter(service_name)
+    formatter = create_formatter(component_name)
 
     # Create a console handler for server logs
     console_handler = logging.StreamHandler(sys.stdout)
@@ -130,27 +130,37 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
 
 
 def _setup_otel_logging(
-    service_name: Optional[str] = None, otel_endpoint: Optional[str] = None
+    otel_endpoint: Optional[str] = None, component: Optional[str] = None
 ) -> None:
     """
     Setup OTEL logging configuration.
 
     Args:
-        service_name: Name of the service for identification
         otel_endpoint: OTEL collector endpoint
+        component: Component name for differentiation (e.g., 'experience-api', 'status-api', 'worker', 'processor')
     """
     if not OTEL_AVAILABLE:
         return
 
+    # Create resource attributes following OpenTelemetry semantic conventions
+    resource_attributes = {
+        "service.name": "manman",
+        "service.instance.id": os.uname().nodename,
+    }
+
+    # Add deployment environment using standard OTEL attribute
+    deployment_env = os.getenv("APP_ENV")
+    if deployment_env:
+        resource_attributes["deployment.environment.name"] = deployment_env
+
+    # Add component differentiation using custom service attribute
+    if component:
+        # Use a custom service attribute for component differentiation
+        # This follows the pattern service.{custom_identifier}
+        resource_attributes["service.component"] = component
+
     # Create OTEL logger provider with service identification
-    logger_provider = LoggerProvider(
-        resource=Resource.create(
-            {
-                "service.name": service_name or "manman",
-                "service.instance.id": os.uname().nodename,
-            }
-        ),
-    )
+    logger_provider = LoggerProvider(resource=Resource.create(resource_attributes))
     set_logger_provider(logger_provider)
 
     # Setup OTLP exporter
@@ -171,15 +181,15 @@ def _setup_otel_logging(
     logging.getLogger().addHandler(handler)
 
 
-def _setup_console_logging(service_name: Optional[str] = None) -> None:
+def _setup_console_logging(component_name: Optional[str] = None) -> None:
     """
     Setup console logging configuration.
 
     Args:
-        service_name: Name of the service for log identification
+        component_name: Name of the component for log identification
     """
     # Use the standardized formatter
-    formatter = create_formatter(service_name)
+    formatter = create_formatter(component_name)
 
     # Create console handler
     handler = logging.StreamHandler(sys.stdout)

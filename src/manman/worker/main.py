@@ -95,7 +95,7 @@ def callback(
     ] = None,
 ):
     # Setup logging first
-    setup_logging(service_name="manman-worker")
+    setup_logging(component="worker")
 
     virtual_host = f"manman-{app_env}" if app_env else "/"
 
