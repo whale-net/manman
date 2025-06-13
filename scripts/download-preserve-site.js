@@ -8,11 +8,9 @@
  *
  * Modes:
  *   release        - Preserve all content (main, versions, PR previews)
- *   pr-cleanup     - Preserve all content except specified PR
  *
  * Examples:
  *   node download-preserve-site.js release site https://example.github.io/repo
- *   node download-preserve-site.js pr-cleanup site https://example.github.io/repo --exclude-pr 123
  */
 
 const fs = require('fs');
@@ -160,7 +158,7 @@ function preserveVersionDocs(pagesUrl, siteDir) {
     return 0;
 }
 
-function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
+function preservePRPreviews(pagesUrl, siteDir, mode) {
     logInfo("Discovering existing PR preview directories...");
 
     // First, try to get the main index.html to extract PR directories
@@ -216,12 +214,6 @@ function preservePRPreviews(pagesUrl, siteDir, mode, excludePR = null) {
         for (const prDir of prDirs) {
             const prNumber = prDir.replace('pr-', '');
 
-            // Skip the excluded PR if in cleanup mode
-            if (mode === 'pr-cleanup' && excludePR && prNumber === excludePR.toString()) {
-                logInfo(`Skipping PR directory: ${prDir} (will be removed)`);
-                continue;
-            }
-
             logInfo(`Preserving existing PR preview: ${prDir}`);
             if (checkUrlExists(`${pagesUrl}/${prDir}/`)) {
                 const prDirPath = path.join(siteDir, prDir);
@@ -271,7 +263,7 @@ function downloadAndPreserveSite(mode, siteDir, pagesUrl, options = {}) {
     // Preserve different types of content
     const mainPreserved = preserveMainDocs(pagesUrl, siteDir);
     const versionsPreserved = preserveVersionDocs(pagesUrl, siteDir);
-    const prPreviewsPreserved = preservePRPreviews(pagesUrl, siteDir, mode, options.excludePR);
+    const prPreviewsPreserved = preservePRPreviews(pagesUrl, siteDir, mode);
 
     logSuccess(`Site preservation completed successfully`);
 
@@ -292,31 +284,15 @@ function main() {
         console.error('');
         console.error('Modes:');
         console.error('  release        - Preserve all content (main, versions, PR previews)');
-        console.error('  pr-cleanup     - Preserve all content except specified PR');
         console.error('');
-        console.error('Options:');
-        console.error('  --exclude-pr <number>   - PR number to exclude (for pr-cleanup mode)');
         process.exit(1);
     }
 
     const [mode, siteDir, pagesUrl] = args;
     const options = {};
 
-    // Parse additional options
-    for (let i = 3; i < args.length; i++) {
-        if (args[i] === '--exclude-pr' && i + 1 < args.length) {
-            options.excludePR = parseInt(args[i + 1]);
-            i++; // Skip the next argument
-        }
-    }
-
-    if (!['release', 'pr-cleanup'].includes(mode)) {
+    if (!['release'].includes(mode)) {
         console.error(`Unknown mode: ${mode}`);
-        process.exit(1);
-    }
-
-    if (mode === 'pr-cleanup' && !options.excludePR) {
-        console.error('pr-cleanup mode requires --exclude-pr option');
         process.exit(1);
     }
 
