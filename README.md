@@ -174,3 +174,10 @@ You can test that OpenAPI generation is working correctly by running:
 ./scripts/test-openapi.sh
 ```
 This will generate all API specifications and validate their basic structure.
+
+### API Development Pattern
+All API modules follow a consistent factory pattern for reusability:
+- Each API module provides a `create_app()` function in its `__init__.py`
+- The main CLI wraps these with service initialization for deployment
+- OpenAPI generation uses the factories directly without service dependencies
+- See `src/manman/host/api/README.md` for detailed pattern documentation

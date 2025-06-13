@@ -19,6 +19,7 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "typer[slim]>=0.15.3",
     "uvicorn>=0.34.0",
+    "gunicorn>=22.0.0",
 ]
 
 [project.optional-dependencies]

@@ -11,7 +11,6 @@ from fastapi import FastAPI
 from typing_extensions import Annotated
 
 from manman.config import ManManConfig
-from manman.host.api.shared import add_health_check
 from manman.logging_config import setup_logging
 
 app = typer.Typer()
@@ -49,30 +48,25 @@ def main(
     # Validate API name
     try:
         validated_api_name = ManManConfig.validate_api_name(api_name)
-        api_config = ManManConfig.get_api_config(validated_api_name)
+        # api_config = ManManConfig.get_api_config(validated_api_name)
     except ValueError as e:
         raise typer.BadParameter(str(e))
 
     # Build FastAPI app based on API
-    fastapi_app = FastAPI(title=api_config.title, root_path=api_config.root_path)
     if validated_api_name == ManManConfig.EXPERIENCE_API:
-        from manman.host.api.experience import router as experience_router
+        from manman.host.api.experience import create_app
 
-        fastapi_app.include_router(experience_router)
-        add_health_check(fastapi_app)
+        fastapi_app = create_app()
 
     elif validated_api_name == ManManConfig.STATUS_API:
-        from manman.host.api.status import router as status_router
+        from manman.host.api.status import create_app
 
-        fastapi_app.include_router(status_router)
-        add_health_check(fastapi_app)
+        fastapi_app = create_app()
 
     elif validated_api_name == ManManConfig.WORKER_DAL_API:
-        from manman.host.api.worker_dal import server_router, worker_router
+        from manman.host.api.worker_dal import create_app
 
-        fastapi_app.include_router(server_router)
-        fastapi_app.include_router(worker_router)
-        add_health_check(fastapi_app)
+        fastapi_app = create_app()
 
     else:
         raise typer.BadParameter(

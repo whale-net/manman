@@ -74,8 +74,8 @@ enable_experience_api = os.getenv('MANMAN_ENABLE_EXPERIENCE_API', 'true').lower(
 enable_worker_dal_api = os.getenv('MANMAN_ENABLE_WORKER_DAL_API', 'true').lower() == 'true'
 enable_status_api = os.getenv('MANMAN_ENABLE_STATUS_API', 'true').lower() == 'true'
 
-# Control OTEL logging (disabled by default for development)
-enable_otel_logging = os.getenv('MANMAN_ENABLE_OTEL_LOGGING', 'false').lower() == 'true'
+# Control OTEL logging (enabled by default for development)
+enable_otel_logging = os.getenv('MANMAN_ENABLE_OTEL_LOGGING', 'true').lower() == 'true'
 
 # RabbitMQ connection parameters
 rabbitmq_host_default = 'rabbitmq-dev.manman-dev.svc.cluster.local'
