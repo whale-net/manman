@@ -116,8 +116,8 @@ env:
     url: <postgresql+psycopg2://user:password@host:port/database>
   otelCollector:
     logs:
-      endpoint: <logs_endpoint>
+      endpoint: "http://otel-collector.manman-dev.svc.cluster.local:4317"
     traces:
-      endpoint: <traces_endpoint>
+      endpoint: "http://otel-collector.manman-dev.svc.cluster.local:4317"
     metrics:
-      endpoint: <metrics_endpoint>
+      endpoint: "http://otel-collector.manman-dev.svc.cluster.local:4318"
