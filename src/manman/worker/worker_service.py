@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import timedelta
 from threading import Lock
 
@@ -179,6 +180,45 @@ class WorkerService(ManManService):
         self._servers_lock.release()
 
     def _shutdown(self):
+        # Cascade shutdown to all dependent servers
+        logger.info(
+            "Initiating shutdown cascade to %d dependent servers", len(self._servers)
+        )
+
+        # Trigger shutdown for all servers
+        self._servers_lock.acquire()
+        servers_to_shutdown = list(self._servers)  # Create a copy to avoid lock issues
+        self._servers_lock.release()
+
+        for server in servers_to_shutdown:
+            if not server.is_shutdown:
+                logger.info("Triggering shutdown for server %s", server.instance)
+                server._trigger_internal_shutdown()
+
+        # Wait for all servers to complete shutdown
+        logger.info("Waiting for dependent servers to complete shutdown")
+        for server in servers_to_shutdown:
+            # Wait with a reasonable timeout to avoid hanging indefinitely
+            timeout_seconds = 30
+            wait_count = 0
+            while (
+                not server.is_shutdown and wait_count < timeout_seconds * 10
+            ):  # Check every 100ms
+                time.sleep(0.1)
+                wait_count += 1
+
+            if server.is_shutdown:
+                logger.info("Server %s shutdown completed", server.instance)
+            else:
+                logger.warning(
+                    "Server %s shutdown timeout after %d seconds",
+                    server.instance,
+                    timeout_seconds,
+                )
+
+        logger.info(
+            "All dependent servers shutdown complete, proceeding with worker shutdown"
+        )
         self._wapi.worker_shutdown(self._worker_instance)
 
     def _create_server(self, game_server_config_id: int):
