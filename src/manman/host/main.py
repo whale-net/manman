@@ -4,15 +4,15 @@ import os
 import threading
 from typing import Optional
 
+import alembic
+import alembic.command
+import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from gunicorn.app.base import BaseApplication
 from typing_extensions import Annotated
 
-import alembic
-import alembic.command
-import alembic.config
 from manman.config import ManManConfig
 from manman.logging_config import (
     get_gunicorn_config,
