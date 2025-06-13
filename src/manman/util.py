@@ -153,11 +153,7 @@ def get_rabbitmq_connection() -> amqpstorm.Connection:
     return robust_connection.get_connection()
 
 
-def get_rabbitmq_robust_connection() -> RobustConnection:
-    """Get the robust RabbitMQ connection wrapper."""
-    if "rmq_robust_connection" not in __GLOBALS:
-        raise RuntimeError("rmq_robust_connection not defined - cannot start")
-    return __GLOBALS["rmq_robust_connection"]
+
 
 
 def shutdown_rabbitmq():

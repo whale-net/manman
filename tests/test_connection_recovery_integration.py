@@ -207,7 +207,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
     def test_util_functions_work_with_robust_connection(self):
         """Test that util functions work with the robust connection."""
-        from manman.util import init_rabbitmq, get_rabbitmq_connection, get_rabbitmq_robust_connection, shutdown_rabbitmq
+        from manman.util import init_rabbitmq, get_rabbitmq_connection, shutdown_rabbitmq
         
         with patch('manman.repository.rabbitmq.connection.Connection') as mock_connection_class:
             mock_connection = Mock()
@@ -228,13 +228,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             conn = get_rabbitmq_connection()
             self.assertEqual(conn, mock_connection)
 
-            # Should be able to get robust connection
-            robust_conn = get_rabbitmq_robust_connection()
-            self.assertIsNotNone(robust_conn)
-
             # Should be able to shutdown
             shutdown_rabbitmq()
 
 
-if __name__ == '__main__':
-    unittest.main()
