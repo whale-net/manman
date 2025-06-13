@@ -94,7 +94,9 @@ class RabbitSubscriber(MessageSubscriberInterface):
                 )
 
                 # mutate config to store actual name
-                self._queue_config.actual_queue_name = result.get("queue", self._queue_config.name)
+                self._queue_config.actual_queue_name = result.get(
+                    "queue", self._queue_config.name
+                )
                 logger.info("Queue declared %s", self._queue_config.actual_queue_name)
 
                 # Bind queue to exchanges
@@ -121,7 +123,10 @@ class RabbitSubscriber(MessageSubscriberInterface):
                 # Start or restart consuming thread
                 self._start_consuming_thread()
 
-                logger.info("Channel initialized successfully for queue %s", self._queue_config.actual_queue_name)
+                logger.info(
+                    "Channel initialized successfully for queue %s",
+                    self._queue_config.actual_queue_name,
+                )
 
             except Exception as e:
                 logger.exception("Failed to initialize channel: %s", e)
@@ -176,7 +181,9 @@ class RabbitSubscriber(MessageSubscriberInterface):
                         break
 
                     if not self._channel or not self._channel.is_open:
-                        logger.warning("Channel is not available, attempting to recover")
+                        logger.warning(
+                            "Channel is not available, attempting to recover"
+                        )
                         self._initialize_channel()
                         continue
 
@@ -190,7 +197,9 @@ class RabbitSubscriber(MessageSubscriberInterface):
 
             except AMQPConnectionError as e:
                 if not self._is_shutting_down:
-                    logger.warning("Connection error in consuming loop, will recover: %s", e)
+                    logger.warning(
+                        "Connection error in consuming loop, will recover: %s", e
+                    )
                     time.sleep(1)
             except Exception as e:
                 if not self._is_shutting_down:
@@ -199,6 +208,7 @@ class RabbitSubscriber(MessageSubscriberInterface):
 
     def _schedule_channel_retry(self):
         """Schedule a channel initialization retry."""
+
         def retry_after_delay():
             time.sleep(5)  # Wait 5 seconds before retry
             if not self._is_shutting_down:

@@ -166,6 +166,7 @@ def get_rabbitmq_connection_provider():
 
     :return: Function that returns current valid connection
     """
+
     def connection_provider() -> amqpstorm.Connection:
         return get_rabbitmq_connection()
 
@@ -179,7 +180,9 @@ def register_subscriber_for_recovery(subscriber_callback):
     :param subscriber_callback: Function to call when connection is restored
     """
     if "rmq_robust_connection" not in __GLOBALS:
-        raise RuntimeError("rmq_robust_connection not defined - cannot register subscriber")
+        raise RuntimeError(
+            "rmq_robust_connection not defined - cannot register subscriber"
+        )
 
     robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
     robust_connection.register_subscriber_callback(subscriber_callback)
