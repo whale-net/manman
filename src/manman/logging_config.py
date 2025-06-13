@@ -13,12 +13,16 @@ from typing import Optional
 try:
     from opentelemetry._logs import set_logger_provider
     from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
     from opentelemetry.sdk._logs.export import (
         BatchLogRecordProcessor,
         # ConsoleLogExporter,
     )
     from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import set_tracer_provider
 
     OTEL_AVAILABLE = True
 except ImportError:
@@ -55,9 +59,10 @@ def setup_logging(
     if force_setup:
         root_logger.handlers.clear()
 
-    # Setup OTEL logging if available and enabled
+    # Setup OTEL logging and tracing if available and enabled
     if enable_otel and OTEL_AVAILABLE:
         _setup_otel_logging(service_name, otel_endpoint)
+        _setup_otel_tracing(service_name, otel_endpoint)
 
     # Setup console logging if enabled
     if enable_console:
@@ -169,6 +174,45 @@ def _setup_otel_logging(
     # Add OTEL handler to root logger
     handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
     logging.getLogger().addHandler(handler)
+
+
+def _setup_otel_tracing(
+    service_name: Optional[str] = None, otel_endpoint: Optional[str] = None
+) -> None:
+    """
+    Setup OTEL tracing configuration.
+
+    Args:
+        service_name: Name of the service for identification
+        otel_endpoint: OTEL collector endpoint
+    """
+    if not OTEL_AVAILABLE:
+        return
+
+    # Create OTEL tracer provider with service identification
+    resource = Resource.create(
+        {
+            "service.name": service_name or "manman",
+            "service.instance.id": os.uname().nodename,
+        }
+    )
+    tracer_provider = TracerProvider(resource=resource)
+    set_tracer_provider(tracer_provider)
+
+    # Setup OTLP span exporter
+    # Use traces endpoint if specified, otherwise use the base OTLP endpoint
+    traces_endpoint = (
+        otel_endpoint
+        or os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        or "http://otel-collector.manman-dev.svc.cluster.local:4317"
+    )
+
+    otlp_span_exporter = OTLPSpanExporter(
+        endpoint=traces_endpoint,
+        insecure=True,
+    )
+    tracer_provider.add_span_processor(BatchSpanProcessor(otlp_span_exporter))
 
 
 def _setup_console_logging(service_name: Optional[str] = None) -> None:
