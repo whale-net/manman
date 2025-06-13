@@ -27,15 +27,17 @@ class TestIdleConnectionHandling(unittest.TestCase):
         }
 
     @patch("manman.repository.rabbitmq.connection.Connection")
-    def test_stale_connection_detected_during_get_connection(self, mock_connection_class):
+    def test_stale_connection_detected_during_get_connection(
+        self, mock_connection_class
+    ):
         """Test that stale connections are detected during get_connection()."""
         mock_connection = Mock()
         mock_connection.is_open = True
         mock_connection.check_for_errors = Mock()
-        
+
         # Simulate stale connection: appears open but channel creation fails
         mock_connection.channel.side_effect = Exception("Connection stale")
-        
+
         mock_connection_class.return_value = mock_connection
 
         robust_conn = RobustConnection(
@@ -48,7 +50,7 @@ class TestIdleConnectionHandling(unittest.TestCase):
         # Should fail and trigger reconnection due to stale connection
         with self.assertRaises(AMQPConnectionError):
             robust_conn.get_connection()
-        
+
         # Verify channel creation was attempted for validation
         mock_connection.channel.assert_called()
 
@@ -60,10 +62,10 @@ class TestIdleConnectionHandling(unittest.TestCase):
         mock_connection = Mock()
         mock_connection.is_open = True
         mock_connection.check_for_errors = Mock()
-        
+
         # Simulate stale connection: appears open but channel creation fails
         mock_connection.channel.side_effect = Exception("Connection stale")
-        
+
         mock_connection_class.return_value = mock_connection
 
         robust_conn = RobustConnection(
@@ -82,13 +84,13 @@ class TestIdleConnectionHandling(unittest.TestCase):
         mock_connection = Mock()
         mock_connection.is_open = True
         mock_connection.check_for_errors = Mock()
-        
+
         # Mock healthy channel
         mock_channel = Mock()
         mock_channel.is_open = True
         mock_channel.close = Mock()
         mock_connection.channel.return_value = mock_channel
-        
+
         mock_connection_class.return_value = mock_connection
 
         robust_conn = RobustConnection(
@@ -99,11 +101,11 @@ class TestIdleConnectionHandling(unittest.TestCase):
         # Should work with healthy connection
         conn = robust_conn.get_connection()
         self.assertEqual(conn, mock_connection)
-        
+
         # Should validate by creating and closing a channel
         mock_connection.channel.assert_called()
         mock_channel.close.assert_called()
-        
+
         # is_connected should also return True
         self.assertTrue(robust_conn.is_connected())
 
@@ -115,12 +117,12 @@ class TestIdleConnectionHandling(unittest.TestCase):
         mock_connection = Mock()
         mock_connection.is_open = True
         mock_connection.check_for_errors = Mock()
-        
+
         # Mock channel that's created but not open (indicates stale connection)
         mock_channel = Mock()
         mock_channel.is_open = False
         mock_connection.channel.return_value = mock_channel
-        
+
         mock_connection_class.return_value = mock_connection
 
         robust_conn = RobustConnection(
@@ -133,7 +135,7 @@ class TestIdleConnectionHandling(unittest.TestCase):
         # Should fail due to channel not being open
         with self.assertRaises(AMQPConnectionError):
             robust_conn.get_connection()
-        
+
         # is_connected should also return False
         self.assertFalse(robust_conn.is_connected())
 
