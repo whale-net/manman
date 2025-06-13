@@ -30,12 +30,26 @@ class RabbitSubscriber(MessageSubscriberInterface):
 
     def __init__(
         self,
-        connection_provider: Callable[[], Connection],
-        binding_configs: Union[BindingConfig, list[BindingConfig]],
-        queue_config: QueueConfig,
+        connection_provider: Callable[[], Connection] = None,
+        binding_configs: Union[BindingConfig, list[BindingConfig]] = None,
+        queue_config: QueueConfig = None,
         recovery_registry: Callable[[Callable], None] = None,
         recovery_unregistry: Callable[[Callable], None] = None,
+        # Backward compatibility parameters
+        connection: Connection = None,
     ) -> None:
+        # Handle backward compatibility: if connection is provided instead of connection_provider
+        if connection is not None and connection_provider is None:
+            # Create a connection provider that returns the static connection
+            def static_connection_provider():
+                return connection
+            connection_provider = static_connection_provider
+            # Don't register for recovery notifications with static connections
+            recovery_registry = None
+            recovery_unregistry = None
+        elif connection_provider is None:
+            raise ValueError("Either connection_provider or connection must be provided")
+
         self._connection_provider = connection_provider
         self._queue_config = queue_config
         self._recovery_registry = recovery_registry
