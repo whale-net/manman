@@ -246,18 +246,16 @@ def _setup_console_logging(service_name: Optional[str] = None) -> None:
     logging.getLogger().addHandler(handler)
 
 
-def get_gunicorn_config_without_logconfig(
+def get_gunicorn_config(
     service_name: str,
     port: int = 8000,
     workers: int = 1,
     worker_class: str = "uvicorn.workers.UvicornWorker",
     preload_app: bool = True,
+    enable_otel: bool = False,
 ) -> dict:
     """
-    Get Gunicorn configuration without logconfig_dict to preserve OTEL handlers.
-
-    This approach sets up logging via Python objects during preload instead of
-    using dictConfig, which clobbers existing handlers.
+    Get Gunicorn configuration for ManMan services.
 
     Args:
         service_name: Name of the service for identification
@@ -265,11 +263,13 @@ def get_gunicorn_config_without_logconfig(
         workers: Number of worker processes
         worker_class: Gunicorn worker class to use
         preload_app: Whether to preload the application before forking workers
+        enable_otel: Whether OTEL logging is enabled
 
     Returns:
-        Configuration dict for Gunicorn without logconfig_dict
+        Configuration dict for Gunicorn
     """
-    return {
+    # Base configuration - same for all services
+    config = {
         "bind": f"0.0.0.0:{port}",
         "workers": workers,
         "worker_class": worker_class,
@@ -280,12 +280,22 @@ def get_gunicorn_config_without_logconfig(
         "keepalive": 2,
         "timeout": 30,
         "graceful_timeout": 30,
-        # Logging configuration without dictConfig
+        # Logging format and output
         "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
         "accesslog": "-",  # Log to stdout
         "errorlog": "-",  # Log to stderr
         "loglevel": "info",
         "capture_output": True,
         "enable_stdio_inheritance": True,
-        # No logconfig_dict - we'll configure logging manually
     }
+
+    # Add logging configuration based on OTEL settings
+    if enable_otel:
+        # When OTEL is enabled, don't use logconfig_dict to avoid clobbering handlers
+        # Logging will be configured manually via setup_logging() and setup_server_logging()
+        pass
+    else:
+        # Use traditional dictConfig approach for non-OTEL setups
+        config["logconfig_dict"] = get_server_log_config(service_name)
+
+    return config

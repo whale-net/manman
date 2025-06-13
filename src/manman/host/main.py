@@ -14,7 +14,9 @@ import alembic
 import alembic.command
 import alembic.config
 from manman.logging_config import (
-    get_gunicorn_config_without_logconfig,
+    get_gunicorn_config as get_gunicorn_logging_config,
+)
+from manman.logging_config import (
     get_server_log_config,
     setup_logging,
     setup_server_logging,
@@ -107,62 +109,6 @@ class GunicornApplication(BaseApplication):
     def load(self):
         """Load the application."""
         return self.app_factory()
-
-
-def get_gunicorn_config(
-    service_name: str,
-    port: int = 8000,
-    workers: int = 1,
-    worker_class: str = "uvicorn.workers.UvicornWorker",
-    enable_otel: bool = False,
-    preload_app: bool = True,
-) -> dict:
-    """
-    Get Gunicorn configuration for ManMan services.
-
-    Args:
-        service_name: Name of the service for identification
-        port: Port to bind to
-        workers: Number of worker processes
-        worker_class: Gunicorn worker class to use
-        enable_otel: Whether OTEL logging is enabled - if True, uses OTEL-compatible config
-        preload_app: Whether to preload the application before forking workers
-
-    Returns:
-        Configuration dict for Gunicorn
-    """
-    if enable_otel:
-        # Use OTEL-compatible configuration that doesn't clobber handlers
-        return get_gunicorn_config_without_logconfig(
-            service_name=service_name,
-            port=port,
-            workers=workers,
-            worker_class=worker_class,
-            preload_app=preload_app,
-        )
-    else:
-        # Use traditional dictConfig approach
-        return {
-            "bind": f"0.0.0.0:{port}",
-            "workers": workers,
-            "worker_class": worker_class,
-            "worker_connections": 1000,
-            "max_requests": 1000,
-            "max_requests_jitter": 100,
-            "preload_app": preload_app,
-            "keepalive": 2,
-            "timeout": 30,
-            "graceful_timeout": 30,
-            # Logging configuration
-            "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
-            "accesslog": "-",  # Log to stdout
-            "errorlog": "-",  # Log to stderr
-            "loglevel": "info",
-            "capture_output": True,
-            "enable_stdio_inheritance": True,
-            # Use our server logging configuration
-            "logconfig_dict": get_server_log_config(service_name),
-        }
 
 
 def _init_common_services(
@@ -321,8 +267,8 @@ def start_experience_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_config(
-        service_name="manman-experience-api",
+    options = get_gunicorn_logging_config(
+        service_name="experience-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -385,8 +331,8 @@ def start_status_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_config(
-        service_name="manman-status-api",
+    options = get_gunicorn_logging_config(
+        service_name="status-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -449,8 +395,8 @@ def start_worker_dal_api(
     )
 
     # Configure and run with Gunicorn
-    options = get_gunicorn_config(
-        service_name="manman-worker-dal-api",
+    options = get_gunicorn_logging_config(
+        service_name="worker-dal-api",
         port=port,
         workers=workers,
         enable_otel=log_otlp,
