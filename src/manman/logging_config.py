@@ -162,7 +162,6 @@ def _setup_otel_logging(
     endpoint = (
         otel_endpoint
         or os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-        or "http://otel-collector.manman-dev.svc.cluster.local:4317"
     )
 
     otlp_exporter = OTLPLogExporter(
@@ -205,7 +204,6 @@ def _setup_otel_tracing(
         otel_endpoint
         or os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
         or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-        or "http://otel-collector.manman-dev.svc.cluster.local:4317"
     )
 
     otlp_span_exporter = OTLPSpanExporter(
