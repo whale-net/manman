@@ -3,22 +3,17 @@ import io
 import logging
 import ssl
 import threading
-from typing import Optional, Union
-from unittest.mock import MagicMock
+from typing import Optional
 
 import amqpstorm
 import sqlalchemy
 from sqlmodel import Session
 
 from manman.repository.api_client import AuthAPIClient
-from manman.repository.rabbitmq.config import BindingConfig, QueueConfig
-from manman.repository.rabbitmq.connection import RobustConnection
-from manman.repository.rabbitmq.subscriber import RabbitSubscriber
 
 logger = logging.getLogger(__name__)
 
 __GLOBALS = {}
-__GLOBALS_LOCK = threading.RLock()
 
 
 def log_stream(
@@ -58,22 +53,20 @@ class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):
 
 
 def get_sqlalchemy_engine() -> sqlalchemy.engine:
-    with __GLOBALS_LOCK:
-        if __GLOBALS.get("engine") is None:
-            raise RuntimeError("global engine not defined - cannot start")
-        return __GLOBALS["engine"]
+    if __GLOBALS.get("engine") is None:
+        raise RuntimeError("global engine not defined - cannot start")
+    return __GLOBALS["engine"]
 
 
 def init_sql_alchemy_engine(
     connection_string: str,
 ):
-    with __GLOBALS_LOCK:
-        if "engine" in __GLOBALS:
-            return
-        __GLOBALS["engine"] = sqlalchemy.create_engine(
-            connection_string,
-            pool_pre_ping=True,
-        )
+    if "engine" in __GLOBALS:
+        return
+    __GLOBALS["engine"] = sqlalchemy.create_engine(
+        connection_string,
+        pool_pre_ping=True,
+    )
 
 
 def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
@@ -83,6 +76,7 @@ def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
     return Session(get_sqlalchemy_engine())
 
 
+# Update RabbitMQ functions to use AMQPStorm
 def init_rabbitmq(
     host: str,
     port: int,
@@ -91,13 +85,10 @@ def init_rabbitmq(
     virtual_host: str = "/",
     ssl_enabled: bool = False,
     ssl_options=None,
-    heartbeat_interval: int = 30,
-    max_reconnect_attempts: int = 5,
-    reconnect_delay: float = 1.0,
 ):
-    """Initialize RabbitMQ connection using AMQPStorm with robust connection handling."""
-    connection_params = {
-        "hostname": host,
+    """Initialize RabbitMQ connection using AMQPStorm."""
+    __GLOBALS["rmq_parameters"] = {
+        "host": host,
         "port": port,
         "username": username,
         "password": password,
@@ -106,191 +97,46 @@ def init_rabbitmq(
         "ssl_options": ssl_options,
     }
 
-    def on_connection_lost():
-        logger.warning("RabbitMQ connection lost - services may become unreachable")
-
-    def on_connection_restored():
-        logger.info(
-            "RabbitMQ connection restored - services should be accessible again"
-        )
-
-    robust_connection = RobustConnection(
-        connection_params=connection_params,
-        heartbeat_interval=heartbeat_interval,
-        max_reconnect_attempts=max_reconnect_attempts,
-        reconnect_delay=reconnect_delay,
-        on_connection_lost=on_connection_lost,
-        on_connection_restored=on_connection_restored,
+    rmq_connection = amqpstorm.Connection(
+        hostname=host,
+        port=port,
+        username=username,
+        password=password,
+        virtual_host=virtual_host,
+        ssl=ssl_enabled,
+        ssl_options=ssl_options,
     )
-
-    with __GLOBALS_LOCK:
-        # Store parameters for potential reconnection with proper deep copy
-        rmq_params_copy = {}
-        for key, value in connection_params.items():
-            if key == "ssl_options" and isinstance(value, dict):
-                # Handle SSL options specially - copy dict but preserve context reference
-                ssl_options_copy = {}
-                for ssl_key, ssl_value in value.items():
-                    if ssl_key == "context" and isinstance(ssl_value, ssl.SSLContext):
-                        # Preserve SSL context reference - cannot be deep copied
-                        ssl_options_copy[ssl_key] = ssl_value
-                    else:
-                        # Copy other SSL option values
-                        ssl_options_copy[ssl_key] = ssl_value
-                rmq_params_copy[key] = ssl_options_copy
-            else:
-                # Copy other parameters
-                rmq_params_copy[key] = value
-
-        # Add additional parameters
-        rmq_params_copy["heartbeat_interval"] = heartbeat_interval
-        rmq_params_copy["max_reconnect_attempts"] = max_reconnect_attempts
-        rmq_params_copy["reconnect_delay"] = reconnect_delay
-
-        __GLOBALS["rmq_parameters"] = rmq_params_copy
-        __GLOBALS["rmq_robust_connection"] = robust_connection
-
-        # Log parameter storage for debugging
-        logger.debug(
-            "Stored RabbitMQ parameters with SSL=%s, hostname=%s",
-            rmq_params_copy.get("ssl", False),
-            rmq_params_copy.get("ssl_options", {}).get("server_hostname")
-            if rmq_params_copy.get("ssl_options")
-            else None,
-        )
-
-    logger.info(
-        "rmq robust connection established with heartbeat=%ds", heartbeat_interval
-    )
+    __GLOBALS["rmq_connection"] = rmq_connection
+    logger.info("rmq connection established")
 
 
 def get_rabbitmq_ssl_options(hostname: str) -> dict:
-    """Create SSL options with enhanced security settings to prevent connection errors."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
     if hostname is None or len(hostname) == 0:
         raise RuntimeError(
             "SSL is enabled but no hostname provided. "
             "Please set MANMAN_RABBITMQ_SSL_HOSTNAME"
         )
-
-    # Create SSL context with enhanced security settings
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
-
-    # Enhanced security settings to prevent SSL errors
-    # Disable insecure protocols to avoid bad record MAC errors
-    context.options |= ssl.OP_NO_SSLv2
-    context.options |= ssl.OP_NO_SSLv3
-    context.options |= ssl.OP_NO_TLSv1
-    context.options |= ssl.OP_NO_TLSv1_1
-
-    # Set minimum TLS version to 1.2 for better security
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-
-    # Enable hostname checking and certificate verification
-    context.check_hostname = True
-    context.verify_mode = ssl.CERT_REQUIRED
-
-    # Restrict to secure cipher suites to prevent MAC errors
-    # This removes weak ciphers that might cause bad record MAC errors
-    context.set_ciphers(
-        "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
-    )
-
     ssl_options = {
+        #'context': ssl.create_default_context(cafile='ca_certificate.pem'),
         "context": context,
         "server_hostname": hostname,
+        #'check_hostname': True,        # New 2.8.0, default is False
+        #'verify_mode': 'required',     # New 2.8.0, default is 'none'
     }
-
-    logger.debug(
-        "Created SSL context with enhanced security settings for hostname: %s", hostname
-    )
     return ssl_options
 
 
 def get_rabbitmq_connection() -> amqpstorm.Connection:
-    """Get the RabbitMQ connection through the robust connection wrapper."""
-    with __GLOBALS_LOCK:
-        if "rmq_robust_connection" not in __GLOBALS:
-            raise RuntimeError("rmq_robust_connection not defined - cannot start")
-        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-
-    return robust_connection.get_connection()
-
-
-def get_rabbitmq_connection_provider():
-    """
-    Get a connection provider function for RabbitMQ subscribers.
-
-    :return: Function that returns current valid connection
-    """
-
-    def connection_provider() -> amqpstorm.Connection:
-        return get_rabbitmq_connection()
-
-    return connection_provider
-
-
-def register_subscriber_for_recovery(subscriber_callback):
-    """
-    Register a subscriber callback to be notified when connection is restored.
-
-    :param subscriber_callback: Function to call when connection is restored
-    """
-    with __GLOBALS_LOCK:
-        if "rmq_robust_connection" not in __GLOBALS:
-            logger.warning(
-                "rmq_robust_connection not defined - subscriber recovery will be disabled"
-            )
-            return
-        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-
-    robust_connection.register_subscriber_callback(subscriber_callback)
-
-
-def unregister_subscriber_from_recovery(subscriber_callback):
-    """
-    Unregister a subscriber callback from connection recovery notifications.
-
-    :param subscriber_callback: Function to remove from callbacks
-    """
-    with __GLOBALS_LOCK:
-        if "rmq_robust_connection" in __GLOBALS:
-            robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-            robust_connection.unregister_subscriber_callback(subscriber_callback)
-
-
-def create_robust_subscriber(
-    binding_configs: Union[BindingConfig, list[BindingConfig]],
-    queue_config: QueueConfig,
-):
-    """
-    Create a RabbitSubscriber with automatic channel recovery support.
-
-    :param binding_configs: Binding configuration(s) for the subscriber
-    :param queue_config: Queue configuration for the subscriber
-    :return: RabbitSubscriber instance with recovery support
-    """
-    return RabbitSubscriber(
-        connection_provider=get_rabbitmq_connection_provider(),
-        binding_configs=binding_configs,
-        queue_config=queue_config,
-        recovery_registry=register_subscriber_for_recovery,
-        recovery_unregistry=unregister_subscriber_from_recovery,
-    )
-
-
-def shutdown_rabbitmq():
-    """Shutdown the RabbitMQ connection properly."""
-    with __GLOBALS_LOCK:
-        if "rmq_robust_connection" in __GLOBALS:
-            robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-            robust_connection.close()
-            del __GLOBALS["rmq_robust_connection"]
+    """Get the RabbitMQ connection."""
+    if "rmq_connection" not in __GLOBALS:
+        raise RuntimeError("rmq_connection not defined - cannot start")
+    return __GLOBALS["rmq_connection"]
 
 
 def init_auth_api_client(auth_url: str):
-    with __GLOBALS_LOCK:
-        __GLOBALS["auth_api_client"] = AuthAPIClient(base_url=auth_url)
+    __GLOBALS["auth_api_client"] = AuthAPIClient(base_url=auth_url)
 
 
 def get_auth_api_client() -> AuthAPIClient:
@@ -299,6 +145,8 @@ def get_auth_api_client() -> AuthAPIClient:
     #     raise RuntimeError("api_client is not initialized")
     # return api_client
     # TODO - re-add authcz
+    from unittest.mock import MagicMock
+
     return MagicMock()
 
 

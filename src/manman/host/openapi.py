@@ -42,7 +42,7 @@ def main(
 ):
     """Generate OpenAPI specification for a specific API without requiring environment setup."""
     # Setup logging
-    setup_logging(service_name="openapi-generator")
+    setup_logging(microservice_name="openapi-generator")
     logger.info(f"Generating OpenAPI spec for {api_name}...")
 
     # Validate API name

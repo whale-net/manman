@@ -8,6 +8,9 @@ commands, and other constants used throughout the application.
 from dataclasses import dataclass
 from typing import Literal
 
+# Global service name for logging/observability systems
+SERVICE_NAME = "manman"
+
 
 @dataclass(frozen=True)
 class APIConfig:
@@ -22,13 +25,16 @@ class APIConfig:
 class ManManConfig:
     """Centralized configuration for ManMan services."""
 
-    # API service names (used for OpenAPI generation, logging, etc.)
+    # API service names (used for OpenAPI generation, microservice identification, etc.)
     EXPERIENCE_API = "experience-api"
     STATUS_API = "status-api"
     WORKER_DAL_API = "worker-dal-api"
 
     # Background processor service names
     STATUS_PROCESSOR = "status-processor"
+
+    # Worker service name
+    WORKER = "worker"
 
     # All well-known API names for validation
     KNOWN_API_NAMES = frozenset(
@@ -39,13 +45,14 @@ class ManManConfig:
         ]
     )
 
-    # All well-known service names (APIs + processors)
+    # All well-known service names (APIs + processors + worker)
     KNOWN_SERVICE_NAMES = frozenset(
         [
             EXPERIENCE_API,
             STATUS_API,
             WORKER_DAL_API,
             STATUS_PROCESSOR,
+            WORKER,
         ]
     )
 
@@ -90,3 +97,12 @@ class ManManConfig:
                 f"Unknown API name: {api_name}. Valid options are: {', '.join(cls.KNOWN_API_NAMES)}"
             )
         return api_name  # type: ignore
+
+    @classmethod
+    def validate_service_name(cls, service_name: str) -> str:
+        """Validate and return service name."""
+        if service_name not in cls.KNOWN_SERVICE_NAMES:
+            raise ValueError(
+                f"Unknown service name: {service_name}. Valid options are: {', '.join(cls.KNOWN_SERVICE_NAMES)}"
+            )
+        return service_name
