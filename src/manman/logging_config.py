@@ -76,9 +76,63 @@ def setup_logging(
     logging.getLogger("manman").setLevel(level)
 
 
+def create_formatter(service_name: Optional[str] = None) -> logging.Formatter:
+    """
+    Create a standardized formatter for ManMan services.
+
+    Args:
+        service_name: Name of the service for log identification
+
+    Returns:
+        Configured logging formatter
+    """
+    service_prefix = f"[{service_name}] " if service_name else ""
+    return logging.Formatter(
+        f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s"
+    )
+
+
+def setup_server_logging(service_name: Optional[str] = None) -> None:
+    """
+    Setup logging for web servers (uvicorn/gunicorn) that preserves existing handlers.
+
+    This function configures server-specific loggers without clobbering
+    the root logger configuration, allowing OTEL and other handlers to coexist.
+
+    Args:
+        service_name: Name of the service for log identification
+    """
+    formatter = create_formatter(service_name)
+
+    # Create a console handler for server logs
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+
+    # Configure server-specific loggers
+    server_loggers = [
+        "uvicorn",
+        "uvicorn.error",
+        "uvicorn.access",
+        "gunicorn",
+        "gunicorn.access",
+        "gunicorn.error",
+    ]
+
+    for logger_name in server_loggers:
+        logger = logging.getLogger(logger_name)
+        # Clear any existing handlers to avoid duplicates
+        logger.handlers.clear()
+        logger.addHandler(console_handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False  # Don't propagate to root to avoid duplicate logs
+
+
 def get_server_log_config(service_name: Optional[str] = None) -> dict:
     """
-    Get unified log configuration for web servers (uvicorn/gunicorn).
+    Get minimal log configuration for web servers that preserves existing handlers.
+
+    This returns a configuration that only sets up server-specific loggers
+    without touching the root logger, preserving any OTEL or other handlers.
 
     Args:
         service_name: Name of the service for log identification
@@ -90,66 +144,46 @@ def get_server_log_config(service_name: Optional[str] = None) -> dict:
 
     return {
         "version": 1,
-        "disable_existing_loggers": False,
+        "disable_existing_loggers": False,  # Critical: preserve existing loggers
         "formatters": {
             "default": {
                 "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
             },
-            "access": {
-                "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
-            },
         },
         "handlers": {
-            "default": {
+            "console": {
                 "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-            "access": {
-                "formatter": "access",
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
             },
         },
         "loggers": {
-            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            # Only configure server-specific loggers, not root
+            "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
             "uvicorn.error": {
-                "handlers": ["default"],
+                "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
             },
             "uvicorn.access": {
-                "handlers": ["access"],
+                "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
             },
-            "gunicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "gunicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
             "gunicorn.access": {
-                "handlers": ["access"],
+                "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
             },
             "gunicorn.error": {
-                "handlers": ["default"],
+                "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
             },
         },
-        "root": {
-            "level": "INFO",
-            "handlers": ["default"],
-        },
+        # Do NOT configure root logger here - let setup_logging() handle it
     }
-
-
-def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
-    """Get uvicorn-compatible log configuration."""
-    return get_server_log_config(service_name)
-
-
-def get_gunicorn_log_config(service_name: Optional[str] = None) -> dict:
-    """Get Gunicorn-compatible log configuration."""
-    return get_server_log_config(service_name)
 
 
 def _setup_otel_logging(
@@ -201,11 +235,8 @@ def _setup_console_logging(service_name: Optional[str] = None) -> None:
     Args:
         service_name: Name of the service for log identification
     """
-    # Create formatter
-    service_prefix = f"[{service_name}] " if service_name else ""
-    formatter = logging.Formatter(
-        f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s"
-    )
+    # Use the standardized formatter
+    formatter = create_formatter(service_name)
 
     # Create console handler
     handler = logging.StreamHandler(sys.stdout)
@@ -213,3 +244,48 @@ def _setup_console_logging(service_name: Optional[str] = None) -> None:
 
     # Add to root logger
     logging.getLogger().addHandler(handler)
+
+
+def get_gunicorn_config_without_logconfig(
+    service_name: str,
+    port: int = 8000,
+    workers: int = 1,
+    worker_class: str = "uvicorn.workers.UvicornWorker",
+    preload_app: bool = True,
+) -> dict:
+    """
+    Get Gunicorn configuration without logconfig_dict to preserve OTEL handlers.
+
+    This approach sets up logging via Python objects during preload instead of
+    using dictConfig, which clobbers existing handlers.
+
+    Args:
+        service_name: Name of the service for identification
+        port: Port to bind to
+        workers: Number of worker processes
+        worker_class: Gunicorn worker class to use
+        preload_app: Whether to preload the application before forking workers
+
+    Returns:
+        Configuration dict for Gunicorn without logconfig_dict
+    """
+    return {
+        "bind": f"0.0.0.0:{port}",
+        "workers": workers,
+        "worker_class": worker_class,
+        "worker_connections": 1000,
+        "max_requests": 1000,
+        "max_requests_jitter": 100,
+        "preload_app": preload_app,
+        "keepalive": 2,
+        "timeout": 30,
+        "graceful_timeout": 30,
+        # Logging configuration without dictConfig
+        "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
+        "accesslog": "-",  # Log to stdout
+        "errorlog": "-",  # Log to stderr
+        "loglevel": "info",
+        "capture_output": True,
+        "enable_stdio_inheritance": True,
+        # No logconfig_dict - we'll configure logging manually
+    }

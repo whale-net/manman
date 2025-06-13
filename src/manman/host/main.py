@@ -14,9 +14,10 @@ import alembic
 import alembic.command
 import alembic.config
 from manman.logging_config import (
-    get_gunicorn_log_config,
+    get_gunicorn_config_without_logconfig,
     get_server_log_config,
     setup_logging,
+    setup_server_logging,
 )
 from manman.repository.rabbitmq.config import ExchangeRegistry
 from manman.util import (
@@ -124,33 +125,44 @@ def get_gunicorn_config(
         port: Port to bind to
         workers: Number of worker processes
         worker_class: Gunicorn worker class to use
-        enable_otel: Whether OTEL logging is enabled (unused, kept for compatibility)
+        enable_otel: Whether OTEL logging is enabled - if True, uses OTEL-compatible config
         preload_app: Whether to preload the application before forking workers
 
     Returns:
         Configuration dict for Gunicorn
     """
-    return {
-        "bind": f"0.0.0.0:{port}",
-        "workers": workers,
-        "worker_class": worker_class,
-        "worker_connections": 1000,
-        "max_requests": 1000,
-        "max_requests_jitter": 100,
-        "preload_app": preload_app,
-        "keepalive": 2,
-        "timeout": 30,
-        "graceful_timeout": 30,
-        # Logging configuration
-        "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
-        "accesslog": "-",  # Log to stdout
-        "errorlog": "-",  # Log to stderr
-        "loglevel": "info",
-        "capture_output": True,
-        "enable_stdio_inheritance": True,
-        # Use our unified logging configuration
-        "logconfig_dict": get_gunicorn_log_config(service_name),
-    }
+    if enable_otel:
+        # Use OTEL-compatible configuration that doesn't clobber handlers
+        return get_gunicorn_config_without_logconfig(
+            service_name=service_name,
+            port=port,
+            workers=workers,
+            worker_class=worker_class,
+            preload_app=preload_app,
+        )
+    else:
+        # Use traditional dictConfig approach
+        return {
+            "bind": f"0.0.0.0:{port}",
+            "workers": workers,
+            "worker_class": worker_class,
+            "worker_connections": 1000,
+            "max_requests": 1000,
+            "max_requests_jitter": 100,
+            "preload_app": preload_app,
+            "keepalive": 2,
+            "timeout": 30,
+            "graceful_timeout": 30,
+            # Logging configuration
+            "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
+            "accesslog": "-",  # Log to stdout
+            "errorlog": "-",  # Log to stderr
+            "loglevel": "info",
+            "capture_output": True,
+            "enable_stdio_inheritance": True,
+            # Use our server logging configuration
+            "logconfig_dict": get_server_log_config(service_name),
+        }
 
 
 def _init_common_services(
@@ -163,6 +175,7 @@ def _init_common_services(
     rabbitmq_ssl_hostname: Optional[str],
     should_run_migration_check: bool,
     create_vhost: bool = False,
+    enable_otel: bool = False,  # Add enable_otel parameter
 ):
     """Initialize common services required by both APIs."""
     if should_run_migration_check and _need_migration():
@@ -215,6 +228,11 @@ def create_experience_app():
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
+    # Configure Gunicorn logging if OTEL is enabled
+    config = get_initialization_config()
+    if config.get("enable_otel", False):
+        setup_server_logging("experience-api")
+
     from manman.host.api.experience import create_app
 
     return create_app()
@@ -225,6 +243,11 @@ def create_status_app():
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
 
+    # Configure Gunicorn logging if OTEL is enabled
+    config = get_initialization_config()
+    if config.get("enable_otel", False):
+        setup_server_logging("status-api")
+
     from manman.host.api.status import create_app
 
     return create_app()
@@ -234,6 +257,11 @@ def create_worker_dal_app():
     """Factory function to create the Worker DAL API FastAPI application with service initialization."""
     # Ensure services are initialized when creating the app
     ensure_common_services_initialized()
+
+    # Configure Gunicorn logging if OTEL is enabled
+    config = get_initialization_config()
+    if config.get("enable_otel", False):
+        setup_server_logging("worker-dal-api")
 
     from manman.host.api.worker_dal import create_app
 
@@ -289,6 +317,7 @@ def start_experience_api(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
         create_vhost=create_vhost,
+        enable_otel=log_otlp,  # Store OTEL flag for app factory
     )
 
     # Configure and run with Gunicorn
@@ -352,6 +381,7 @@ def start_status_api(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
         create_vhost=create_vhost,
+        enable_otel=log_otlp,  # Store OTEL flag for app factory
     )
 
     # Configure and run with Gunicorn
@@ -415,6 +445,7 @@ def start_worker_dal_api(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
         create_vhost=create_vhost,
+        enable_otel=log_otlp,  # Store OTEL flag for app factory
     )
 
     # Configure and run with Gunicorn
@@ -470,6 +501,7 @@ def start_status_processor(
         rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
         should_run_migration_check=should_run_migration_check,
         create_vhost=create_vhost,
+        enable_otel=log_otlp,  # Store OTEL flag for status processor
     )
 
     ensure_common_services_initialized()
