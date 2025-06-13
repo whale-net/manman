@@ -145,7 +145,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             patch("manman.repository.rabbitmq.subscriber.queue.Queue"),
         ):
             RabbitSubscriber(
-                connection=robust_conn.get_connection(),
+                connection_provider=lambda: robust_conn.get_connection(),
                 binding_configs=binding_config,
                 queue_config=queue_config,
             )

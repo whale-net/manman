@@ -55,7 +55,7 @@ class TestRabbitSubscriberMultipleExchanges(unittest.TestCase):
 
         # Act
         subscriber = RabbitSubscriber(
-            connection=self.mock_connection,
+            connection_provider=lambda: self.mock_connection,
             binding_configs=binding_config,
             queue_config=queue_config,
         )
@@ -106,7 +106,7 @@ class TestRabbitSubscriberMultipleExchanges(unittest.TestCase):
 
         # Act
         subscriber = RabbitSubscriber(
-            connection=self.mock_connection,
+            connection_provider=lambda: self.mock_connection,
             binding_configs=binding_configs,
             queue_config=queue_config,
         )
@@ -159,7 +159,7 @@ class TestRabbitSubscriberMultipleExchanges(unittest.TestCase):
 
         # Act
         subscriber = RabbitSubscriber(
-            connection=self.mock_connection,
+            connection_provider=lambda: self.mock_connection,
             binding_configs=binding_config,
             queue_config=queue_config,
         )
@@ -204,7 +204,7 @@ class TestRabbitSubscriberMultipleExchanges(unittest.TestCase):
         )
 
         subscriber = RabbitSubscriber(
-            connection=self.mock_connection,
+            connection_provider=lambda: self.mock_connection,
             binding_configs=binding_config,
             queue_config=queue_config,
         )

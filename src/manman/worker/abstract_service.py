@@ -19,6 +19,7 @@ from manman.repository.rabbitmq.config import (
     RoutingKeyConfig,
 )
 from manman.repository.rabbitmq.publisher import RabbitPublisher
+from manman.util import create_robust_subscriber
 
 logger = logging.getLogger(__name__)
 
@@ -115,8 +116,6 @@ class ManManService(ABC):
         )
 
         # Use robust subscriber that can recover from connection drops
-        from manman.util import create_robust_subscriber
-
         rabbit_subscriber = create_robust_subscriber(
             binding_configs=command_binding,
             queue_config=self.command_queue_config,

@@ -4,6 +4,7 @@ import logging
 import ssl
 import threading
 from typing import Optional, Union
+from unittest.mock import MagicMock
 
 import amqpstorm
 import sqlalchemy
@@ -12,6 +13,7 @@ from sqlmodel import Session
 from manman.repository.api_client import AuthAPIClient
 from manman.repository.rabbitmq.config import BindingConfig, QueueConfig
 from manman.repository.rabbitmq.connection import RobustConnection
+from manman.repository.rabbitmq.subscriber import RabbitSubscriber
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +207,6 @@ def create_robust_subscriber(
     :param queue_config: Queue configuration for the subscriber
     :return: RabbitSubscriber instance with recovery support
     """
-    from manman.repository.rabbitmq.subscriber import RabbitSubscriber
-
     return RabbitSubscriber(
         connection_provider=get_rabbitmq_connection_provider(),
         binding_configs=binding_configs,
@@ -234,8 +234,6 @@ def get_auth_api_client() -> AuthAPIClient:
     #     raise RuntimeError("api_client is not initialized")
     # return api_client
     # TODO - re-add authcz
-    from unittest.mock import MagicMock
-
     return MagicMock()
 
 
