@@ -7,18 +7,18 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
-ARG COMPILE_CORES=0
+ARG COMPILE_CORES=1
 
-# Determine the number of cores to use
-RUN if [ "$COMPILE_CORES" -gt 0 ]; then \
-        CORES="$COMPILE_CORES"; \
-    elif [ "$COMPILE_CORES" -eq 0 ]; then \
-        CORES=$(nproc); \
-    else \
-        CORES=1; \
-    fi && \
-    echo "Using $CORES cores for compilation" && \
-    COMPILE_CORES="$CORES"
+# # Determine the number of cores to use
+# RUN if [ "$COMPILE_CORES" -gt 0 ]; then \
+#         CORES="$COMPILE_CORES"; \
+#     elif [ "$COMPILE_CORES" -eq 0 ]; then \
+#         CORES=$(nproc); \
+#     else \
+#         CORES=1; \
+#     fi && \
+#     echo "Using $CORES cores for compilation" && \
+#     COMPILE_CORES="$CORES"
 
 # First phase: Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -26,8 +26,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
-# Install OpenTelemetry auto instrumentation packages
-RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
 
 # Second phase: compile deps
 RUN python -m compileall -f -j "$COMPILE_CORES" -o2 /app/.venv
@@ -38,6 +36,9 @@ COPY /src /app/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
+
+# Install OpenTelemetry auto instrumentation packages
+RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
 
 # Fourth phase: compile app code
 RUN python -m compileall -f -j "$COMPILE_CORES" -o2 /app/src
