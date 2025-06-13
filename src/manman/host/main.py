@@ -4,15 +4,15 @@ import os
 import threading
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from gunicorn.app.base import BaseApplication
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
 from manman.config import ManManConfig
 from manman.logging_config import (
     get_gunicorn_config,
@@ -150,7 +150,7 @@ def _init_common_services(
         else None,
     )
 
-    # declare rabbitmq exchanges
+    # declare rabbitmq exchanges - use persistent connection for this operation
     from manman.util import get_rabbitmq_connection
 
     rmq_connection = get_rabbitmq_connection()

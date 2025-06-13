@@ -1,8 +1,11 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from amqpstorm import Connection
+from fastapi import APIRouter, Depends, HTTPException
 
 from manman.exceptions import WorkerAlreadyClosedException
+from manman.host.api.shared.injectors import rmq_conn
 from manman.models import InternalStatusInfo, StatusType, Worker
 from manman.repository.database import WorkerRepository
 from manman.repository.message.pub import InternalStatusInfoPubService
@@ -14,7 +17,6 @@ from manman.repository.rabbitmq.config import (
     RoutingKeyConfig,
 )
 from manman.repository.rabbitmq.publisher import RabbitPublisher
-from manman.util import get_rabbitmq_connection
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,9 @@ async def worker_shutdown(instance: Worker) -> Worker:
 
 
 @router.put("/shutdown/other")
-async def worker_shutdown_other(instance: Worker):
+async def worker_shutdown_other(
+    instance: Worker, rmq_connection: Annotated[Connection, Depends(rmq_conn)]
+):
     repository = WorkerRepository()
     lost_workers = repository.close_other_workers(instance.worker_id)
     # terminate the lost workers
@@ -65,7 +69,7 @@ async def worker_shutdown_other(instance: Worker):
         # Send COMPLETE status to worker status queue for each shutdown worker
         for worker in lost_workers:
             rmq_publisher = RabbitPublisher(
-                connection=get_rabbitmq_connection(),
+                connection=rmq_connection,
                 binding_configs=BindingConfig(
                     exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
                     routing_keys=[
