@@ -291,7 +291,7 @@ def get_gunicorn_config(
         Configuration dict for Gunicorn
     """
     # Build service display name for logs - keep simple for OTEL compatibility
-    service_display = microservice_name or "manman"
+    service_display = microservice_name
 
     # Base configuration - same for all services
     config = {
