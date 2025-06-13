@@ -58,8 +58,10 @@ spec:
             httpGet:
               path: /experience/health # Health check path
               port: {{ .Values.apis.experience.port }}
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           # TODO - improve how secrets are sourced in this template
           env:
             - name: MANMAN_POSTGRES_URL
