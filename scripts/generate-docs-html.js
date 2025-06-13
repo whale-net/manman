@@ -13,7 +13,6 @@
  *   hub-index [pr-dirs...] [version-dirs...]
  *   dynamic-pr-hub <site-dir> <current-pr> <current-pr-title>
  *   dynamic-release-hub <site-dir>
- *   dynamic-cleanup-hub <site-dir>
  *   static-main-hub
  */
 
@@ -787,157 +786,7 @@ function generateDynamicReleaseHub(siteDir, outputFile) {
     console.log(`✅ Updated documentation hub with ${versionDirs.length} versions and ${prDirs.length} PR previews`);
 }
 
-// Dynamic cleanup hub index - used when PR is closed to regenerate index without the closed PR
-function generateDynamicCleanupHub(siteDir, outputFile) {
-    console.log('🔍 Regenerating index after PR cleanup...');
 
-    // Scan the site directory for remaining PR preview folders
-    let siteDirs = [];
-    if (fs.existsSync(siteDir)) {
-        siteDirs = fs.readdirSync(siteDir);
-    }
-    const prDirs = siteDirs.filter(dir => dir.startsWith('pr-'));
-
-    console.log(`Found ${prDirs.length} remaining PR preview directories: ${prDirs.join(', ')}`);
-
-    // Sort PR directories by number (newest first)
-    prDirs.sort((a, b) => {
-        const numA = parseInt(a.replace('pr-', ''));
-        const numB = parseInt(b.replace('pr-', ''));
-        return numB - numA;
-    });
-
-    // Generate PR preview cards HTML
-    let prCardsHtml = '';
-    if (prDirs.length > 0) {
-        for (const prDir of prDirs) {
-            const prNumber = prDir.replace('pr-', '');
-
-            prCardsHtml += `
-                <div class="preview-card pr-preview">
-                    <h2 class="preview-title">🔍 PR #${prNumber} Preview</h2>
-                    <p><strong>Loading...</strong></p>
-                    <p>Preview of API changes in pull request #${prNumber}</p>
-                    <a href="${prDir}/" class="preview-link">View PR Preview</a>
-                </div>`;
-        }
-    } else {
-        prCardsHtml = '<div class="empty-state">No active PR previews</div>';
-    }
-
-    // Generate the complete index.html
-    const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ManMan API Documentation Hub</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #f8fafc;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
-            padding-bottom: 2rem;
-            border-bottom: 2px solid #e2e8f0;
-        }
-        .section {
-            margin-bottom: 3rem;
-        }
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: #1e293b;
-        }
-        .preview-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            margin-top: 2rem;
-        }
-        .preview-card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e2e8f0;
-        }
-        .main-docs {
-            border-left: 4px solid #10b981;
-        }
-        .pr-preview {
-            border-left: 4px solid #f59e0b;
-        }
-        .preview-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: #1e293b;
-        }
-        .preview-link {
-            display: inline-block;
-            background: #3b82f6;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 500;
-            margin-top: 1rem;
-        }
-        .main-docs .preview-link {
-            background: #10b981;
-        }
-        .pr-preview .preview-link {
-            background: #f59e0b;
-        }
-        .empty-state {
-            text-align: center;
-            color: #64748b;
-            font-style: italic;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>ManMan API Documentation Hub</h1>
-        <p>Access the latest API documentation and PR previews</p>
-    </div>
-
-    <div class="section">
-        <h2 class="section-title">🚀 Latest Release Documentation</h2>
-        <div class="preview-grid">
-            <div class="preview-card main-docs">
-                <h2 class="preview-title">Latest Release Documentation</h2>
-                <p>Official API documentation from the latest stable release</p>
-                <a href="main/" class="preview-link">View Main Documentation</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="section">
-        <h2 class="section-title">🔍 PR Previews (${prDirs.length})</h2>
-        <div class="preview-grid">
-            ${prCardsHtml}
-        </div>
-    </div>
-
-    <div style="margin-top: 3rem; padding: 1rem; background: #f1f5f9; border-radius: 8px; font-size: 0.875rem; color: #475569;">
-        <strong>Last updated:</strong> ${new Date().toISOString()}<br>
-        <strong>Generated by:</strong> OpenAPI Documentation Workflow (cleanup)
-    </div>
-</body>
-</html>`;
-
-    // Write the index.html file
-    fs.writeFileSync(outputFile, indexHtml);
-    console.log(`✅ Regenerated index.html after cleanup, showing ${prDirs.length} remaining PR previews`);
-}
 
 // Static main hub index - static version for main branch deployment
 function generateStaticMainHub(outputFile) {
@@ -1150,13 +999,7 @@ function main() {
             generateDynamicReleaseHub(options[0], outputFile);
             break;
 
-        case 'dynamic-cleanup-hub':
-            if (options.length < 1) {
-                console.error('Usage: dynamic-cleanup-hub <output-file> <site-dir>');
-                process.exit(1);
-            }
-            generateDynamicCleanupHub(options[0], outputFile);
-            break;
+
 
         case 'static-main-hub':
             generateStaticMainHub(outputFile);
