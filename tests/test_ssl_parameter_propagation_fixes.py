@@ -19,7 +19,6 @@ class TestSSLParameterPropagation(unittest.TestCase):
     def test_ssl_parameter_deep_copy_in_robust_connection(self):
         """Test that RobustConnection properly handles SSL parameter copying."""
         ssl_options = get_rabbitmq_ssl_options("test.example.com")
-        original_context = ssl_options["context"]
 
         connection_params = {
             "hostname": "test.example.com",
