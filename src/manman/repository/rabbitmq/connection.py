@@ -98,11 +98,24 @@ class RobustConnection:
             if self._is_reconnecting or self._should_stop:
                 return
 
+            # Check if previous thread is still alive and wait for it to finish
+            if self._reconnect_thread and self._reconnect_thread.is_alive():
+                logger.debug("Previous reconnection thread still running, skipping")
+                return
+
             self._is_reconnecting = True
+
+        # Create and start thread outside the lock to prevent potential deadlock
+        try:
             self._reconnect_thread = threading.Thread(
                 target=self._reconnect_loop, name="rmq-reconnect-thread", daemon=True
             )
             self._reconnect_thread.start()
+            logger.debug("Reconnection thread started")
+        except Exception as e:
+            logger.exception("Failed to start reconnection thread: %s", e)
+            with self._lock:
+                self._is_reconnecting = False
 
     def _reconnect_loop(self):
         """Main reconnection loop."""
@@ -195,6 +208,9 @@ class RobustConnection:
         :return: Active connection
         :raises AMQPConnectionError: If connection is not available
         """
+        needs_reconnect = False
+        connection = None
+
         with self._lock:
             if not self._connection:
                 raise AMQPConnectionError("No connection available")
@@ -203,24 +219,31 @@ class RobustConnection:
             try:
                 if not self._connection.is_open:
                     logger.warning("Connection is not open, attempting to reconnect")
-                    self._start_reconnect_thread()
-                    raise AMQPConnectionError("Connection is not open")
-
-                # Additional health check
-                self._connection.check_for_errors()
-
-                return self._connection
+                    needs_reconnect = True
+                else:
+                    # Additional health check
+                    self._connection.check_for_errors()
+                    connection = self._connection
 
             except AMQPConnectionError:
                 logger.warning("Connection health check failed, starting reconnection")
-                self._start_reconnect_thread()
-                raise
+                needs_reconnect = True
             except Exception as e:
                 logger.exception(
                     "Unexpected error during connection health check: %s", e
                 )
-                self._start_reconnect_thread()
-                raise AMQPConnectionError(f"Connection health check failed: {e}")
+                needs_reconnect = True
+
+        # Start reconnection outside the lock to avoid deadlock
+        if needs_reconnect:
+            self._start_reconnect_thread()
+            if connection is None:
+                raise AMQPConnectionError("Connection is not available")
+
+        if connection is None:
+            raise AMQPConnectionError("Connection health check failed")
+
+        return connection
 
     def is_connected(self) -> bool:
         """

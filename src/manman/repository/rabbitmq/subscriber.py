@@ -56,7 +56,6 @@ class RabbitSubscriber(MessageSubscriberInterface):
         # Thread safety
         self._lock = threading.RLock()
         self._is_shutting_down = False
-        self._restart_consuming = False
 
         # Register for recovery notifications if available
         if self._recovery_registry:
@@ -161,8 +160,7 @@ class RabbitSubscriber(MessageSubscriberInterface):
     def _start_consuming_thread(self):
         """Start the consuming thread with recovery support."""
         if self._consumer_thread and self._consumer_thread.is_alive():
-            # Signal thread to restart
-            self._restart_consuming = True
+            logger.debug("Consumer thread already running, skipping start")
             return
 
         self._consumer_thread = threading.Thread(
@@ -171,21 +169,30 @@ class RabbitSubscriber(MessageSubscriberInterface):
             daemon=True,
         )
         self._consumer_thread.start()
+        logger.debug("Consumer thread started for queue %s",
+                    self._queue_config.actual_queue_name)
 
     def _consuming_loop(self):
         """Main consuming loop with automatic recovery."""
         while not self._is_shutting_down:
             try:
+                # Check if we have a valid channel
+                channel_needs_recovery = False
                 with self._lock:
                     if self._is_shutting_down:
                         break
 
                     if not self._channel or not self._channel.is_open:
                         logger.warning(
-                            "Channel is not available, attempting to recover"
+                            "Channel is not available, needs recovery"
                         )
-                        self._initialize_channel()
-                        continue
+                        channel_needs_recovery = True
+
+                # Handle channel recovery outside the lock to prevent deadlock
+                if channel_needs_recovery:
+                    self._schedule_channel_retry()
+                    time.sleep(1)  # Brief pause before retrying
+                    continue
 
                 # Start consuming - this will block until an error occurs or stop_consuming is called
                 self._channel.start_consuming()

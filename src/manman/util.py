@@ -18,6 +18,7 @@ from manman.repository.rabbitmq.subscriber import RabbitSubscriber
 logger = logging.getLogger(__name__)
 
 __GLOBALS = {}
+__GLOBALS_LOCK = threading.RLock()
 
 
 def log_stream(
@@ -57,20 +58,22 @@ class NamedThreadPool(concurrent.futures.ThreadPoolExecutor):
 
 
 def get_sqlalchemy_engine() -> sqlalchemy.engine:
-    if __GLOBALS.get("engine") is None:
-        raise RuntimeError("global engine not defined - cannot start")
-    return __GLOBALS["engine"]
+    with __GLOBALS_LOCK:
+        if __GLOBALS.get("engine") is None:
+            raise RuntimeError("global engine not defined - cannot start")
+        return __GLOBALS["engine"]
 
 
 def init_sql_alchemy_engine(
     connection_string: str,
 ):
-    if "engine" in __GLOBALS:
-        return
-    __GLOBALS["engine"] = sqlalchemy.create_engine(
-        connection_string,
-        pool_pre_ping=True,
-    )
+    with __GLOBALS_LOCK:
+        if "engine" in __GLOBALS:
+            return
+        __GLOBALS["engine"] = sqlalchemy.create_engine(
+            connection_string,
+            pool_pre_ping=True,
+        )
 
 
 def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
@@ -80,7 +83,6 @@ def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
     return Session(get_sqlalchemy_engine())
 
 
-# Update RabbitMQ functions to use AMQPStorm with robust connection
 def init_rabbitmq(
     host: str,
     port: int,
@@ -104,12 +106,6 @@ def init_rabbitmq(
         "ssl_options": ssl_options,
     }
 
-    # Store parameters for potential reconnection
-    __GLOBALS["rmq_parameters"] = connection_params.copy()
-    __GLOBALS["rmq_parameters"]["heartbeat_interval"] = heartbeat_interval
-    __GLOBALS["rmq_parameters"]["max_reconnect_attempts"] = max_reconnect_attempts
-    __GLOBALS["rmq_parameters"]["reconnect_delay"] = reconnect_delay
-
     def on_connection_lost():
         logger.warning("RabbitMQ connection lost - services may become unreachable")
 
@@ -127,7 +123,14 @@ def init_rabbitmq(
         on_connection_restored=on_connection_restored,
     )
 
-    __GLOBALS["rmq_robust_connection"] = robust_connection
+    with __GLOBALS_LOCK:
+        # Store parameters for potential reconnection
+        __GLOBALS["rmq_parameters"] = connection_params.copy()
+        __GLOBALS["rmq_parameters"]["heartbeat_interval"] = heartbeat_interval
+        __GLOBALS["rmq_parameters"]["max_reconnect_attempts"] = max_reconnect_attempts
+        __GLOBALS["rmq_parameters"]["reconnect_delay"] = reconnect_delay
+        __GLOBALS["rmq_robust_connection"] = robust_connection
+
     logger.info(
         "rmq robust connection established with heartbeat=%ds", heartbeat_interval
     )
@@ -153,10 +156,11 @@ def get_rabbitmq_ssl_options(hostname: str) -> dict:
 
 def get_rabbitmq_connection() -> amqpstorm.Connection:
     """Get the RabbitMQ connection through the robust connection wrapper."""
-    if "rmq_robust_connection" not in __GLOBALS:
-        raise RuntimeError("rmq_robust_connection not defined - cannot start")
+    with __GLOBALS_LOCK:
+        if "rmq_robust_connection" not in __GLOBALS:
+            raise RuntimeError("rmq_robust_connection not defined - cannot start")
+        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
 
-    robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
     return robust_connection.get_connection()
 
 
@@ -179,12 +183,13 @@ def register_subscriber_for_recovery(subscriber_callback):
 
     :param subscriber_callback: Function to call when connection is restored
     """
-    if "rmq_robust_connection" not in __GLOBALS:
-        raise RuntimeError(
-            "rmq_robust_connection not defined - cannot register subscriber"
-        )
+    with __GLOBALS_LOCK:
+        if "rmq_robust_connection" not in __GLOBALS:
+            raise RuntimeError(
+                "rmq_robust_connection not defined - cannot register subscriber"
+            )
+        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
 
-    robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
     robust_connection.register_subscriber_callback(subscriber_callback)
 
 
@@ -194,9 +199,10 @@ def unregister_subscriber_from_recovery(subscriber_callback):
 
     :param subscriber_callback: Function to remove from callbacks
     """
-    if "rmq_robust_connection" in __GLOBALS:
-        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-        robust_connection.unregister_subscriber_callback(subscriber_callback)
+    with __GLOBALS_LOCK:
+        if "rmq_robust_connection" in __GLOBALS:
+            robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+            robust_connection.unregister_subscriber_callback(subscriber_callback)
 
 
 def create_robust_subscriber(
@@ -221,14 +227,16 @@ def create_robust_subscriber(
 
 def shutdown_rabbitmq():
     """Shutdown the RabbitMQ connection properly."""
-    if "rmq_robust_connection" in __GLOBALS:
-        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
-        robust_connection.close()
-        del __GLOBALS["rmq_robust_connection"]
+    with __GLOBALS_LOCK:
+        if "rmq_robust_connection" in __GLOBALS:
+            robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+            robust_connection.close()
+            del __GLOBALS["rmq_robust_connection"]
 
 
 def init_auth_api_client(auth_url: str):
-    __GLOBALS["auth_api_client"] = AuthAPIClient(base_url=auth_url)
+    with __GLOBALS_LOCK:
+        __GLOBALS["auth_api_client"] = AuthAPIClient(base_url=auth_url)
 
 
 def get_auth_api_client() -> AuthAPIClient:
