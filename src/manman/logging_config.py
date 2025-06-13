@@ -24,6 +24,10 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
+HAS_DONE_SETUP = False
+
+logger = logging.getLogger(__name__)
+
 
 def setup_logging(
     level: int = logging.INFO,
@@ -36,6 +40,10 @@ def setup_logging(
     """
     Setup logging configuration for ManMan services with optional OTEL support.
 
+    This function works with both standalone services and uvicorn-based services.
+    For uvicorn, this should be called before uvicorn.run() and uvicorn will
+    handle console logging while we add OTEL and configure log levels.
+
     Args:
         level: Logging level (default: INFO)
         service_name: Name of the service for log identification
@@ -46,14 +54,24 @@ def setup_logging(
     """
     # Check if logging has already been configured
     root_logger = logging.getLogger()
-    if root_logger.handlers and not force_setup:
+    global HAS_DONE_SETUP
+    if HAS_DONE_SETUP and not force_setup:
         # Logging already configured, just ensure our level is set
+        logger.info(
+            "Logging already configured, setting level to %s",
+            logging.getLevelName(level),
+        )
         root_logger.setLevel(level)
+        # If OTEL is enabled and we are forcing setup, ensure the handler is present
+        if enable_otel and OTEL_AVAILABLE and force_setup:
+            # Remove existing OTEL handlers to avoid duplicates if any
+            for handler in list(root_logger.handlers):  # Iterate over a copy
+                if isinstance(handler, LoggingHandler):
+                    root_logger.removeHandler(handler)
+            _setup_otel_logging(service_name, otel_endpoint)  # Re-apply OTEL
         return
-
-    # Clear any existing handlers if we're forcing setup
-    if force_setup:
-        root_logger.handlers.clear()
+    else:
+        HAS_DONE_SETUP = True
 
     # Setup OTEL logging if available and enabled
     if enable_otel and OTEL_AVAILABLE:
@@ -61,7 +79,11 @@ def setup_logging(
 
     # Setup console logging if enabled
     if enable_console:
-        _setup_console_logging(service_name)
+        # Only setup console logging if we don't already have handlers
+        # (uvicorn will add its own handlers)
+        if not root_logger.handlers:
+            logging.basicConfig(level=level)
+            _setup_console_logging(service_name)
 
     # Configure root logger
     root_logger.setLevel(level)
@@ -74,61 +96,11 @@ def setup_logging(
 
     # Ensure ManMan loggers are at the specified level
     logging.getLogger("manman").setLevel(level)
-
-
-def get_uvicorn_log_config(service_name: Optional[str] = None) -> dict:
-    """
-    Get uvicorn-compatible log configuration that plays nicely with our setup.
-
-    Args:
-        service_name: Name of the service for log identification
-
-    Returns:
-        Log configuration dict for uvicorn
-    """
-    service_prefix = f"[{service_name}] " if service_name else ""
-
-    return {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "format": f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s",
-            },
-            "access": {
-                "format": f"%(asctime)s - {service_prefix}uvicorn.access - %(levelname)s - %(message)s",
-            },
-        },
-        "handlers": {
-            "default": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-            "access": {
-                "formatter": "access",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-        },
-        "loggers": {
-            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {
-                "handlers": ["default"],
-                "level": "INFO",
-                "propagate": False,
-            },
-            "uvicorn.access": {
-                "handlers": ["access"],
-                "level": "INFO",
-                "propagate": False,
-            },
-        },
-        "root": {
-            "level": "INFO",
-            "handlers": ["default"],
-        },
-    }
+    logger.info(
+        "Logging configured for service '%s' at level %s",
+        service_name,
+        logging.getLevelName(level),
+    )
 
 
 def _setup_otel_logging(

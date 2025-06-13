@@ -1,18 +1,17 @@
 import logging
-import logging.config
 import os
 import threading
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from typing_extensions import Annotated
 
-from manman.logging_config import get_uvicorn_log_config, setup_logging
+import alembic
+import alembic.command
+import alembic.config
+from manman.logging_config import setup_logging
 from manman.repository.rabbitmq.config import ExchangeRegistry
 from manman.util import (
     create_rabbitmq_vhost,
@@ -91,6 +90,12 @@ def start_experience_api(
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
     app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
     port: int = 8000,
+    workers: Annotated[
+        Optional[int],
+        typer.Option(
+            help="Number of uvicorn workers (default: 1 if not specified, or CPU count * 2 + 1 if gunicorn was used)"
+        ),
+    ] = 1,  # Default to 1 for direct uvicorn
     should_run_migration_check: Optional[bool] = True,
     enable_ssl: Annotated[
         bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
@@ -108,9 +113,11 @@ def start_experience_api(
         bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
-    """Start the experience API (host layer) that provides game server management and user-facing functionality."""
-    # Setup logging first
-    setup_logging(service_name="experience-api", enable_otel=log_otlp)
+    """Start the experience API directly with Uvicorn."""
+    # Setup logging
+    setup_logging(
+        service_name="manman-experience-api", enable_otel=log_otlp, force_setup=log_otlp
+    )
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -124,21 +131,21 @@ def start_experience_api(
         create_vhost=create_vhost,
     )
 
-    # Create FastAPI app with only host/experience routes
-    from fastapi import FastAPI
+    from manman.host.asgi import create_experience_app
 
-    from manman.host.api.experience import router as experience_router
-    from manman.host.api.shared import add_health_check
+    app_instance = create_experience_app()
 
-    experience_app = FastAPI(title="ManMan Experience API", root_path="/experience")
-    experience_app.include_router(experience_router)
-    add_health_check(experience_app)
+    log_level = os.getenv("LOG_LEVEL", "info").lower()
 
+    logger.info(
+        "Starting Experience API with Uvicorn (workers: %d, port: %d)", workers, port
+    )
     uvicorn.run(
-        experience_app,
+        app_instance,
         host="0.0.0.0",
         port=port,
-        log_config=get_uvicorn_log_config("experience-api"),
+        workers=workers,
+        log_level=log_level,
     )
 
 
@@ -150,6 +157,12 @@ def start_status_api(
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
     app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
     port: int = 8000,
+    workers: Annotated[
+        Optional[int],
+        typer.Option(
+            help="Number of uvicorn workers (default: 1 if not specified, or CPU count * 2 + 1 if gunicorn was used)"
+        ),
+    ] = 1,  # Default to 1 for direct uvicorn
     should_run_migration_check: Optional[bool] = True,
     enable_ssl: Annotated[
         bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
@@ -167,9 +180,11 @@ def start_status_api(
         bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
-    """Start the status API that provides status and monitoring functionality."""
-    # Setup logging first
-    setup_logging(service_name="status-api", enable_otel=log_otlp)
+    """Start the status API directly with Uvicorn."""
+    # Setup logging
+    setup_logging(
+        service_name="manman-status-api", enable_otel=log_otlp, force_setup=log_otlp
+    )
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -183,21 +198,20 @@ def start_status_api(
         create_vhost=create_vhost,
     )
 
-    # Create FastAPI app with status routes
-    from fastapi import FastAPI
+    from manman.host.asgi import create_status_app
 
-    from manman.host.api.shared import add_health_check
-    from manman.host.api.status import router as status_router
+    app_instance = create_status_app()
+    log_level = os.getenv("LOG_LEVEL", "info").lower()
 
-    status_app = FastAPI(title="ManMan Status API", root_path="/status")
-    status_app.include_router(status_router)
-    add_health_check(status_app)
-
+    logger.info(
+        "Starting Status API with Uvicorn (workers: %d, port: %d)", workers, port
+    )
     uvicorn.run(
-        status_app,
+        app_instance,
         host="0.0.0.0",
         port=port,
-        log_config=get_uvicorn_log_config("status-api"),
+        workers=workers,
+        log_level=log_level,
     )
 
 
@@ -209,6 +223,12 @@ def start_worker_dal_api(
     rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
     app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
     port: int = 8000,
+    workers: Annotated[
+        Optional[int],
+        typer.Option(
+            help="Number of uvicorn workers (default: 1 if not specified, or CPU count * 2 + 1 if gunicorn was used)"
+        ),
+    ] = 1,  # Default to 1 for direct uvicorn
     should_run_migration_check: Optional[bool] = True,
     enable_ssl: Annotated[
         bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
@@ -226,9 +246,11 @@ def start_worker_dal_api(
         bool, typer.Option(help="Create RabbitMQ vhost before initialization")
     ] = False,
 ):
-    """Start the worker DAL API that provides data access endpoints for worker services."""
-    # Setup logging first
-    setup_logging(service_name="worker-dal-api", enable_otel=log_otlp)
+    """Start the worker DAL API directly with Uvicorn."""
+    # Setup logging
+    setup_logging(
+        service_name="manman-worker-dal-api", enable_otel=log_otlp, force_setup=log_otlp
+    )
 
     _init_common_services(
         rabbitmq_host=rabbitmq_host,
@@ -242,26 +264,20 @@ def start_worker_dal_api(
         create_vhost=create_vhost,
     )
 
-    # Create FastAPI app with only worker DAL routes
-    from fastapi import FastAPI
+    from manman.host.asgi import create_worker_dal_app
 
-    from manman.host.api.shared import add_health_check
-    from manman.host.api.worker_dal import server_router, worker_router
+    app_instance = create_worker_dal_app()
+    log_level = os.getenv("LOG_LEVEL", "info").lower()
 
-    worker_dal_app = FastAPI(
-        title="ManMan Worker DAL API",
-        root_path="/workerdal",  # Configure root path for reverse proxy
+    logger.info(
+        "Starting Worker DAL API with Uvicorn (workers: %d, port: %d)", workers, port
     )
-    worker_dal_app.include_router(server_router)
-    worker_dal_app.include_router(worker_router)
-    # For worker DAL, health check should be at the root level since root_path handles the /workerdal prefix
-    add_health_check(worker_dal_app)
-
     uvicorn.run(
-        worker_dal_app,
+        app_instance,
         host="0.0.0.0",
         port=port,
-        log_config=get_uvicorn_log_config("worker-dal-api"),
+        workers=workers,
+        log_level=log_level,
     )
 
 
@@ -292,7 +308,11 @@ def start_status_processor(
     """Start the status event processor that handles status-related pub/sub messages."""
 
     # Setup logging first - this is a standalone service (no uvicorn)
-    setup_logging(service_name="status-processor", enable_otel=log_otlp)
+    setup_logging(
+        service_name="manman-status-processor",
+        enable_otel=log_otlp,
+        force_setup=log_otlp,
+    )
 
     logger.info("Starting status event processor...")
 
@@ -322,13 +342,12 @@ def start_status_processor(
     add_health_check(health_check_app)
 
     def run_health_check_server():
-        # Use our uvicorn config for the health check server too
+        # Use uvicorn for the health check server too
         uvicorn.run(
             health_check_app,
             host="0.0.0.0",
             port=8000,
-            # NOTE: this sets the name of the service in the logs
-            log_config=get_uvicorn_log_config("status-processor"),
+            log_level="info",
         )
 
     health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
