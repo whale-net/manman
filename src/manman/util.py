@@ -10,6 +10,7 @@ import sqlalchemy
 from sqlmodel import Session
 
 from manman.repository.api_client import AuthAPIClient
+from manman.repository.rabbitmq.connection import RobustConnection
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def get_sqlalchemy_session(session: Optional[Session] = None) -> Session:
     return Session(get_sqlalchemy_engine())
 
 
-# Update RabbitMQ functions to use AMQPStorm
+# Update RabbitMQ functions to use AMQPStorm with robust connection
 def init_rabbitmq(
     host: str,
     port: int,
@@ -85,10 +86,13 @@ def init_rabbitmq(
     virtual_host: str = "/",
     ssl_enabled: bool = False,
     ssl_options=None,
+    heartbeat_interval: int = 30,
+    max_reconnect_attempts: int = 5,
+    reconnect_delay: float = 1.0,
 ):
-    """Initialize RabbitMQ connection using AMQPStorm."""
-    __GLOBALS["rmq_parameters"] = {
-        "host": host,
+    """Initialize RabbitMQ connection using AMQPStorm with robust connection handling."""
+    connection_params = {
+        "hostname": host,
         "port": port,
         "username": username,
         "password": password,
@@ -96,18 +100,30 @@ def init_rabbitmq(
         "ssl": ssl_enabled,
         "ssl_options": ssl_options,
     }
+    
+    # Store parameters for potential reconnection
+    __GLOBALS["rmq_parameters"] = connection_params.copy()
+    __GLOBALS["rmq_parameters"]["heartbeat_interval"] = heartbeat_interval
+    __GLOBALS["rmq_parameters"]["max_reconnect_attempts"] = max_reconnect_attempts
+    __GLOBALS["rmq_parameters"]["reconnect_delay"] = reconnect_delay
 
-    rmq_connection = amqpstorm.Connection(
-        hostname=host,
-        port=port,
-        username=username,
-        password=password,
-        virtual_host=virtual_host,
-        ssl=ssl_enabled,
-        ssl_options=ssl_options,
+    def on_connection_lost():
+        logger.warning("RabbitMQ connection lost - services may become unreachable")
+    
+    def on_connection_restored():
+        logger.info("RabbitMQ connection restored - services should be accessible again")
+
+    robust_connection = RobustConnection(
+        connection_params=connection_params,
+        heartbeat_interval=heartbeat_interval,
+        max_reconnect_attempts=max_reconnect_attempts,
+        reconnect_delay=reconnect_delay,
+        on_connection_lost=on_connection_lost,
+        on_connection_restored=on_connection_restored,
     )
-    __GLOBALS["rmq_connection"] = rmq_connection
-    logger.info("rmq connection established")
+    
+    __GLOBALS["rmq_robust_connection"] = robust_connection
+    logger.info("rmq robust connection established with heartbeat=%ds", heartbeat_interval)
 
 
 def get_rabbitmq_ssl_options(hostname: str) -> dict:
@@ -129,10 +145,27 @@ def get_rabbitmq_ssl_options(hostname: str) -> dict:
 
 
 def get_rabbitmq_connection() -> amqpstorm.Connection:
-    """Get the RabbitMQ connection."""
-    if "rmq_connection" not in __GLOBALS:
-        raise RuntimeError("rmq_connection not defined - cannot start")
-    return __GLOBALS["rmq_connection"]
+    """Get the RabbitMQ connection through the robust connection wrapper."""
+    if "rmq_robust_connection" not in __GLOBALS:
+        raise RuntimeError("rmq_robust_connection not defined - cannot start")
+    
+    robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+    return robust_connection.get_connection()
+
+
+def get_rabbitmq_robust_connection() -> RobustConnection:
+    """Get the robust RabbitMQ connection wrapper."""
+    if "rmq_robust_connection" not in __GLOBALS:
+        raise RuntimeError("rmq_robust_connection not defined - cannot start")
+    return __GLOBALS["rmq_robust_connection"]
+
+
+def shutdown_rabbitmq():
+    """Shutdown the RabbitMQ connection properly."""
+    if "rmq_robust_connection" in __GLOBALS:
+        robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
+        robust_connection.close()
+        del __GLOBALS["rmq_robust_connection"]
 
 
 def init_auth_api_client(auth_url: str):
