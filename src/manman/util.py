@@ -1,6 +1,7 @@
 import concurrent.futures
 import io
 import logging
+import os
 import ssl
 import threading
 from typing import Optional
@@ -14,6 +15,7 @@ from manman.repository.api_client import AuthAPIClient
 logger = logging.getLogger(__name__)
 
 __GLOBALS = {}
+_connection_lock = threading.Lock()
 
 
 def log_stream(
@@ -86,7 +88,7 @@ def init_rabbitmq(
     ssl_enabled: bool = False,
     ssl_options=None,
 ):
-    """Initialize RabbitMQ connection using AMQPStorm."""
+    """Initialize RabbitMQ connection parameters for later use."""
     __GLOBALS["rmq_parameters"] = {
         "host": host,
         "port": port,
@@ -96,18 +98,7 @@ def init_rabbitmq(
         "ssl": ssl_enabled,
         "ssl_options": ssl_options,
     }
-
-    rmq_connection = amqpstorm.Connection(
-        hostname=host,
-        port=port,
-        username=username,
-        password=password,
-        virtual_host=virtual_host,
-        ssl=ssl_enabled,
-        ssl_options=ssl_options,
-    )
-    __GLOBALS["rmq_connection"] = rmq_connection
-    logger.info("rmq connection established")
+    logger.info("rmq parameters stored")
 
 
 def get_rabbitmq_ssl_options(hostname: str) -> dict:
@@ -129,10 +120,67 @@ def get_rabbitmq_ssl_options(hostname: str) -> dict:
 
 
 def get_rabbitmq_connection() -> amqpstorm.Connection:
-    """Get the RabbitMQ connection."""
-    if "rmq_connection" not in __GLOBALS:
-        raise RuntimeError("rmq_connection not defined - cannot start")
-    return __GLOBALS["rmq_connection"]
+    """
+    Get or create a RabbitMQ connection for the current process.
+
+    Creates one persistent connection per process (including Gunicorn workers).
+    Each process gets its own connection with a fresh SSL context to avoid
+    SSL context sharing issues across forked processes.
+    """
+    with _connection_lock:
+        # Check if we have a valid connection for this process
+        current_pid = os.getpid()
+        connection_key = f"rmq_connection_{current_pid}"
+
+        if connection_key in __GLOBALS:
+            connection = __GLOBALS[connection_key]
+            try:
+                # Test if connection is still alive
+                if connection.is_open:
+                    return connection
+                else:
+                    logger.warning("RabbitMQ connection is closed, creating new one")
+            except Exception as e:
+                logger.warning("Error checking RabbitMQ connection status: %s", e)
+
+            # Remove invalid connection
+            del __GLOBALS[connection_key]
+
+        # Create new connection for this process
+        if "rmq_parameters" not in __GLOBALS:
+            raise RuntimeError(
+                "rmq_parameters not defined - init_rabbitmq() must be called first"
+            )
+
+        params = __GLOBALS["rmq_parameters"]
+
+        # Create fresh SSL options for this process to avoid context sharing issues
+        ssl_options = None
+        if params["ssl"] and params.get("ssl_options"):
+            # Recreate SSL context to avoid fork issues
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+            ssl_options = {
+                "context": context,
+                "server_hostname": params["ssl_options"]["server_hostname"],
+            }
+
+        try:
+            connection = amqpstorm.Connection(
+                hostname=params["host"],
+                port=params["port"],
+                username=params["username"],
+                password=params["password"],
+                virtual_host=params["virtual_host"],
+                ssl=params["ssl"],
+                ssl_options=ssl_options,
+            )
+            __GLOBALS[connection_key] = connection
+            logger.info("rmq connection established for process %d", current_pid)
+            return connection
+        except Exception as e:
+            logger.error("Failed to create RabbitMQ connection: %s", e)
+            raise
 
 
 def init_auth_api_client(auth_url: str):
@@ -182,3 +230,27 @@ def create_rabbitmq_vhost(
     )
     mgmt.virtual_host.create(vhost)
     logger.info("RabbitMQ vhost created: %s", vhost)
+
+
+def cleanup_rabbitmq_connections():
+    """
+    Cleanup function to gracefully close RabbitMQ connections.
+
+    Should be called during application shutdown or worker termination.
+    """
+    with _connection_lock:
+        current_pid = os.getpid()
+        connection_key = f"rmq_connection_{current_pid}"
+
+        if connection_key in __GLOBALS:
+            connection = __GLOBALS[connection_key]
+            try:
+                if connection.is_open:
+                    connection.close()
+                    logger.info(
+                        "RabbitMQ connection closed for process %d", current_pid
+                    )
+            except Exception as e:
+                logger.warning("Error closing RabbitMQ connection: %s", e)
+            finally:
+                del __GLOBALS[connection_key]

@@ -150,7 +150,7 @@ def _init_common_services(
         else None,
     )
 
-    # declare rabbitmq exchanges
+    # declare rabbitmq exchanges - use persistent connection for this operation
     from manman.util import get_rabbitmq_connection
 
     rmq_connection = get_rabbitmq_connection()

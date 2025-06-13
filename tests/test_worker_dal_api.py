@@ -6,6 +6,7 @@ Focuses on happy path and error cases for worker management endpoints.
 """
 
 from datetime import datetime
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -16,10 +17,22 @@ from manman.models import Worker
 
 
 @pytest.fixture
-def client():
+def mock_rmq_connection():
+    """Create a mock RabbitMQ connection."""
+    return Mock()
+
+
+@pytest.fixture
+def client(mock_rmq_connection):
     """Create a test client for the worker DAL API router."""
+    from manman.host.api.shared.injectors import rmq_conn
+
     app = FastAPI()
     app.include_router(router)
+
+    # Override the RabbitMQ connection dependency
+    app.dependency_overrides[rmq_conn] = lambda: mock_rmq_connection
+
     return TestClient(app)
 
 

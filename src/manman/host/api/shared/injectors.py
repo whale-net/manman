@@ -1,4 +1,5 @@
-from typing import Annotated
+import logging
+from typing import Annotated, AsyncGenerator
 
 from amqpstorm import Channel, Connection
 from fastapi import Depends, Header, HTTPException
@@ -25,6 +26,8 @@ from manman.util import (
     get_rabbitmq_connection,
     get_sqlalchemy_session,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # using builtin fastapi classes is not helpful because my token provider endpoint is elsewhere
@@ -126,13 +129,32 @@ async def current_game_server_instances(
 
 async def rmq_conn() -> Connection:
     """
-    Dependency to inject a RabbitMQ connection.
+    Dependency to inject the RabbitMQ connection.
+
+    Returns the persistent connection for this worker process.
+    The connection is created once per worker and reused.
     """
     return get_rabbitmq_connection()
 
 
-async def rmq_chan(connection: Annotated[Connection, Depends(rmq_conn)]) -> Channel:
-    return connection.channel()
+async def rmq_chan(
+    connection: Annotated[Connection, Depends(rmq_conn)],
+) -> AsyncGenerator[Channel, None]:
+    """
+    Dependency to inject a RabbitMQ channel.
+
+    Creates a fresh channel per request from the persistent connection.
+    Channels are lightweight and designed for per-operation use.
+    """
+    channel = connection.channel()
+    try:
+        yield channel
+    finally:
+        # Ensure channel is properly closed after use
+        try:
+            channel.close()
+        except Exception as e:
+            logger.warning("Error closing RabbitMQ channel: %s", e)
 
 
 async def current_worker_routing_config(
