@@ -169,8 +169,9 @@ class RabbitSubscriber(MessageSubscriberInterface):
             daemon=True,
         )
         self._consumer_thread.start()
-        logger.debug("Consumer thread started for queue %s",
-                    self._queue_config.actual_queue_name)
+        logger.debug(
+            "Consumer thread started for queue %s", self._queue_config.actual_queue_name
+        )
 
     def _consuming_loop(self):
         """Main consuming loop with automatic recovery."""
@@ -183,9 +184,7 @@ class RabbitSubscriber(MessageSubscriberInterface):
                         break
 
                     if not self._channel or not self._channel.is_open:
-                        logger.warning(
-                            "Channel is not available, needs recovery"
-                        )
+                        logger.warning("Channel is not available, needs recovery")
                         channel_needs_recovery = True
 
                 # Handle channel recovery outside the lock to prevent deadlock
