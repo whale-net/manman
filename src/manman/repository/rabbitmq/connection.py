@@ -166,6 +166,32 @@ class RobustConnection:
         )
         return True
 
+    def _validate_connection_usability(self, connection: Connection) -> bool:
+        """
+        Validate that the connection can actually perform operations.
+        
+        This addresses the idle period issue where connections appear healthy
+        but are actually stale due to server-side drops during inactivity.
+        
+        :param connection: Connection to validate
+        :return: True if connection is usable, False otherwise
+        """
+        try:
+            # Perform a lightweight operation to test if the connection is actually usable
+            # This creates a temporary channel and immediately closes it
+            # If the server has dropped the connection, this will fail
+            test_channel = connection.channel()
+            if test_channel and test_channel.is_open:
+                test_channel.close()
+                logger.debug("Connection usability validation passed")
+                return True
+            else:
+                logger.warning("Connection usability validation failed: channel not open")
+                return False
+        except Exception as e:
+            logger.warning("Connection usability validation failed: %s", e)
+            return False
+
     def _connect(self) -> bool:
         """
         Establish the initial connection with enhanced SSL error handling.
@@ -448,9 +474,17 @@ class RobustConnection:
                     logger.warning("Connection is not open, attempting to reconnect")
                     needs_reconnect = True
                 else:
-                    # Additional health check
+                    # Basic health check
                     self._connection.check_for_errors()
-                    connection = self._connection
+                    
+                    # Enhanced validation: test if connection can actually perform operations
+                    # This addresses the idle period issue where connections appear healthy
+                    # but are actually stale due to server-side drops
+                    if not self._validate_connection_usability(self._connection):
+                        logger.warning("Connection validation failed, attempting to reconnect")
+                        needs_reconnect = True
+                    else:
+                        connection = self._connection
 
             except AMQPConnectionError:
                 logger.warning("Connection health check failed, starting reconnection")
@@ -487,7 +521,9 @@ class RobustConnection:
                     return False
 
                 self._connection.check_for_errors()
-                return True
+                
+                # Enhanced validation: test if connection can actually perform operations
+                return self._validate_connection_usability(self._connection)
 
         except Exception:
             return False
