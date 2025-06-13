@@ -9,10 +9,16 @@ from unittest.mock import Mock, patch
 
 from amqpstorm import AMQPConnectionError
 
+from manman.repository.rabbitmq.config import (
+    BindingConfig,
+    EntityRegistry,
+    MessageTypeRegistry,
+    QueueConfig,
+    RoutingKeyConfig,
+)
 from manman.repository.rabbitmq.connection import RobustConnection
 from manman.repository.rabbitmq.publisher import RabbitPublisher
 from manman.repository.rabbitmq.subscriber import RabbitSubscriber
-from manman.repository.rabbitmq.config import BindingConfig, QueueConfig, RoutingKeyConfig, EntityRegistry, MessageTypeRegistry
 
 
 class TestConnectionRecoveryIntegration(unittest.TestCase):
@@ -21,14 +27,14 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.connection_params = {
-            'hostname': 'localhost',
-            'port': 5672,
-            'username': 'guest',
-            'password': 'guest',
-            'virtual_host': '/',
+            "hostname": "localhost",
+            "port": 5672,
+            "username": "guest",
+            "password": "guest",
+            "virtual_host": "/",
         }
 
-    @patch('manman.repository.rabbitmq.connection.Connection')
+    @patch("manman.repository.rabbitmq.connection.Connection")
     def test_publisher_handles_connection_recovery(self, mock_connection_class):
         """Test that publisher operations work after connection recovery."""
         # Set up mock connection that starts healthy
@@ -44,7 +50,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             connection_params=self.connection_params,
             heartbeat_interval=10,
             max_reconnect_attempts=2,
-            reconnect_delay=0.1
+            reconnect_delay=0.1,
         )
 
         # Create publisher
@@ -54,14 +60,13 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
                 RoutingKeyConfig(
                     entity=EntityRegistry.WORKER,
                     identifier="123",
-                    type=MessageTypeRegistry.STATUS
+                    type=MessageTypeRegistry.STATUS,
                 )
-            ]
+            ],
         )
-        
+
         publisher = RabbitPublisher(
-            connection=robust_conn.get_connection(),
-            binding_configs=binding_config
+            connection=robust_conn.get_connection(), binding_configs=binding_config
         )
 
         # Should work initially
@@ -70,7 +75,9 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
         # Simulate connection failure and recovery
         mock_connection.is_open = False
-        mock_connection.check_for_errors.side_effect = AMQPConnectionError("Connection lost")
+        mock_connection.check_for_errors.side_effect = AMQPConnectionError(
+            "Connection lost"
+        )
 
         # Getting connection should now fail
         with self.assertRaises(AMQPConnectionError):
@@ -82,21 +89,20 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
         # Simulate connection recovery
         mock_connection.is_open = True
         mock_connection.check_for_errors.side_effect = None
-        
+
         # Small delay for reconnection
         time.sleep(0.2)
-        
+
         # After recovery, we should be able to get connection again
         if robust_conn.is_connected():
             new_publisher = RabbitPublisher(
-                connection=robust_conn.get_connection(),
-                binding_configs=binding_config
+                connection=robust_conn.get_connection(), binding_configs=binding_config
             )
             new_publisher.publish("test message after recovery")
 
         robust_conn.close()
 
-    @patch('manman.repository.rabbitmq.connection.Connection')
+    @patch("manman.repository.rabbitmq.connection.Connection")
     def test_subscriber_handles_connection_recovery(self, mock_connection_class):
         """Test that subscriber operations work after connection recovery."""
         # Set up mock connection that starts healthy
@@ -115,7 +121,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             connection_params=self.connection_params,
             heartbeat_interval=10,
             max_reconnect_attempts=2,
-            reconnect_delay=0.1
+            reconnect_delay=0.1,
         )
 
         # Create subscriber
@@ -125,23 +131,23 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
                 RoutingKeyConfig(
                     entity=EntityRegistry.WORKER,
                     identifier="123",
-                    type=MessageTypeRegistry.COMMAND
+                    type=MessageTypeRegistry.COMMAND,
                 )
-            ]
+            ],
         )
-        
+
         queue_config = QueueConfig(
-            name="test-queue",
-            durable=True,
-            exclusive=False,
-            auto_delete=True
+            name="test-queue", durable=True, exclusive=False, auto_delete=True
         )
-        
-        with patch('threading.Thread'), patch('manman.repository.rabbitmq.subscriber.queue.Queue'):
+
+        with (
+            patch("threading.Thread"),
+            patch("manman.repository.rabbitmq.subscriber.queue.Queue"),
+        ):
             subscriber = RabbitSubscriber(
                 connection=robust_conn.get_connection(),
                 binding_configs=binding_config,
-                queue_config=queue_config
+                queue_config=queue_config,
             )
 
             # Should initialize properly
@@ -150,16 +156,16 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
         robust_conn.close()
 
-    @patch('manman.repository.rabbitmq.connection.Connection')  
+    @patch("manman.repository.rabbitmq.connection.Connection")
     def test_connection_callbacks_called(self, mock_connection_class):
         """Test that connection lost and restored callbacks are called."""
         # Set up connection events
         connection_lost_event = threading.Event()
         connection_restored_event = threading.Event()
-        
+
         def on_lost():
             connection_lost_event.set()
-            
+
         def on_restored():
             connection_restored_event.set()
 
@@ -176,7 +182,7 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
             max_reconnect_attempts=3,
             reconnect_delay=0.1,
             on_connection_lost=on_lost,
-            on_connection_restored=on_restored
+            on_connection_restored=on_restored,
         )
 
         # Should be connected initially
@@ -184,7 +190,9 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
         # Simulate connection loss
         mock_connection.is_open = False
-        mock_connection.check_for_errors.side_effect = AMQPConnectionError("Connection lost")
+        mock_connection.check_for_errors.side_effect = AMQPConnectionError(
+            "Connection lost"
+        )
 
         # Try to get connection, should trigger reconnection
         with self.assertRaises(AMQPConnectionError):
@@ -207,9 +215,15 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
     def test_util_functions_work_with_robust_connection(self):
         """Test that util functions work with the robust connection."""
-        from manman.util import init_rabbitmq, get_rabbitmq_connection, shutdown_rabbitmq
-        
-        with patch('manman.repository.rabbitmq.connection.Connection') as mock_connection_class:
+        from manman.util import (
+            get_rabbitmq_connection,
+            init_rabbitmq,
+            shutdown_rabbitmq,
+        )
+
+        with patch(
+            "manman.repository.rabbitmq.connection.Connection"
+        ) as mock_connection_class:
             mock_connection = Mock()
             mock_connection.is_open = True
             mock_connection.check_for_errors = Mock()
@@ -217,11 +231,11 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
             # Initialize RabbitMQ with robust connection
             init_rabbitmq(
-                host='localhost',
+                host="localhost",
                 port=5672,
-                username='guest',
-                password='guest',
-                heartbeat_interval=30
+                username="guest",
+                password="guest",
+                heartbeat_interval=30,
             )
 
             # Should be able to get connection
@@ -230,5 +244,3 @@ class TestConnectionRecoveryIntegration(unittest.TestCase):
 
             # Should be able to shutdown
             shutdown_rabbitmq()
-
-

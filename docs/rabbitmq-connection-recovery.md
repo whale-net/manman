@@ -68,7 +68,7 @@ publisher = RabbitPublisher(connection, binding_config)
 
 Comprehensive test suites validate:
 - Robust connection functionality
-- Integration with publishers/subscribers  
+- Integration with publishers/subscribers
 - Connection recovery scenarios
 - Util function compatibility
 - End-to-end connection handling
