@@ -185,9 +185,10 @@ def register_subscriber_for_recovery(subscriber_callback):
     """
     with __GLOBALS_LOCK:
         if "rmq_robust_connection" not in __GLOBALS:
-            raise RuntimeError(
-                "rmq_robust_connection not defined - cannot register subscriber"
+            logger.warning(
+                "rmq_robust_connection not defined - subscriber recovery will be disabled"
             )
+            return
         robust_connection: RobustConnection = __GLOBALS["rmq_robust_connection"]
 
     robust_connection.register_subscriber_callback(subscriber_callback)
