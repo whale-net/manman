@@ -31,7 +31,8 @@ except ImportError:
 
 def setup_logging(
     level: int = logging.INFO,
-    service_name: Optional[str] = None,
+    microservice_name: Optional[str] = None,
+    app_env: Optional[str] = None,
     force_setup: bool = False,
     enable_otel: bool = False,
     enable_console: bool = True,
@@ -42,7 +43,8 @@ def setup_logging(
 
     Args:
         level: Logging level (default: INFO)
-        service_name: Name of the service for log identification
+        microservice_name: Name of the microservice component (e.g., 'worker', 'status-api')
+        app_env: Application environment (e.g., 'dev', 'staging', 'prod')
         force_setup: Whether to force reconfiguration even if already setup
         enable_otel: Whether to enable OTEL logging (default: False)
         enable_console: Whether to enable console logging (default: True)
@@ -59,14 +61,17 @@ def setup_logging(
     if force_setup:
         root_logger.handlers.clear()
 
+    # Import global service name
+    from manman.config import SERVICE_NAME
+
     # Setup OTEL logging and tracing if available and enabled
     if enable_otel and OTEL_AVAILABLE:
-        _setup_otel_logging(service_name, otel_endpoint)
-        _setup_otel_tracing(service_name, otel_endpoint)
+        _setup_otel_logging(SERVICE_NAME, microservice_name, app_env, otel_endpoint)
+        _setup_otel_tracing(SERVICE_NAME, microservice_name, app_env, otel_endpoint)
 
     # Setup console logging if enabled
     if enable_console:
-        _setup_console_logging(service_name)
+        _setup_console_logging(microservice_name)
 
     # Configure root logger
     root_logger.setLevel(level)
@@ -81,23 +86,32 @@ def setup_logging(
     logging.getLogger("manman").setLevel(level)
 
 
-def create_formatter(service_name: Optional[str] = None) -> logging.Formatter:
+def create_formatter(microservice_name: Optional[str] = None) -> logging.Formatter:
     """
     Create a standardized formatter for ManMan services.
 
+    For OTEL compatibility, we keep the format simple since structured attributes
+    are handled at the resource level in OTEL configuration.
+
     Args:
-        service_name: Name of the service for log identification
+        microservice_name: Name of the microservice component for log identification
 
     Returns:
         Configured logging formatter
     """
-    service_prefix = f"[{service_name}] " if service_name else ""
+    # For console logging, include component info for human readability
+    # OTEL will use structured resource attributes instead
+    if microservice_name:
+        service_prefix = f"[{microservice_name}] "
+    else:
+        service_prefix = ""
+
     return logging.Formatter(
         f"%(asctime)s - {service_prefix}%(name)s - %(levelname)s - %(message)s"
     )
 
 
-def setup_server_logging(service_name: Optional[str] = None) -> None:
+def setup_server_logging(microservice_name: Optional[str] = None) -> None:
     """
     Setup logging for web servers (uvicorn/gunicorn) that preserves existing handlers.
 
@@ -107,9 +121,9 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
     for better maintainability and error detection.
 
     Args:
-        service_name: Name of the service for log identification
+        microservice_name: Name of the microservice component for log identification
     """
-    formatter = create_formatter(service_name)
+    formatter = create_formatter(microservice_name)
 
     # Create a console handler for server logs
     console_handler = logging.StreamHandler(sys.stdout)
@@ -135,27 +149,37 @@ def setup_server_logging(service_name: Optional[str] = None) -> None:
 
 
 def _setup_otel_logging(
-    service_name: Optional[str] = None, otel_endpoint: Optional[str] = None
+    service_name: str,
+    microservice_name: Optional[str] = None,
+    app_env: Optional[str] = None,
+    otel_endpoint: Optional[str] = None,
 ) -> None:
     """
     Setup OTEL logging configuration.
 
     Args:
-        service_name: Name of the service for identification
+        service_name: Global service name for identification (e.g., 'manman')
+        microservice_name: Name of the microservice component
+        app_env: Application environment
         otel_endpoint: OTEL collector endpoint
     """
     if not OTEL_AVAILABLE:
         return
 
+    # Build resource attributes
+    resource_attrs = {
+        "service.name": service_name,
+        "service.instance.id": os.uname().nodename,
+    }
+
+    # Add microservice information
+    if microservice_name:
+        resource_attrs["service.component"] = microservice_name
+    if app_env:
+        resource_attrs["deployment.environment"] = app_env
+
     # Create OTEL logger provider with service identification
-    logger_provider = LoggerProvider(
-        resource=Resource.create(
-            {
-                "service.name": service_name or "manman",
-                "service.instance.id": os.uname().nodename,
-            }
-        ),
-    )
+    logger_provider = LoggerProvider(resource=Resource.create(resource_attrs))
     set_logger_provider(logger_provider)
 
     # Setup OTLP exporter
@@ -173,25 +197,37 @@ def _setup_otel_logging(
 
 
 def _setup_otel_tracing(
-    service_name: Optional[str] = None, otel_endpoint: Optional[str] = None
+    service_name: str,
+    microservice_name: Optional[str] = None,
+    app_env: Optional[str] = None,
+    otel_endpoint: Optional[str] = None,
 ) -> None:
     """
     Setup OTEL tracing configuration.
 
     Args:
-        service_name: Name of the service for identification
+        service_name: Global service name for identification (e.g., 'manman')
+        microservice_name: Name of the microservice component
+        app_env: Application environment
         otel_endpoint: OTEL collector endpoint
     """
     if not OTEL_AVAILABLE:
         return
 
+    # Build resource attributes
+    resource_attrs = {
+        "service.name": service_name,
+        "service.instance.id": os.uname().nodename,
+    }
+
+    # Add microservice information
+    if microservice_name:
+        resource_attrs["service.component"] = microservice_name
+    if app_env:
+        resource_attrs["deployment.environment"] = app_env
+
     # Create OTEL tracer provider with service identification
-    resource = Resource.create(
-        {
-            "service.name": service_name or "manman",
-            "service.instance.id": os.uname().nodename,
-        }
-    )
+    resource = Resource.create(resource_attrs)
     tracer_provider = TracerProvider(resource=resource)
     set_tracer_provider(tracer_provider)
 
@@ -210,15 +246,15 @@ def _setup_otel_tracing(
     tracer_provider.add_span_processor(BatchSpanProcessor(otlp_span_exporter))
 
 
-def _setup_console_logging(service_name: Optional[str] = None) -> None:
+def _setup_console_logging(microservice_name: Optional[str] = None) -> None:
     """
     Setup console logging configuration.
 
     Args:
-        service_name: Name of the service for log identification
+        microservice_name: Name of the microservice component for log identification
     """
     # Use the standardized formatter
-    formatter = create_formatter(service_name)
+    formatter = create_formatter(microservice_name)
 
     # Create console handler
     handler = logging.StreamHandler(sys.stdout)
@@ -229,7 +265,7 @@ def _setup_console_logging(service_name: Optional[str] = None) -> None:
 
 
 def get_gunicorn_config(
-    service_name: str,
+    microservice_name: str,
     port: int = 8000,
     workers: int = 1,
     worker_class: str = "uvicorn.workers.UvicornWorker",
@@ -244,7 +280,7 @@ def get_gunicorn_config(
     dictionary-based configuration.
 
     Args:
-        service_name: Name of the service for identification
+        microservice_name: Name of the microservice component for identification
         port: Port to bind to
         workers: Number of worker processes
         worker_class: Gunicorn worker class to use
@@ -254,6 +290,9 @@ def get_gunicorn_config(
     Returns:
         Configuration dict for Gunicorn
     """
+    # Build service display name for logs - keep simple for OTEL compatibility
+    service_display = microservice_name or "manman"
+
     # Base configuration - same for all services
     config = {
         "bind": f"0.0.0.0:{port}",
@@ -266,8 +305,8 @@ def get_gunicorn_config(
         "keepalive": 2,
         "timeout": 30,
         "graceful_timeout": 30,
-        # Logging format and output
-        "access_log_format": f'[{service_name}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
+        # Logging format and output - simplified for OTEL
+        "access_log_format": f'[{service_display}] %(h)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s',
         "accesslog": "-",  # Log to stdout
         "errorlog": "-",  # Log to stderr
         "loglevel": "info",

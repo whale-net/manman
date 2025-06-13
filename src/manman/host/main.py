@@ -4,15 +4,16 @@ import os
 import threading
 from typing import Optional
 
-import alembic
-import alembic.command
-import alembic.config
 import sqlalchemy
 import typer
 import uvicorn
 from gunicorn.app.base import BaseApplication
 from typing_extensions import Annotated
 
+import alembic
+import alembic.command
+import alembic.config
+from manman.config import ManManConfig
 from manman.logging_config import (
     get_gunicorn_config,
     setup_logging,
@@ -172,7 +173,7 @@ def create_experience_app():
     ensure_common_services_initialized()
 
     # Configure server-specific logging using Python objects
-    setup_server_logging("experience-api")
+    setup_server_logging(ManManConfig.EXPERIENCE_API)
 
     from manman.host.api.experience import create_app
 
@@ -185,7 +186,7 @@ def create_status_app():
     ensure_common_services_initialized()
 
     # Configure server-specific logging using Python objects
-    setup_server_logging("status-api")
+    setup_server_logging(ManManConfig.STATUS_API)
 
     from manman.host.api.status import create_app
 
@@ -198,7 +199,7 @@ def create_worker_dal_app():
     ensure_common_services_initialized()
 
     # Configure server-specific logging using Python objects
-    setup_server_logging("worker-dal-api")
+    setup_server_logging(ManManConfig.WORKER_DAL_API)
 
     from manman.host.api.worker_dal import create_app
 
@@ -241,7 +242,11 @@ def start_experience_api(
 ):
     """Start the experience API (host layer) that provides game server management and user-facing functionality."""
     # Setup logging first
-    setup_logging(service_name="manman-experience-api", enable_otel=log_otlp)
+    setup_logging(
+        microservice_name=ManManConfig.EXPERIENCE_API,
+        app_env=app_env,
+        enable_otel=log_otlp,
+    )
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -259,7 +264,7 @@ def start_experience_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="experience-api",
+        microservice_name=ManManConfig.EXPERIENCE_API,
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -305,7 +310,9 @@ def start_status_api(
 ):
     """Start the status API that provides status and monitoring functionality."""
     # Setup logging first
-    setup_logging(service_name="manman-status-api", enable_otel=log_otlp)
+    setup_logging(
+        microservice_name=ManManConfig.STATUS_API, app_env=app_env, enable_otel=log_otlp
+    )
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -323,7 +330,7 @@ def start_status_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="status-api",
+        microservice_name=ManManConfig.STATUS_API,
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -369,7 +376,11 @@ def start_worker_dal_api(
 ):
     """Start the worker DAL API that provides data access endpoints for worker services."""
     # Setup logging first
-    setup_logging(service_name="manman-worker-dal-api", enable_otel=log_otlp)
+    setup_logging(
+        microservice_name=ManManConfig.WORKER_DAL_API,
+        app_env=app_env,
+        enable_otel=log_otlp,
+    )
 
     # Store initialization configuration for use in app factory
     store_initialization_config(
@@ -387,7 +398,7 @@ def start_worker_dal_api(
 
     # Configure and run with Gunicorn
     options = get_gunicorn_config(
-        service_name="worker-dal-api",
+        microservice_name=ManManConfig.WORKER_DAL_API,
         port=port,
         workers=workers,
         enable_otel=log_otlp,
@@ -424,7 +435,11 @@ def start_status_processor(
     """Start the status event processor that handles status-related pub/sub messages."""
 
     # Setup logging first - this is a standalone service (no uvicorn)
-    setup_logging(service_name="manman-status-processor", enable_otel=log_otlp)
+    setup_logging(
+        microservice_name=ManManConfig.STATUS_PROCESSOR,
+        app_env=app_env,
+        enable_otel=log_otlp,
+    )
 
     logger.info("Starting status event processor...")
 
