@@ -1,6 +1,6 @@
 import logging
 
-from manman.models import Command, ExternalStatusInfo, InternalStatusInfo
+from manman.models import Command, ExternalStatusInfo, InternalStatusInfo, LogMessage
 from manman.repository.message.abstract_interface import MessagePublisherInterface
 
 logger = logging.getLogger(__name__)
@@ -46,4 +46,15 @@ class CommandPubService(PubServiceInterface):
         :param command: The command to publish.
         """
         message = command.model_dump_json()
+        self._publisher.publish(message)
+
+
+class LogMessagePubService(PubServiceInterface):
+    def publish_log(self, log_message: LogMessage) -> None:
+        """
+        Publish a log message to RabbitMQ.
+
+        :param log_message: The log message to publish.
+        """
+        message = log_message.model_dump_json()
         self._publisher.publish(message)

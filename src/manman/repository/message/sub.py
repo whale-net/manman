@@ -1,6 +1,6 @@
 import logging
 
-from manman.models import Command, ExternalStatusInfo, InternalStatusInfo
+from manman.models import Command, ExternalStatusInfo, InternalStatusInfo, LogMessage
 from manman.repository.message.abstract_interface import MessageSubscriberInterface
 
 logger = logging.getLogger(__name__)
@@ -71,3 +71,21 @@ class ExternalStatusSubService(SubServiceInterface):
             status = ExternalStatusInfo.model_validate_json(message)
             statuses.append(status)
         return statuses
+
+
+class LogMessageSubService(SubServiceInterface):
+    """
+    Service for subscribing to log messages
+    """
+
+    def get_log_messages(self) -> list[LogMessage]:
+        """
+        Consume log messages from RabbitMQ.
+
+        :return: The consumed log messages.
+        """
+        log_messages = []
+        for message in self._subscriber.consume():
+            log_message = LogMessage.model_validate_json(message)
+            log_messages.append(log_message)
+        return log_messages

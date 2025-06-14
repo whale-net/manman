@@ -91,6 +91,10 @@ graph TD
 - server manager service manager (manman-host)
     - controls server manager service instances
     - exposes management API (worker/info/admin)
+- log subscriber service
+    - transparent pass-through for server instance log messages
+    - preserves original service identity for log collection
+    - enables centralized log aggregation and monitoring
 
 ### not in this repo
 ~~UI - this will live in https://github.com/whale-net/orca project~~

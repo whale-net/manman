@@ -19,12 +19,31 @@ class ProcessBuilderStatus(enum.Enum):
 
 
 class ProcessBuilder:
-    def __init__(self, executable: str, stdin_delay_seconds: int = 20) -> None:
+    def __init__(
+        self, 
+        executable: str, 
+        stdin_delay_seconds: int = 20,
+        log_publisher=None,
+        entity_type=None,
+        identifier: str | None = None,
+    ) -> None:
+        """
+        Initialize ProcessBuilder.
+        
+        :param executable: Path to executable
+        :param stdin_delay_seconds: Delay before considering process running
+        :param log_publisher: Optional LogMessagePubService for publishing log messages
+        :param entity_type: Entity type for log messages
+        :param identifier: Entity identifier for log messages
+        """
         self._executable: str = executable
         self._args: list[str] = []
         self._parameter_stdin: list[str] = []
         self._stdin_delay_seconds = stdin_delay_seconds
         self._process_start_time: datetime.datetime | None = None
+        self._log_publisher = log_publisher
+        self._entity_type = entity_type
+        self._identifier = identifier
 
     @property
     def status(self) -> ProcessBuilderStatus:
@@ -153,8 +172,21 @@ class ProcessBuilder:
     def read_output(self):
         if self.status == ProcessBuilderStatus.NOTSTARTED:
             return
-        log_stream(self._proc.stdout, logger=logger)
-        log_stream(self._proc.stderr, logger=logger, prefix="stderr:")
+        log_stream(
+            self._proc.stdout, 
+            logger=logger,
+            log_publisher=self._log_publisher,
+            entity_type=self._entity_type,
+            identifier=self._identifier,
+        )
+        log_stream(
+            self._proc.stderr, 
+            logger=logger, 
+            prefix="stderr:",
+            log_publisher=self._log_publisher,
+            entity_type=self._entity_type,
+            identifier=self._identifier,
+        )
 
     def write_stdin(self, stdin_command: str):
         status = self.status

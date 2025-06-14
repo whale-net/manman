@@ -494,6 +494,70 @@ def start_status_processor(
 
 
 @app.command()
+def start_log_subscriber(
+    rabbitmq_host: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_HOST")],
+    rabbitmq_port: Annotated[int, typer.Option(envvar="MANMAN_RABBITMQ_PORT")],
+    rabbitmq_username: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_USER")],
+    rabbitmq_password: Annotated[str, typer.Option(envvar="MANMAN_RABBITMQ_PASSWORD")],
+    app_env: Annotated[Optional[str], typer.Option(envvar="APP_ENV")] = None,
+    enable_ssl: Annotated[
+        bool, typer.Option(envvar="MANMAN_RABBITMQ_ENABLE_SSL")
+    ] = False,
+    rabbitmq_ssl_hostname: Annotated[
+        str, typer.Option(envvar="MANMAN_RABBITMQ_SSL_HOSTNAME")
+    ] = None,
+    log_otlp: Annotated[
+        bool,
+        typer.Option(
+            envvar="MANMAN_LOG_OTLP", help="Enable OpenTelemetry OTLP logging"
+        ),
+    ] = False,
+    create_vhost: Annotated[
+        bool, typer.Option(help="Create RabbitMQ vhost before initialization")
+    ] = False,
+):
+    """Start the log subscriber service that processes server instance log messages."""
+
+    # Setup logging first - this is a standalone service
+    setup_logging(
+        microservice_name="log-subscriber",
+        app_env=app_env,
+        enable_otel=log_otlp,
+    )
+
+    logger.info("Starting log subscriber service...")
+
+    store_initialization_config(
+        rabbitmq_host=rabbitmq_host,
+        rabbitmq_port=rabbitmq_port,
+        rabbitmq_username=rabbitmq_username,
+        rabbitmq_password=rabbitmq_password,
+        app_env=app_env,
+        enable_ssl=enable_ssl,
+        rabbitmq_ssl_hostname=rabbitmq_ssl_hostname,
+        create_vhost=create_vhost,
+        enable_otel=log_otlp,
+    )
+
+    ensure_common_services_initialized()
+
+    # Start the log subscriber service
+    from manman.host.log_subscriber import LogSubscriberService
+    from manman.util import get_rabbitmq_connection
+
+    rabbitmq_connection = get_rabbitmq_connection()
+    log_subscriber = LogSubscriberService(rabbitmq_connection)
+    
+    try:
+        log_subscriber.run()
+    except KeyboardInterrupt:
+        logger.info("Log subscriber service interrupted by user")
+    finally:
+        log_subscriber.stop()
+        logger.info("Log subscriber service stopped")
+
+
+@app.command()
 def run_migration():
     setup_logging()  # Basic logging for CLI operations
     _run_migration(get_sqlalchemy_engine())
