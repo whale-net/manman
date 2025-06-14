@@ -17,6 +17,7 @@ class EntityRegistry(StrEnum):
 class MessageTypeRegistry(StrEnum):
     STATUS = "status"
     COMMAND = "command"
+    LOG = "log"
 
 
 class TopicWildcard(StrEnum):

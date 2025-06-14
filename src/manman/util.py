@@ -23,12 +23,32 @@ def log_stream(
     prefix: str | None = None,
     logger: logging.Logger = logger,
     max_lines: int | None = None,
+    log_publisher=None,
+    entity_type=None,
+    identifier: str | None = None,
 ):
+    """
+    Read and log lines from a stream, with optional log message publishing.
+    
+    :param stream: The stream to read from
+    :param prefix: Optional prefix for log lines
+    :param logger: Logger to use for output
+    :param max_lines: Maximum number of lines to read
+    :param log_publisher: Optional LogMessagePubService for publishing log messages
+    :param entity_type: Entity type for log messages (required if log_publisher is provided)
+    :param identifier: Entity identifier for log messages (required if log_publisher is provided)
+    """
     if prefix is None:
         prefix = ""
 
     if stream is None:
         return
+
+    # Validate log publishing parameters
+    if log_publisher is not None:
+        if entity_type is None or identifier is None:
+            logger.warning("log_publisher provided but entity_type or identifier is missing")
+            log_publisher = None
 
     line_count = 0
     while True:
@@ -38,7 +58,26 @@ def log_stream(
         line = stream.readline()
         if line is None or len(line) == 0:
             break
-        logger.info("%s%s", prefix, line.decode("utf-8").rstrip())
+        
+        line_content = line.decode("utf-8").rstrip()
+        logger.info("%s%s", prefix, line_content)
+        
+        # Publish log message if publisher is provided
+        if log_publisher is not None:
+            try:
+                from manman.models import LogMessage
+                source = "stderr" if prefix.startswith("stderr") else "stdout"
+                log_message = LogMessage.create(
+                    entity_type=entity_type,
+                    identifier=identifier,
+                    log_level="INFO",  # Default to INFO, could be enhanced to parse log levels
+                    message=line_content,
+                    source=source,
+                )
+                log_publisher.publish_log(log_message)
+            except Exception as e:
+                logger.warning("Failed to publish log message: %s", e)
+        
         line_count += 1 if max_lines is not None else 0
 
 

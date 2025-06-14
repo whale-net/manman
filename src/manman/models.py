@@ -150,6 +150,41 @@ class Command(ManManBase):
     command_args: list[str] = Field(default=[])
 
 
+class LogMessage(ManManBase, table=False):
+    """
+    Message type for log data from server instances.
+    
+    This preserves the original service metadata to maintain log provenance
+    and enable proper log routing while acting as a transparent pass-through.
+    """
+    entity_type: EntityRegistry = Field(description="Original service entity type")
+    identifier: str = Field(description="Original service identifier")
+    timestamp: datetime.datetime = Field(default=current_timestamp(), description="Log timestamp")
+    log_level: str = Field(description="Log level (INFO, ERROR, etc.)")
+    message: str = Field(description="Log message content")
+    source: str = Field(default="stdout", description="Log source (stdout, stderr)")
+
+    @classmethod
+    def create(
+        cls,
+        entity_type: EntityRegistry,
+        identifier: str,
+        log_level: str,
+        message: str,
+        source: str = "stdout",
+    ) -> "LogMessage":
+        """Create a log message with current timestamp."""
+        timestamp = datetime.datetime.now(datetime.timezone.utc)
+        return cls(
+            entity_type=entity_type,
+            identifier=identifier,
+            timestamp=timestamp,
+            log_level=log_level,
+            message=message,
+            source=source,
+        )
+
+
 # See https://github.com/whale-net/friendly-computing-machine/blob/main/docs/manman_subscribe.md
 class StatusType(Enum):
     CREATED = "CREATED"

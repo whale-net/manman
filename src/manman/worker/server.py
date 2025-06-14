@@ -11,7 +11,15 @@ from manman.models import (
     ServerType,
 )
 from manman.repository.api_client import WorkerAPIClient
-from manman.repository.rabbitmq.config import EntityRegistry
+from manman.repository.message.pub import LogMessagePubService
+from manman.repository.rabbitmq.config import (
+    BindingConfig,
+    EntityRegistry,
+    ExchangeRegistry,
+    MessageTypeRegistry,
+    RoutingKeyConfig,
+)
+from manman.repository.rabbitmq.publisher import RabbitPublisher
 from manman.util import env_list_to_dict
 from manman.worker.abstract_service import ManManService
 from manman.worker.processbuilder import ProcessBuilder, ProcessBuilderStatus
@@ -79,12 +87,40 @@ class Server(ManManService):
             self._config.name,
         )
 
+        # Create log publisher for process output (after parent init)
+        self._log_publisher = self._build_log_publisher()
+
         executable_path = os.path.join(self._server_directory, self._config.executable)
-        pb = ProcessBuilder(executable=executable_path)
+        pb = ProcessBuilder(
+            executable=executable_path,
+            log_publisher=self._log_publisher,
+            entity_type=self.service_entity_type,
+            identifier=self.identifier,
+        )
         for arg in self._config.args:
             pb.add_parameter(arg)
         self._proc = pb
         logger.info("ProcessBuilder initialized with executable: %s", executable_path)
+
+    def _build_log_publisher(self) -> LogMessagePubService:
+        """Build the log message publisher for this server instance."""
+        log_routing_key = RoutingKeyConfig(
+            entity=self.service_entity_type,
+            identifier=self.identifier,
+            type=MessageTypeRegistry.LOG,
+        )
+        
+        binding_config = BindingConfig(
+            exchange=ExchangeRegistry.INTERNAL_SERVICE_EVENT,
+            routing_keys=[log_routing_key],
+        )
+        
+        rabbit_publisher = RabbitPublisher(
+            connection=self._rabbitmq_connection,
+            binding_configs=binding_config,
+        )
+        
+        return LogMessagePubService(publisher=rabbit_publisher)
 
     def _send_heartbeat(self):
         """Send a heartbeat for the game server instance."""
