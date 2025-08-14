@@ -27,8 +27,8 @@ from manman.models import (
 )
 
 
-class DatabaseRepository:
-    """Repository class for database operations related to status and worker management."""
+class BaseRepository:
+    """Base repository class that handles sessions and common functionality."""
 
     def __init__(self, session: Optional[Session] = None):
         """
@@ -85,100 +85,12 @@ class DatabaseRepository:
         ).subquery()
         return last_status
 
-    def get_stale_workers_with_status(
-        self, heartbeat_threshold: datetime, heartbeat_max_lookback: datetime
-    ) -> List[Tuple[Worker, str]]:
-        """
-        Get workers whose heartbeats are stale along with their current status.
 
-        Args:
-            heartbeat_threshold: Workers with heartbeat before this time are considered stale
-            heartbeat_max_lookback: Only consider workers that had a heartbeat within this lookback period
-
-        Returns:
-            List of tuples containing (Worker, current_status_type)
-        """
-        with self._get_session_context() as session:
-            last_status = DatabaseRepository.get_worker_current_status_subquery()
-
-            # Query for workers with stale heartbeats
-            candidate_workers = (
-                select(Worker, last_status.c.status_type)
-                .join(last_status)
-                .where(
-                    Worker.last_heartbeat > heartbeat_max_lookback,
-                    Worker.last_heartbeat < heartbeat_threshold,
-                    Worker.end_date.is_(None),
-                    last_status.c.status_type.in_(ACTIVE_STATUS_TYPES),
-                )
-            )
-
-            return session.exec(candidate_workers).all()
-
-    def get_active_game_server_instances(
-        self, worker_id: int
-    ) -> List[GameServerInstance]:
-        """
-        Get all active game server instances for a given worker.
-
-        Args:
-            worker_id: The ID of the worker
-
-        Returns:
-            List of active GameServerInstance objects
-        """
-        with self._get_session_context() as session:
-            stmt = (
-                select(GameServerInstance)
-                .where(GameServerInstance.worker_id == worker_id)
-                .where(GameServerInstance.end_date.is_(None))
-            )
-            return session.exec(stmt).all()
-
-    def write_external_status_to_database(
-        self, status_info: ExternalStatusInfo
-    ) -> None:
-        """
-        Write a status message to the database.
-
-        Args:
-            status_info: The StatusInfo object to write to the database
-        """
-        if status_info.status_info_id is not None and status_info.status_info_id < 0:
-            status_info.status_info_id = None  # Ensure ID is None for new records
-        with self._get_session_context() as session:
-            session.add(status_info)
-            session.commit()
-
-    def get_workers_with_stale_heartbeats(
-        self,
-        heartbeat_threshold_seconds: int = 5,
-        heartbeat_max_lookback_hours: int = 1,
-    ) -> List[Tuple[Worker, str]]:
-        """
-        Convenience method to get workers with stale heartbeats using default time periods.
-
-        Args:
-            heartbeat_threshold_seconds: Seconds before now to consider heartbeat stale (default: 5)
-            heartbeat_max_lookback_hours: Hours before now to look back for workers (default: 1)
-
-        Returns:
-            List of tuples containing (Worker, current_status_type)
-        """
-        current_time = datetime.now(timezone.utc)
-        heartbeat_threshold = current_time - timedelta(
-            seconds=heartbeat_threshold_seconds
-        )
-        heartbeat_max_lookback = current_time - timedelta(
-            hours=heartbeat_max_lookback_hours
-        )
-
-        return self.get_stale_workers_with_status(
-            heartbeat_threshold, heartbeat_max_lookback
-        )
+class DatabaseRepository(BaseRepository):
+    """Repository class for database operations related to status and worker management."""
 
 
-class StatusRepository(DatabaseRepository):
+class StatusRepository(BaseRepository):
     """Repository class for status-related database operations."""
 
     def get_latest_worker_status(self, worker_id: int) -> Optional[ExternalStatusInfo]:
@@ -224,8 +136,23 @@ class StatusRepository(DatabaseRepository):
             )
             return session.exec(stmt).first()
 
+    def write_external_status_to_database(
+        self, status_info: ExternalStatusInfo
+    ) -> None:
+        """
+        Write a status message to the database.
 
-class WorkerRepository(DatabaseRepository):
+        Args:
+            status_info: The StatusInfo object to write to the database
+        """
+        if status_info.status_info_id is not None and status_info.status_info_id < 0:
+            status_info.status_info_id = None  # Ensure ID is None for new records
+        with self._get_session_context() as session:
+            session.add(status_info)
+            session.commit()
+
+
+class WorkerRepository(BaseRepository):
     """Repository class for worker-related database operations."""
 
     def create_worker(self) -> Worker:
@@ -347,7 +274,7 @@ class WorkerRepository(DatabaseRepository):
                 Worker.end_date.is_(None),
             )
 
-            last_status = DatabaseRepository.get_worker_current_status_subquery()
+            last_status = BaseRepository.get_worker_current_status_subquery()
             lost_workers = session.exec(
                 select(Worker)
                 .join(last_status)
@@ -379,8 +306,65 @@ class WorkerRepository(DatabaseRepository):
             worker = session.exec(stmt).one_or_none()
             return worker
 
+    def get_stale_workers_with_status(
+        self, heartbeat_threshold: datetime, heartbeat_max_lookback: datetime
+    ) -> List[Tuple[Worker, str]]:
+        """
+        Get workers whose heartbeats are stale along with their current status.
 
-class GameServerRepository(DatabaseRepository):
+        Args:
+            heartbeat_threshold: Workers with heartbeat before this time are considered stale
+            heartbeat_max_lookback: Only consider workers that had a heartbeat within this lookback period
+
+        Returns:
+            List of tuples containing (Worker, current_status_type)
+        """
+        with self._get_session_context() as session:
+            last_status = BaseRepository.get_worker_current_status_subquery()
+
+            # Query for workers with stale heartbeats
+            candidate_workers = (
+                select(Worker, last_status.c.status_type)
+                .join(last_status)
+                .where(
+                    Worker.last_heartbeat > heartbeat_max_lookback,
+                    Worker.last_heartbeat < heartbeat_threshold,
+                    Worker.end_date.is_(None),
+                    last_status.c.status_type.in_(ACTIVE_STATUS_TYPES),
+                )
+            )
+
+            return session.exec(candidate_workers).all()
+
+    def get_workers_with_stale_heartbeats(
+        self,
+        heartbeat_threshold_seconds: int = 5,
+        heartbeat_max_lookback_hours: int = 1,
+    ) -> List[Tuple[Worker, str]]:
+        """
+        Convenience method to get workers with stale heartbeats using default time periods.
+
+        Args:
+            heartbeat_threshold_seconds: Seconds before now to consider heartbeat stale (default: 5)
+            heartbeat_max_lookback_hours: Hours before now to look back for workers (default: 1)
+
+        Returns:
+            List of tuples containing (Worker, current_status_type)
+        """
+        current_time = datetime.now(timezone.utc)
+        heartbeat_threshold = current_time - timedelta(
+            seconds=heartbeat_threshold_seconds
+        )
+        heartbeat_max_lookback = current_time - timedelta(
+            hours=heartbeat_max_lookback_hours
+        )
+
+        return self.get_stale_workers_with_status(
+            heartbeat_threshold, heartbeat_max_lookback
+        )
+
+
+class GameServerRepository(BaseRepository):
     """Repository class for game server-related database operations."""
 
     def get_game_server_by_id(self, server_id: int) -> Optional[GameServer]:
@@ -418,7 +402,7 @@ class GameServerRepository(DatabaseRepository):
             return config
 
 
-class GameServerConfigRepository(DatabaseRepository):
+class GameServerConfigRepository(BaseRepository):
     """Repository class for game server configuration-related database operations."""
 
     def get_game_server_configs(self) -> list[GameServerConfig]:
@@ -441,7 +425,7 @@ class GameServerConfigRepository(DatabaseRepository):
             return results
 
 
-class GameServerInstanceRepository(DatabaseRepository):
+class GameServerInstanceRepository(BaseRepository):
     """Repository class for game server instance-related database operations."""
 
     def create_instance(
@@ -558,3 +542,23 @@ class GameServerInstanceRepository(DatabaseRepository):
             )
             results = session.exec(stmt).all()
             return results
+
+    def get_active_game_server_instances(
+        self, worker_id: int
+    ) -> List[GameServerInstance]:
+        """
+        Get all active game server instances for a given worker.
+
+        Args:
+            worker_id: The ID of the worker
+
+        Returns:
+            List of active GameServerInstance objects
+        """
+        with self._get_session_context() as session:
+            stmt = (
+                select(GameServerInstance)
+                .where(GameServerInstance.worker_id == worker_id)
+                .where(GameServerInstance.end_date.is_(None))
+            )
+            return session.exec(stmt).all()
