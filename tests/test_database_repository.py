@@ -126,3 +126,51 @@ class TestDatabaseRepository:
 
         # The repository should store the provided session
         assert repository._session == mock_session
+
+    @patch("manman.util.get_sqlalchemy_session")
+    def test_get_lost_workers_with_recent_heartbeats_default_params(
+        self, mock_get_session, repository, mock_session
+    ):
+        """Test getting lost workers with recent heartbeats using default parameters."""
+        mock_get_session.return_value.__enter__.return_value = mock_session
+
+        # Call the method
+        result = repository.get_lost_workers_with_recent_heartbeats()
+
+        # Verify session was used
+        mock_get_session.assert_called_once()
+        mock_session.exec.assert_called_once()
+        assert result == []
+
+    @patch("manman.util.get_sqlalchemy_session")
+    def test_get_lost_workers_with_recent_heartbeats_custom_params(
+        self, mock_get_session, repository, mock_session
+    ):
+        """Test getting lost workers with recent heartbeats using custom parameters."""
+        mock_get_session.return_value.__enter__.return_value = mock_session
+
+        # Call the method with custom parameters
+        result = repository.get_lost_workers_with_recent_heartbeats(
+            heartbeat_threshold_seconds=10, lost_max_age_hours=12
+        )
+
+        # Verify session was used
+        mock_get_session.assert_called_once()
+        mock_session.exec.assert_called_once()
+        assert result == []
+
+    @patch("manman.util.get_sqlalchemy_session")
+    def test_get_lost_game_server_instances_for_worker(
+        self, mock_get_session, repository, mock_session
+    ):
+        """Test getting lost game server instances for a specific worker."""
+        mock_get_session.return_value.__enter__.return_value = mock_session
+        worker_id = 123
+
+        # Call the method
+        result = repository.get_lost_game_server_instances_for_worker(worker_id)
+
+        # Verify session was used
+        mock_get_session.assert_called_once()
+        mock_session.exec.assert_called_once()
+        assert result == []
