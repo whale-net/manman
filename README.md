@@ -1,6 +1,8 @@
 # manman
 ([cs2/game]server)man(ager)man(ager)
 
+> [!NOTE]
+> **Archival Notice:** This repository's content has been, or is being migrated to [whale-net/everything](https://github.com/whale-net/everything).
 
 ## about
 
